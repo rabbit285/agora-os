@@ -65,7 +65,7 @@ erDiagram
 | Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
 | AI Governance | ai_systems, ai_assessments, ai_incidents | 3 |
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
-| Security | security_assets, security_findings, vulnerabilities, security_incidents | 4 |
+| Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | accounts, contacts, leads, sequences, opportunities | 5 |
 | Support | customers, tickets, support_conversations, knowledge_articles | 6 |
 | Automation | workflows, workflow_versions, workflow_runs | 7 |
@@ -126,6 +126,41 @@ AI governance (ai_systems/ai_assessments), privacy workflows (RoPA, DPIA,
 DSAR), vendor risk, questionnaires, Trust Center — each a substantial
 feature attaching to this backbone, not blocking it. See
 `docs/KNOWN_LIMITATIONS.md`.
+
+## Phase 4 entities (implemented — Security backbone)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ SECURITY_ASSET : has
+  SECURITY_ASSET ||--o{ SECURITY_FINDING : "found on"
+  SECURITY_FINDING ||--o{ SECURITY_ALERT : "raises"
+  ORGANIZATION ||--o{ SECURITY_INCIDENT : has
+  SECURITY_INCIDENT }o--o| RISK : "critical severity links to"
+```
+
+- **SecurityAsset** — cloud accounts, servers, endpoints, repositories,
+  etc. (spec §14's inventory). Tenant-scoped, unlike Compliance's
+  Framework/Requirement — an organization's own infrastructure, not
+  shared catalog data.
+- **SecurityFinding** — consolidates the spec's parallel
+  vulnerabilities/cloud_findings/identity_findings into one table with a
+  `category` discriminator (`docs/DECISIONS.md` ADR-0017); optionally
+  tied to a SecurityAsset.
+- **SecurityAlert** — the triage inbox (spec §18); optionally tied to the
+  SecurityFinding that raised it.
+- **SecurityIncident** — the escalated workspace (spec §19). A
+  `critical`-severity incident automatically creates and links a
+  Compliance **Risk** (ADR-0018) — the explicit security↔compliance
+  connection spec §19 calls "critical," implemented the same way Phase
+  3's failed-assessment→Task hook was (shared primitives, not a new
+  module-specific type).
+
+Not modeled yet: identity-provider integrations (Okta/Entra/Google
+Workspace — spec §16), cloud-provider connectors (spec §15), incident
+playbooks/timeline/evidence sub-objects (spec §19 lists these as part of
+the incident workspace), vulnerability scanner ingestion. The
+`SecurityFinding.category` field anticipates these without modeling their
+ingestion pipelines yet.
 
 ## Cross-module entity linking (spec §81)
 

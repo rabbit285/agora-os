@@ -2,8 +2,8 @@
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial Phase 3
-/ local-only** checkpoint, not a production release — most items below are
-correctly unchecked.
++ partial Phase 4 / local-only** checkpoint, not a production release —
+most items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
 
@@ -55,11 +55,22 @@ correctly unchecked.
       risk, questionnaires, Trust Center, regulatory intelligence — not
       started, each a substantial feature in its own right
 
-See `docs/RESUME_BUILD.md` for the next phase (Security).
+## Phase 4 (Security) — backbone complete, sub-features remain
+
+- [x] SecurityAsset, SecurityFinding, SecurityAlert, SecurityIncident models + migration
+- [x] Cross-module hook: critical incident auto-creates a linked Compliance Risk (tested)
+- [x] Tenant-isolated `/api/v1/security` API + frontend (dashboard, incident detail)
+- [x] RBAC: `security_manager` role granted security permissions, tested
+- [x] Seed script: demo org assets, findings, alert, critical incident
+- [x] Backend tests: 43 passing total; ruff/mypy clean
+- [ ] Cloud/identity provider connectors, vulnerability scanner ingestion,
+      incident timeline/evidence/playbooks — not started, need the
+      connector SDK (Phase 9) to do properly
+
+See `docs/RESUME_BUILD.md` for the next phase (Sales).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 4 — Security module
 - [ ] Phase 5 — Sales
 - [ ] Phase 6 — Customer Support
 - [ ] Phase 7 — Business Automation (workflow builder)

@@ -61,12 +61,21 @@ portal), Trust Center, regulatory intelligence feed. Each is a
 substantial feature attaching to the backbone above, not a blocker to it
 — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
-## Phase 4 — Security
+## Phase 4 — Security (backbone in progress)
 
-Asset inventory, cloud security (AWS/Azure/GCP read-only connectors),
-identity security (Okta/Entra/Google Workspace), vulnerability management,
-alerts, incident response workspace + playbooks, integration with
-Compliance's GDPR-breach process.
+Done: asset inventory, findings (consolidating vulnerabilities/cloud
+misconfigurations/identity findings — ADR-0017), alerts inbox, incident
+workspace with a status workflow (detected→...→closed). The integration
+with Compliance's GDPR-breach process (spec §19) is implemented as the
+Phase 4 cross-module hook: a critical incident auto-creates a linked
+Compliance Risk (ADR-0018).
+
+Remaining: cloud security connectors (AWS/Azure/GCP — read-only, per the
+progressive trust model in spec §B1), identity security connectors
+(Okta/Entra/Google Workspace), vulnerability scanner ingestion, incident
+timeline/evidence/playbooks as first-class sub-objects. Each requires the
+Integrations/connector SDK (Phase 9) to do properly rather than one-off
+per-provider code — see `docs/RESUME_BUILD.md`.
 
 ## Phase 5 — Sales
 

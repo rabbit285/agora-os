@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance backbone — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance and Phase 4 Security backbones — verified end-to-end)
 
 ## Platform
 
@@ -65,7 +65,16 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance backbon
 
 ## Security
 
-- [ ] Not started (Phase 4)
+- [x] SecurityAsset, SecurityFinding (consolidated category discriminator — ADR-0017), SecurityAlert, SecurityIncident models + migration
+- [x] Cross-module hook: a `critical` incident auto-creates a linked Compliance `Risk` (tested, ADR-0018)
+- [x] `/api/v1/security` router — assets, findings, alerts, incidents; tenant-isolated, RBAC-gated
+- [x] RBAC: `security_manager` system role granted security permissions
+- [x] Frontend: `/security` dashboard + `/security/incidents/[id]` detail with status workflow
+- [x] Seed script: 2 assets, 2 findings, 1 alert, 1 critical incident (linked risk) for the demo org
+- [ ] Identity provider integrations (Okta/Entra/Google Workspace) — not started
+- [ ] Cloud provider connectors (AWS/Azure/GCP) — not started
+- [ ] Incident timeline/evidence/playbooks sub-objects — not started
+- [ ] Vulnerability scanner ingestion — not started
 
 ## Sales
 
@@ -95,7 +104,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance backbon
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
 - [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
-- [x] 35/35 total, ruff+mypy strict clean
+- [x] Security tests (8 tests: RBAC grant/denial, cross-module risk creation, tenant isolation, status workflows)
+- [x] 43/43 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -117,9 +127,9 @@ next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 **Do not read this file as "the product is done."** It tracks a very large,
 explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
-Phase 3 (Compliance) has its core backbone (frameworks, controls,
-assessments, evidence, risks, policies) but not its larger sub-features
-(audits, AI governance, privacy workflows, vendor risk, Trust Center —
-see the Compliance section above). Security, Sales, Support, Automation
-(Phases 4–7), the cross-module intent router, Phases 8–10, and the AWS
+Phase 3 (Compliance) and Phase 4 (Security) have their core backbones
+(see their sections above) but not their larger sub-features (audits, AI
+governance, privacy workflows, vendor risk, Trust Center, identity/cloud
+provider integrations, incident playbooks). Sales, Support, Automation
+(Phases 5–7), the cross-module intent router, Phases 8–10, and the AWS
 production deployment have not started.

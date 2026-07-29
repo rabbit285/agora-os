@@ -7,36 +7,35 @@ kept current at the end of every work session per the execution contract's
 ## Where things stand
 
 **Phase 1 (platform foundation) and Phase 2 (Knowledge & AI
-Infrastructure) are complete. Phase 3 (Compliance) has its core backbone
-built and verified** — Framework/Requirement catalog, Control,
-ControlMapping, ControlAssessment, Evidence, Risk, Policy — but not its
-larger sub-features (audits, AI governance, privacy workflows, vendor
-risk, questionnaires, Trust Center). See `docs/RELEASE_CHECKLIST.md` and
+Infrastructure) are complete. Phase 3 (Compliance) and Phase 4 (Security)
+both have their core backbones built and verified**, but not their larger
+sub-features. See `docs/RELEASE_CHECKLIST.md` and
 `docs/IMPLEMENTATION_STATUS.md` for the itemized list.
 
-Working and verified end to end: everything from Phase 1/2, plus:
-GDPR/EU AI Act/ISO 27001 seeded as catalog data; the demo org has two
-controls (one passing, one failing) mapped to GDPR requirements; a failed
-assessment automatically creates a remediation `Task` (the cross-module
-hook spec §80 requires); evidence links a control to the previously-seeded
-GDPR overview document. `/compliance` and `/compliance/controls/[id]`
-render this live. All lint/typecheck/test/build checks pass (35 backend
-tests, ruff + mypy --strict clean; frontend eslint + tsc + production
-build clean).
+Working and verified end to end: everything from Phase 1/2/3, plus:
+SecurityAsset/SecurityFinding/SecurityAlert/SecurityIncident with a status
+workflow; a critical-severity incident automatically creates a linked
+Compliance Risk (spec §19's explicit security↔compliance connection,
+implemented as a cross-module hook — the same shared-primitives pattern
+Compliance's failed-assessment→Task hook used, just in the other
+direction). `/security` and `/security/incidents/[id]` render this live.
+All lint/typecheck/test/build checks pass (43 backend tests, ruff + mypy
+--strict clean; frontend eslint + tsc + production build clean).
 
-No other domain module (Security, Sales, Support, Automation) has been
-started. No AWS infrastructure exists. See `docs/IMPLEMENTATION_PLAN.md`
-for the full phase order and `docs/KNOWN_LIMITATIONS.md` for exactly
-what's missing — notably, the Compliance catalog is a small representative
-seed (a handful of requirements per framework), not the complete
-regulatory text, and the AI Copilot doesn't yet retrieve from Compliance
-data (only from Knowledge documents).
+No other domain module (Sales, Support, Automation) has been started. No
+AWS infrastructure exists. See `docs/IMPLEMENTATION_PLAN.md` for the full
+phase order and `docs/KNOWN_LIMITATIONS.md` for exactly what's missing —
+notably, Security has no cloud/identity provider connectors yet (those
+need the connector SDK from Phase 9 to do properly, not one-off
+per-provider code), and the AI Copilot still only retrieves from Knowledge
+documents, not Compliance or Security data.
 
 ## Branch and commit
 
-Branch: `main`. Four substantive commits: Phase 1 platform foundation,
-Phase 2 Knowledge ingestion, Phase 2 completion (RAG + Copilot), and this
-Phase 3 Compliance backbone. See `git log` for exact SHAs.
+Branch: `main`. Five substantive commits: Phase 1 platform foundation,
+Phase 2 Knowledge ingestion, Phase 2 completion (RAG + Copilot), Phase 3
+Compliance backbone, and this Phase 4 Security backbone. See `git log` for
+exact SHAs.
 
 ## Machine-specific note
 
@@ -48,15 +47,14 @@ a gitignored `infra/docker/.env` (see `docs/ENVIRONMENT_VARIABLES.md`) so
 it doesn't collide with them. On a clean machine, delete or ignore that
 override file to get the standard ports.
 
-## Exact commands already run (this session, on top of Phase 1 + Phase 2)
+## Exact commands already run (this session, on top of Phase 1-3)
 
 ```bash
 cd infra/docker
 docker compose ps   # confirm the stack from earlier sessions is still up
 
-# Migration for frameworks/requirements/controls/control_mappings/
-# control_assessments/evidence/risks/policies
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add compliance module tables"
+# Migration for security_assets/security_findings/security_alerts/security_incidents
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add security module tables"
 docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
 docker compose run --rm api alembic check   # confirms no drift
@@ -65,7 +63,7 @@ docker compose run --rm api python -m app.seed   # ran twice, confirmed idempote
 
 # Backend checks (all green)
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 35 passed
+# -> 43 passed
 
 # Frontend checks (all green)
 cd apps/web
@@ -76,48 +74,55 @@ npm run build
 
 ## Next highest-priority task
 
-**Start Phase 4 — Security** (spec sections 13–19, 4th module in
+**Start Phase 5 — Sales** (spec sections 20–29, 5th module in
 `docs/IMPLEMENTATION_PLAN.md`). Suggested dependency order, following the
-`app/compliance/` pattern:
+`app/compliance/` and `app/secops/` pattern:
 
-1. **Data model**: `app/security/models.py` — security_assets,
-   security_findings, vulnerabilities, security_alerts,
-   security_incidents, identity_findings, cloud_findings (spec §50). Link
-   findings/incidents to `core.files` (for evidence) and consider whether
-   a critical finding should auto-create a `core.Task` or `core.Approval`
-   — same cross-module-hook pattern as Compliance's failed assessment.
-2. **The compliance ↔ security connection is explicit in the spec**
-   (§19: "Integrate incidents with: GDPR breach process... This
-   connection between security and compliance is critical"). Don't build
-   Security as an island — when a security incident's severity is
-   critical, consider creating a compliance `Risk` or linking to one,
-   mirroring how a failed compliance assessment creates a `Task`.
-3. **Migration**, then `app/routers/security.py` — asset inventory,
-   findings list, incident workspace endpoints. Add
-   `security.findings.manage` / `security.incidents.manage` permission
-   keys to `app/core/rbac.py`, granted to the `security_manager` system
-   role (already seeded, currently has zero permissions — same gap
-   `compliance_manager`/`dpo` had before this phase).
-4. **Frontend**: replace `/coming-soon?module=security` — security
-   dashboard first (asset count, findings by severity), incident detail
-   second.
+1. **Data model**: `app/sales/models.py` — accounts, contacts, leads,
+   sequences, sequence_steps, outreach_messages, opportunities (spec
+   §50). Note: `app/security.py` (password/session helpers) already
+   exists — `secops` was used for the Security domain package for the
+   same reason; check for naming collisions before naming this one too
+   (a plain `app/sales/` should be fine, nothing else uses that name).
+2. **Compliance governs Sales explicitly** (spec §91: "Sales AI asks: Can
+   we contact this prospect? Compliance checks: jurisdiction, data
+   source, marketing basis, opt-out, suppression, organization policy").
+   Don't build outreach as an island — at minimum, model a suppression/
+   opt-out flag on Contact and check it before any "send" action, even
+   before real email sending exists. This is Phase 5's natural
+   cross-module hook, mirroring Compliance→Task and Security→Risk.
+3. **Migration**, then `app/routers/sales.py` — accounts, leads,
+   opportunities, pipeline endpoints. Add `sales.leads.manage` /
+   `sales.accounts.manage` / `sales.opportunities.manage` permission
+   keys, granted to `sales_manager` and `sales_representative` (both
+   already seeded with zero permissions).
+4. **Frontend**: replace `/coming-soon?module=sales` — pipeline/accounts
+   overview first, account detail second.
 5. Tests: tenant isolation + RBAC denial (same pattern as
-   `tests/test_compliance.py`), plus a test for whatever cross-module
-   hook you build.
+   `tests/test_compliance.py` / `tests/test_security.py`), plus the
+   suppression-check cross-module test.
 6. Update `docs/DATABASE_MODEL.md`, `docs/DOMAIN_MODEL.md`,
    `docs/IMPLEMENTATION_STATUS.md`, `docs/IMPLEMENTATION_PLAN.md`, and
    this file when done.
 
+Note: real lead-finding, enrichment, and outreach sending all depend on
+external data sources / email providers that don't exist yet in this
+build (spec's progressive trust model — Stage 1 read-only connectors
+first). Phase 5's realistic scope here is the **data model and pipeline
+management** (accounts/contacts/leads/opportunities, manually entered or
+seeded), not real prospecting — same "backbone now, connectors later"
+shape as Compliance and Security.
+
 ## Files to edit next
 
-- `apps/api/app/security/` (new package: `models.py`, `schemas.py`, `service.py`)
-- `apps/api/app/routers/security.py` (new)
-- `apps/api/app/core/rbac.py` (new permission keys, grant to `security_manager`)
+- `apps/api/app/sales/` (new package: `models.py`, `schemas.py`, `service.py`)
+- `apps/api/app/routers/sales.py` (new)
+- `apps/api/app/core/rbac.py` (new permission keys, grant to `sales_manager`/`sales_representative`)
 - `apps/api/migrations/versions/` (new revision)
-- `apps/api/app/seed.py` (seed a few assets/findings/one incident for the demo org)
-- `apps/api/tests/test_security.py` (new)
-- `apps/web/lib/navigation.ts` (flip `security` to `implemented: true`)
-- `apps/web/app/(app)/security/` (new pages)
+- `apps/api/app/seed.py` (seed a few accounts/contacts/leads/one opportunity for the demo org)
+- `apps/api/tests/test_sales.py` (new)
+- `apps/web/lib/navigation.ts` (flip `sales` to `implemented: true`)
+- `apps/web/app/(app)/sales/` (new pages)
 
 ## Command to resume
 
@@ -126,5 +131,5 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (35 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (43 passed)
 ```

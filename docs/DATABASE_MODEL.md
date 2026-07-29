@@ -298,6 +298,69 @@ creates a `core.tasks` row (`module = 'compliance'`) via
 `app/compliance/service.py::record_assessment` — the one cross-module
 hook this slice ships (spec §80).
 
+## Tables (Phase 4 — Security)
+
+Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`
+ADR-0016, naming collision with the Phase 1 password/session module).
+
+```text
+security_assets
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  asset_type TEXT NOT NULL   -- cloud_account|server|container|endpoint|application|api|repository|saas|database|domain|user|privileged_account
+  environment TEXT NOT NULL DEFAULT 'production'
+  provider TEXT NULL
+  criticality TEXT NOT NULL DEFAULT 'medium'   -- low|medium|high|critical
+  data_classification TEXT NOT NULL DEFAULT 'internal'
+  internet_exposed BOOLEAN NOT NULL DEFAULT false
+  status TEXT NOT NULL DEFAULT 'healthy'   -- healthy|at_risk|compromised
+  owner_id UUID FK users NULL
+  last_observed_at TIMESTAMPTZ NULL
+  created_at, updated_at
+
+security_findings        -- consolidates vulnerabilities/cloud_findings/identity_findings (ADR-0017)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  asset_id UUID FK security_assets NULL
+  category TEXT NOT NULL    -- vulnerability|cloud_misconfiguration|identity|other
+  title TEXT NOT NULL
+  description TEXT
+  severity TEXT NOT NULL     -- low|medium|high|critical
+  cve TEXT NULL
+  status TEXT NOT NULL DEFAULT 'open'   -- open|investigating|resolved|false_positive|risk_accepted
+  owner_id UUID FK users NULL
+  due_at TIMESTAMPTZ NULL
+  created_at, updated_at
+
+security_alerts          -- inbox/triage (spec §18)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  finding_id UUID FK security_findings NULL
+  title TEXT NOT NULL
+  description TEXT
+  severity TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'new'   -- new|investigating|contained|resolved|false_positive
+  created_at, updated_at
+
+security_incidents       -- escalated workspace (spec §19)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  description TEXT
+  severity TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'detected'  -- detected|triage|investigation|containment|eradication|recovery|postmortem|closed
+  related_risk_id UUID FK risks NULL   -- cross-module link, see below
+  owner_id UUID FK users NULL
+  closed_at TIMESTAMPTZ NULL
+  created_at, updated_at
+```
+
+A `critical`-severity `security_incidents` row automatically creates a
+`compliance.risks` row (`category='security'`) and sets
+`related_risk_id`, via `app/secops/service.py::create_incident` — Phase
+4's one cross-module hook (spec §19, ADR-0018).
+
 ## Migration policy
 
 - Every schema change ships an Alembic revision with both `upgrade()` and

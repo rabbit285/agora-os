@@ -25,6 +25,22 @@ const STATUS_VARIANTS: Record<
   not_assessed: "outline",
   mitigated: "success",
   accepted: "secondary",
+  healthy: "success",
+  at_risk: "warning",
+  compromised: "destructive",
+  new: "warning",
+  investigating: "warning",
+  contained: "secondary",
+  resolved: "success",
+  false_positive: "outline",
+  risk_accepted: "secondary",
+  detected: "destructive",
+  triage: "warning",
+  containment: "warning",
+  eradication: "warning",
+  recovery: "secondary",
+  postmortem: "secondary",
+  closed: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {

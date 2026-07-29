@@ -43,6 +43,10 @@ PERMISSIONS: dict[str, str] = {
     "compliance.evidence.manage": "Attach and manage evidence",
     "compliance.risks.manage": "Create and update risks",
     "compliance.policies.manage": "Create and publish policies",
+    "security.assets.manage": "Create and update the security asset inventory",
+    "security.findings.manage": "Create and update security findings",
+    "security.alerts.manage": "Triage and update security alerts",
+    "security.incidents.manage": "Create and manage security incidents",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -50,6 +54,13 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.evidence.manage",
     "compliance.risks.manage",
     "compliance.policies.manage",
+]
+
+SECURITY_PERMISSIONS = [
+    "security.assets.manage",
+    "security.findings.manage",
+    "security.alerts.manage",
+    "security.incidents.manage",
 ]
 
 # Only org_admin gets the full Phase 1 permission set; module-specific
@@ -60,6 +71,7 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "org_admin": list(PERMISSIONS.keys()),
     "compliance_manager": COMPLIANCE_PERMISSIONS,
     "dpo": COMPLIANCE_PERMISSIONS,
+    "security_manager": SECURITY_PERMISSIONS,
 }
 
 

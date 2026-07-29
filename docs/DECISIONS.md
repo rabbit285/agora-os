@@ -207,3 +207,51 @@ disconnected modules... use shared entities wherever appropriate").
 Tested in `tests/test_compliance.py::test_failed_assessment_creates_remediation_task`
 — it asserts the task is visible through the generic `/api/v1/tasks`
 endpoint, not a compliance-specific one.
+
+## ADR-0016 — Security domain package is named `secops`, not `security`
+
+**Decision**: The Phase 4 Security module lives in `app/secops/`
+(`app/secops/models.py`, etc.), not `app/security/`.
+
+**Why**: `app/security.py` already exists — the Phase 1 password-hashing
+and session-token helper module. Python cannot have both a module named
+`security.py` and a package named `security/` as siblings in the same
+parent package. Renaming the Phase 1 utility module would touch every
+file that imports password/token helpers (`identity/service.py`,
+`dependencies.py`, ...) purely to free up a name; `secops` costs nothing
+and reads clearly enough in imports (`from app.secops.models import
+SecurityAsset`).
+
+## ADR-0017 — One `SecurityFinding` table with a category discriminator, not three
+
+**Decision**: Vulnerabilities, cloud misconfigurations, and identity
+findings (spec §50 lists `vulnerabilities`, `cloud_findings`,
+`identity_findings` as separate tables) are one `security_findings` table
+with a `category` column (`vulnerability | cloud_misconfiguration |
+identity | other`).
+
+**Why**: The spec's own field lists for these three are nearly identical
+(asset, severity, status, owner, due date) — three tables would mean
+three copies of the same CRUD/RBAC/serialization code for no behavioral
+difference. If a category's fields genuinely diverge later (e.g.
+vulnerability-specific CVSS scoring), split it out then; a discriminator
+column is trivially migrated into a proper subtype at that point.
+
+## ADR-0018 — A critical security incident auto-creates a linked Compliance Risk
+
+**Decision**: `app/secops/service.py::create_incident` creates a
+`compliance.Risk` (`category="security"`) and sets
+`incident.related_risk_id` when `severity == "critical"` — using the
+Compliance module's existing Risk primitive, not a security-specific
+breach-tracking type.
+
+**Why**: Spec §19 explicitly calls this out: "Integrate incidents with
+the GDPR breach process... this connection between security and
+compliance is critical." This is Phase 4's one cross-module hook, mirror
+of Phase 3's failed-assessment-creates-a-Task (ADR-0015) — same
+principle (spec §80: shared entities over disconnected modules), applied
+in the other direction (Security → Compliance instead of
+Compliance → core). Tested in
+`tests/test_security.py::test_critical_incident_creates_linked_compliance_risk`,
+which asserts the risk is visible through the generic
+`/api/v1/compliance/risks` endpoint.

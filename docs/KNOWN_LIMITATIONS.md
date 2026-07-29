@@ -7,20 +7,30 @@ implied to work.
 
 ## Product scope
 
-- **Security, Sales, Support, and Automation** (four of the five primary
-  product modules) have zero domain logic — their nav entries route to a
-  `/coming-soon` page. **Compliance** has its core backbone (frameworks,
-  controls, assessments, evidence, risks, policies) but not audits, AI
-  governance, privacy workflows (RoPA/DPIA/DSAR), vendor risk,
-  questionnaires, or the Trust Center. See `docs/IMPLEMENTATION_PLAN.md`
-  for the phase order.
+- **Sales, Support, and Automation** (three of the five primary product
+  modules) have zero domain logic — their nav entries route to a
+  `/coming-soon` page. **Compliance** and **Security** have their core
+  backbones (see below) but not their larger sub-features. See
+  `docs/IMPLEMENTATION_PLAN.md` for the phase order.
+- **Compliance**: no audits (auditor portal), AI governance, privacy
+  workflows (RoPA/DPIA/DSAR), vendor risk, questionnaires, or Trust
+  Center.
+- **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
+  provider connectors (Okta/Entra/Google Workspace), no vulnerability
+  scanner ingestion, no incident timeline/evidence/playbook sub-objects —
+  the incident *workspace* has a status workflow, but not the richer
+  structure spec §19 describes (Timeline, Affected Assets, Evidence,
+  Communication, Root Cause, Lessons Learned tabs). These realistically
+  need the connector SDK (Phase 9) to do properly rather than one-off
+  per-provider integrations.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,
   Security, and Sales context in one answer) can't work yet — Compliance
-  data exists now but nothing wires it into Copilot retrieval, and
-  Security/Sales don't exist at all. There's also no cross-module intent
-  router — every question goes through the same single retrieval path.
+  and Security data exist now but nothing wires either into Copilot
+  retrieval, and Sales doesn't exist at all. There's also no cross-module
+  intent router — every question goes through the same single retrieval
+  path over Knowledge chunks only.
 - **Compliance frameworks/requirements are a fixed seeded catalog**, not
   an editable admin feature — GDPR, EU AI Act, and ISO 27001 are seeded
   with a handful of representative requirements each (not the complete

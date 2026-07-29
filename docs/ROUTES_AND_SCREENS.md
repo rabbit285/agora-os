@@ -57,11 +57,24 @@ page, AI Inventory/Assessment, Data Inventory/DPIA/DSAR, Vendors,
 Questionnaires, Policies list page (API exists, no UI yet), Audits, Trust
 Center, Regulatory Intelligence.
 
-## SECURITY / SALES / SUPPORT / AUTOMATION
+## SECURITY
 
-Not started — Phases 4–7 respectively. Routes will be added under
-`apps/web/app/(app)/security`, `/sales`, `/support`, `/automation`
-matching the navigation tree in spec §6.
+| Route | Status |
+|---|---|
+| `/security` | [x] assets + findings + alerts + incidents overview |
+| `/security/incidents/[id]` | [x] detail: status workflow, linked compliance risk |
+
+Not yet built (spec §67 lists these under Security): standalone Asset
+Detail page, Cloud Security / Identity Security dedicated views, Alert
+Detail page, Security Policies. Incident workspace has a status workflow
+but not the full Timeline/Affected Assets/Evidence/Communication/Root
+Cause/Lessons Learned tab structure spec §19 describes.
+
+## SALES / SUPPORT / AUTOMATION
+
+Not started — Phases 5–7 respectively. Routes will be added under
+`apps/web/app/(app)/sales`, `/support`, `/automation` matching the
+navigation tree in spec §6.
 
 ## SETTINGS
 

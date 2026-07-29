@@ -23,6 +23,7 @@ from app.routers import (
     knowledge,
     notifications,
     organizations,
+    security,
     tasks,
 )
 
@@ -97,3 +98,4 @@ app.include_router(notifications.router)
 app.include_router(ai.router)
 app.include_router(knowledge.router)
 app.include_router(compliance.router)
+app.include_router(security.router)

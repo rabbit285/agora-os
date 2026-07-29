@@ -23,6 +23,8 @@ from app.db.session import AsyncSessionLocal
 from app.identity.models import User
 from app.knowledge.models import Document
 from app.knowledge.service import get_or_create_default_knowledge_base, ingest_document
+from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding
+from app.secops.service import create_incident
 from app.security import hash_password
 
 logger = logging.getLogger("agora.seed")
@@ -140,6 +142,18 @@ async def seed() -> None:
                 gdpr_requirements=gdpr_requirements,
                 evidence_file_id=evidence_file_id,
             )
+
+        existing_assets = (
+            (
+                await db.execute(
+                    select(SecurityAsset).where(SecurityAsset.organization_id == organization.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_assets:
+            await _seed_demo_security_data(db, organization_id=organization.id, admin_id=admin.id)
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -366,6 +380,80 @@ async def _seed_demo_compliance_data(
 
     await db.commit()
     logger.info("Seeded demo compliance data (2 controls, 2 assessments, 1 risk)")
+
+
+async def _seed_demo_security_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds a couple of assets, one resolved and one open finding, one
+    alert, and one critical incident — the critical incident exercises
+    the cross-module hook that links it to a Compliance Risk (spec
+    section 19)."""
+    prod_cluster = SecurityAsset(
+        organization_id=organization_id,
+        name="prod-api-cluster",
+        asset_type="cloud_account",
+        provider="aws",
+        criticality="critical",
+        internet_exposed=True,
+        owner_id=admin_id,
+    )
+    laptop_fleet = SecurityAsset(
+        organization_id=organization_id,
+        name="Employee laptop fleet",
+        asset_type="endpoint",
+        provider="google_workspace",
+        criticality="medium",
+        owner_id=admin_id,
+    )
+    db.add_all([prod_cluster, laptop_fleet])
+    await db.flush()
+
+    db.add(
+        SecurityFinding(
+            organization_id=organization_id,
+            asset_id=prod_cluster.id,
+            category="cloud_misconfiguration",
+            title="S3 bucket allows public read access",
+            description="customer-exports bucket has public-read ACL enabled.",
+            severity="critical",
+            status="open",
+            owner_id=admin_id,
+        )
+    )
+    db.add(
+        SecurityFinding(
+            organization_id=organization_id,
+            asset_id=laptop_fleet.id,
+            category="identity",
+            title="2 administrators without MFA",
+            severity="high",
+            status="resolved",
+            owner_id=admin_id,
+        )
+    )
+    db.add(
+        SecurityAlert(
+            organization_id=organization_id,
+            title="Unusual login location for admin@acme-ai.example",
+            severity="medium",
+            status="investigating",
+        )
+    )
+    await db.flush()
+
+    await create_incident(
+        db,
+        organization_id=organization_id,
+        title="Public S3 bucket exposed customer export data",
+        description="Discovered via routine cloud configuration scan; bucket made private immediately.",
+        severity="critical",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    await db.commit()
+    logger.info("Seeded demo security data (2 assets, 2 findings, 1 alert, 1 critical incident)")
 
 
 if __name__ == "__main__":

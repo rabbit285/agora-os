@@ -159,3 +159,66 @@ export type Risk = {
   owner_id: string | null;
   created_at: string;
 };
+
+export type Severity = "low" | "medium" | "high" | "critical";
+
+export type SecurityAsset = {
+  id: string;
+  name: string;
+  asset_type: string;
+  environment: string;
+  provider: string | null;
+  criticality: Severity;
+  data_classification: string;
+  internet_exposed: boolean;
+  status: "healthy" | "at_risk" | "compromised";
+  owner_id: string | null;
+  last_observed_at: string | null;
+  created_at: string;
+};
+
+export type SecurityFinding = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: "vulnerability" | "cloud_misconfiguration" | "identity" | "other";
+  severity: Severity;
+  cve: string | null;
+  status: "open" | "investigating" | "resolved" | "false_positive" | "risk_accepted";
+  asset_id: string | null;
+  owner_id: string | null;
+  due_at: string | null;
+  created_at: string;
+};
+
+export type SecurityAlert = {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: Severity;
+  status: "new" | "investigating" | "contained" | "resolved" | "false_positive";
+  finding_id: string | null;
+  created_at: string;
+};
+
+export type SecurityIncidentStatus =
+  | "detected"
+  | "triage"
+  | "investigation"
+  | "containment"
+  | "eradication"
+  | "recovery"
+  | "postmortem"
+  | "closed";
+
+export type SecurityIncident = {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: Severity;
+  status: SecurityIncidentStatus;
+  related_risk_id: string | null;
+  owner_id: string | null;
+  closed_at: string | null;
+  created_at: string;
+};
