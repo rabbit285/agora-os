@@ -53,6 +53,8 @@ PERMISSIONS: dict[str, str] = {
     "sales.outreach.manage": "Draft and send outreach messages",
     "support.tickets.manage": "Create and update support tickets and messages",
     "support.knowledge.manage": "Create, edit, and publish knowledge articles",
+    "automation.workflows.manage": "Create, edit, and publish automation workflows",
+    "automation.runs.manage": "Trigger and resume workflow runs",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -81,6 +83,11 @@ SUPPORT_PERMISSIONS = [
     "support.knowledge.manage",
 ]
 
+AUTOMATION_PERMISSIONS = [
+    "automation.workflows.manage",
+    "automation.runs.manage",
+]
+
 # Only org_admin gets the full Phase 1 permission set; module-specific
 # roles get only their own module's permissions. Every other role is
 # seeded with zero permissions until its owning module defines what it
@@ -94,6 +101,7 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "sales_representative": SALES_PERMISSIONS,
     "support_manager": SUPPORT_PERMISSIONS,
     "support_agent": SUPPORT_PERMISSIONS,
+    "automation_manager": AUTOMATION_PERMISSIONS,
 }
 
 

@@ -234,6 +234,44 @@ or confidence-gated auto-resolution (spec §32 — the Copilot/retrieval
 infrastructure from Phase 2 could support this, but nothing wires Support
 into it yet), knowledge-gap detection, FAQ generation.
 
+## Phase 7 entities (implemented — Business Automation backbone)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ WORKFLOW : has
+  WORKFLOW ||--o{ WORKFLOW_RUN : produces
+  WORKFLOW_RUN ||--o{ WORKFLOW_STEP_RUN : contains
+  WORKFLOW_STEP_RUN }o--o| APPROVAL : "human_approval step creates"
+```
+
+- **Workflow** — `steps` is a JSON-defined ordered list
+  (`{step_type, config}`), not a visual builder yet (spec §37's much
+  larger step vocabulary — Condition/Delay/Loop/Data Transform/Webhook/
+  Subworkflow/AI Step — is out of scope for this slice, see
+  `docs/KNOWN_LIMITATIONS.md`). `status` follows spec §41's governance
+  states (draft/testing/active/paused/archived); steps can only be
+  edited via a dedicated endpoint while `status = draft` — publishing
+  locks them, so an edit can never silently change already-active
+  behavior.
+- **WorkflowRun** — one execution, `status`
+  running/succeeded/failed/awaiting_approval. `trigger_type` is `manual`
+  only — every other spec §38 trigger (new email, webhook, CRM stage
+  change, ...) needs external connectors that don't exist yet.
+- **WorkflowStepRun** — one step's execution record, making a run's
+  history inspectable (spec §41 "workflow logs"), not just a final
+  pass/fail. `approval_id` is the cross-module hook: a `human_approval`
+  step creates a real Phase 1 **Approval** and pauses the run until it's
+  decided through the existing `/api/v1/approvals/{id}/decide` endpoint
+  (ADR-0021) — the first domain module to actually exercise that
+  primitive outside its own generic UI.
+
+Not modeled yet: workflow templates, AI steps (spec §40 — generate/
+summarize/classify/extract/RAG query), data transforms, branching/loops,
+webhooks and other non-manual triggers, retries/failure policies beyond
+"step failed → run failed," automation analytics (spec §43). Real
+non-manual triggers (new email, CRM stage change, webhook) depend on the
+connector SDK (Phase 9).
+
 ## Cross-module entity linking (spec §81)
 
 Reserved-domain entities will carry foreign keys back to Phase 1 primitives

@@ -67,6 +67,12 @@ const STATUS_VARIANTS: Record<
   high: "warning",
   urgent: "destructive",
   active: "success",
+  testing: "warning",
+  paused: "secondary",
+  archived: "outline",
+  running: "warning",
+  succeeded: "success",
+  awaiting_approval: "warning",
 };
 
 export function StatusBadge({ status }: { status: string }) {

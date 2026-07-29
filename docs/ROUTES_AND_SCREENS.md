@@ -96,8 +96,16 @@ CSAT reporting, support analytics.
 
 ## AUTOMATION
 
-Not started — Phase 7. Routes will be added under
-`apps/web/app/(app)/automation` matching the navigation tree in spec §6.
+| Route | Status |
+|---|---|
+| `/automation` | [x] workflow list + step-by-step create form |
+| `/automation/workflows/[id]` | [x] detail: status governance, run now, run history with expandable step log |
+
+Not yet built (spec §67 lists these under Automation): a visual
+drag-and-drop Workflow Builder (React Flow), Workflow Templates gallery,
+a dedicated Connections page, automation analytics dashboard. The current
+create form is a structured list-based step editor, not the visual
+builder.
 
 ## SETTINGS
 

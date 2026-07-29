@@ -2,7 +2,7 @@
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
-Phases 3-6 / local-only** checkpoint, not a production release — most
+Phases 3-7 / local-only** checkpoint, not a production release — most
 items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
@@ -89,11 +89,24 @@ items below are correctly unchecked.
 - [ ] SLA policies/timers, QA review scoring, multi-channel connectors, AI-drafted
       replies — not started, need Phase 9 connectors and Copilot integration
 
-See `docs/RESUME_BUILD.md` for the next phase (Business Automation).
+## Phase 7 (Automation) — backbone complete, sub-features remain
+
+- [x] Workflow, WorkflowRun, WorkflowStepRun models + migration
+- [x] Cross-module hook: `human_approval` step creates a real core.Approval and pauses the run until decided (tested, ADR-0021)
+- [x] Tenant-isolated `/api/v1/automation` API + frontend (workflow list/create, detail with run history)
+- [x] RBAC: `automation_manager` role granted automation permissions, tested
+- [x] Governance: steps lock once a workflow is published to active (spec §41)
+- [x] Seed script: 2 active workflows (1 awaiting approval, 1 succeeded), 1 draft workflow
+- [x] Backend tests: 70 passing total; ruff/mypy clean
+- [ ] Full step vocabulary (Condition/Delay/Loop/Data Transform/Webhook/Subworkflow/AI Step),
+      non-manual triggers, visual builder, templates, analytics — not started
+
+All five primary product modules (Compliance, Security, Sales, Support,
+Automation) now have a real, tested backbone. See `docs/RESUME_BUILD.md`
+for the next phase (Phase 8 — Cross-Module Intelligence).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 7 — Business Automation (workflow builder)
 - [ ] Phase 8 — Cross-module intelligence
 - [ ] Phase 9 — Integrations / connectors
 - [ ] Phase 10 — Enterprise (SSO/SAML/SCIM)

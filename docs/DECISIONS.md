@@ -301,3 +301,36 @@ Security module. Tested in
 `tests/test_support.py::test_security_category_ticket_creates_linked_alert`,
 which asserts the alert is visible through the generic
 `/api/v1/security/alerts` endpoint.
+
+## ADR-0021 — A `human_approval` workflow step creates a real `core.Approval`, and a small fixed step vocabulary instead of a general interpreter
+
+**Decision**: `Workflow.steps` is a JSON list of `{step_type, config}`
+objects, but `app/automation/service.py` only executes three step types
+(`create_task`, `send_notification`, `human_approval`) — anything else is
+rejected before a run can start. A `human_approval` step creates a real
+`core.Approval` row (`requested_by` the user who triggered the run) and
+leaves the `WorkflowRun` at `awaiting_approval`; nothing pushes a
+decision back into the run automatically — `POST
+/api/v1/automation/runs/{id}/resume` re-checks the linked Approval's
+status (still decided through the ordinary, pre-existing
+`/api/v1/approvals/{id}/decide` endpoint) and either continues the
+remaining steps, fails the run (rejected), or no-ops (still pending).
+Workflow step edits are only allowed while `status == "draft"`; once
+`active`, the steps router route returns 409 rather than letting an edit
+silently change a published workflow's behavior (spec §41).
+
+**Why**: Spec §37 lists a large step vocabulary (Trigger/Action/Condition/
+AI Step/Human Approval/Delay/Loop/Data Transform/Webhook/
+Notification/Subworkflow) and calls the whole module "a major platform
+capability" — building a general visual workflow interpreter in one slice
+would produce a stub of everything rather than one real vertical (spec
+§80/§82), the same discipline applied to every prior phase (Sales shipped
+real CRUD before a lead-finder; Support shipped real tickets before
+SLA/QA scoring). `human_approval` reusing `core.Approval` is also the
+first domain module to actually exercise that Phase 1 primitive outside
+its own generic UI — previously noted as unused by any domain module as
+far back as the Phase 5 resume notes. Tested in
+`tests/test_automation.py::test_human_approval_step_creates_approval_and_pauses_run`
+and `test_rejected_approval_fails_the_run`, both of which decide the
+approval through the real `/api/v1/approvals/{id}/decide` endpoint rather
+than mutating the database directly.

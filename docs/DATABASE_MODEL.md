@@ -489,6 +489,53 @@ to `blocked` instead, via `app/sales/service.py::send_outreach_message`
 — Phase 5's cross-module hook (spec §91, ADR-0019). No real email/
 LinkedIn provider is wired up yet — sending only transitions this row.
 
+## Tables (Phase 7 — Business Automation)
+
+```text
+automation_workflows
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  description TEXT NULL
+  trigger_type TEXT NOT NULL DEFAULT 'manual'   -- manual only today
+  status TEXT NOT NULL DEFAULT 'draft'   -- draft|testing|active|paused|archived
+  steps JSON NOT NULL DEFAULT '[]'   -- ordered [{step_type, config}, ...]
+  version INTEGER NOT NULL DEFAULT 1
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+automation_workflow_runs
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  workflow_id UUID FK automation_workflows NOT NULL
+  status TEXT NOT NULL DEFAULT 'running'   -- running|succeeded|failed|awaiting_approval
+  trigger_payload JSON NULL
+  triggered_by UUID FK users NULL
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  completed_at TIMESTAMPTZ NULL
+
+automation_workflow_step_runs
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  run_id UUID FK automation_workflow_runs NOT NULL
+  step_index INTEGER NOT NULL
+  step_type TEXT NOT NULL
+  status TEXT NOT NULL   -- succeeded|failed|awaiting_approval
+  output JSON NULL
+  approval_id UUID FK approvals NULL   -- cross-module hook, see below
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+`Workflow.steps` only supports three step types in this build —
+`create_task`, `send_notification`, `human_approval` — out of the much
+larger vocabulary spec §37 describes (Condition/Delay/Loop/Data
+Transform/Webhook/Subworkflow/AI Step are not implemented; see
+`docs/KNOWN_LIMITATIONS.md`). A `human_approval` step run creates a real
+row in the existing `approvals` table (Phase 1) and pauses the run at
+`awaiting_approval` until that Approval is decided through
+`/api/v1/approvals/{id}/decide` — ADR-0021. Workflow steps can only be
+edited via `PATCH /workflows/{id}/steps` while `status = 'draft'`.
+
 ## Migration policy
 
 - Every schema change ships an Alembic revision with both `upgrade()` and

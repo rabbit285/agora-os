@@ -350,3 +350,51 @@ export type CSATResponse = {
   comment: string | null;
   created_at: string;
 };
+
+export type WorkflowStepType = "create_task" | "send_notification" | "human_approval";
+
+export type WorkflowStep = {
+  step_type: WorkflowStepType;
+  config: Record<string, unknown>;
+};
+
+export type WorkflowStatus = "draft" | "testing" | "active" | "paused" | "archived";
+
+export type Workflow = {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger_type: string;
+  status: WorkflowStatus;
+  steps: WorkflowStep[];
+  version: number;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type WorkflowRunStatus = "running" | "succeeded" | "failed" | "awaiting_approval";
+
+export type WorkflowRun = {
+  id: string;
+  workflow_id: string;
+  status: WorkflowRunStatus;
+  trigger_payload: Record<string, unknown> | null;
+  triggered_by: string | null;
+  started_at: string;
+  completed_at: string | null;
+};
+
+export type WorkflowStepRun = {
+  id: string;
+  run_id: string;
+  step_index: number;
+  step_type: WorkflowStepType;
+  status: "succeeded" | "failed" | "awaiting_approval";
+  output: Record<string, unknown> | null;
+  approval_id: string | null;
+  created_at: string;
+};
+
+export type WorkflowRunDetail = WorkflowRun & {
+  step_runs: WorkflowStepRun[];
+};

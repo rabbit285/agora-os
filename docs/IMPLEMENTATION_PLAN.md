@@ -112,11 +112,25 @@ analytics. Real multi-channel support needs the connector SDK (Phase 9);
 AI-drafted replies need Support wired into the existing Copilot retrieval
 path — see `docs/RESUME_BUILD.md`.
 
-## Phase 7 — Business Automation
+## Phase 7 — Business Automation (backbone in progress)
 
-Visual workflow builder (React Flow), triggers, actions, AI steps, human
-approval nodes, versioning (draft/testing/active/paused/archived),
-templates, run history, automation analytics.
+Done: Workflow (JSON-defined ordered steps, not a visual builder yet),
+WorkflowRun, WorkflowStepRun. Governance states (draft/testing/active/
+paused/archived, spec §41) are modeled; steps can only be edited while
+draft, so publishing to active can never silently change behavior. Only
+the `manual` trigger and three step types execute for real —
+`create_task`, `send_notification`, `human_approval` — deliberately a
+small fixed vocabulary rather than a stub of spec §37's much larger list
+(Condition/Delay/Loop/Data Transform/Webhook/Subworkflow/AI Step). A
+`human_approval` step creates a real Phase 1 `core.Approval` and pauses
+the run until it's decided through the existing approvals endpoint — the
+Phase 7 cross-module hook (spec §42, ADR-0021), and the first domain
+module to actually exercise that primitive outside its own generic UI.
+
+Remaining: the rest of the step vocabulary, non-manual triggers (new
+email, webhook, CRM stage change, schedule — spec §38, need Phase 9
+connectors), a real visual drag-and-drop builder (React Flow), workflow
+templates, run history filtering/search, automation analytics (spec §43).
 
 ## Phase 8 — Cross-Module Intelligence
 

@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, and Phase 6 Customer Support backbones — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones — verified end-to-end)
 
 ## Platform
 
@@ -102,7 +102,16 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 ## Automation
 
-- [ ] Not started (Phase 7)
+- [x] Workflow, WorkflowRun, WorkflowStepRun models + migration
+- [x] Cross-module hook: a `human_approval` step creates a real `core.Approval` and pauses the run until it's decided via the existing `/api/v1/approvals/{id}/decide` endpoint (tested, ADR-0021)
+- [x] `/api/v1/automation` router — workflows (create, steps/status transitions), runs (trigger, detail with step log, resume); tenant-isolated, RBAC-gated
+- [x] RBAC: `automation_manager` system role granted automation permissions
+- [x] Frontend: `/automation` overview (workflow list + step-by-step create form) + `/automation/workflows/[id]` detail (status governance, run now, run history with expandable step log)
+- [x] Seed script: 2 active workflows (1 run awaiting approval, 1 run succeeded), 1 draft workflow for the demo org
+- [x] Workflow governance: steps can only be edited while `status = draft`; publishing to `active` locks them (spec §41)
+- [ ] Only 3 of the spec's much larger step vocabulary implemented (create_task, send_notification, human_approval) — Condition/Delay/Loop/Data Transform/Webhook/Subworkflow/AI Step not started
+- [ ] Only `manual` trigger type implemented — email/webhook/CRM-event/schedule triggers need Phase 9 connectors
+- [ ] Visual drag-and-drop builder, templates, automation analytics — not started
 
 ## Integrations
 
@@ -123,7 +132,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Security tests (8 tests: RBAC grant/denial, cross-module risk creation, tenant isolation, status workflows)
 - [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
-- [x] 61/61 total, ruff+mypy strict clean
+- [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
+- [x] 70/70 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -145,10 +155,10 @@ next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 **Do not read this file as "the product is done."** It tracks a very large,
 explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
-Phases 3–6 (Compliance, Security, Sales, Support) have their core backbones
-(see their sections above) but not their larger sub-features (audits, AI
-governance, privacy workflows, vendor risk, Trust Center, identity/cloud
-provider integrations, incident playbooks, sequences/campaigns, SLA/QA
-scoring, real external connectors). Automation (Phase 7), the cross-module
-intent router, Phases 8–10, and the AWS production deployment have not
-started.
+Phases 3–7 (Compliance, Security, Sales, Support, Automation) have their
+core backbones (see their sections above) but not their larger
+sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
+Center, identity/cloud provider integrations, incident playbooks,
+sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
+non-manual triggers, real external connectors). The cross-module intent
+router, Phases 8–10, and the AWS production deployment have not started.

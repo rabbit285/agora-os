@@ -7,10 +7,9 @@ implied to work.
 
 ## Product scope
 
-- **Automation** (one of the five primary product modules) has zero
-  domain logic — its nav entry routes to a `/coming-soon` page.
-  **Compliance**, **Security**, **Sales**, and **Support** have their
-  core backbones (see below) but not their larger sub-features. See
+- **Compliance**, **Security**, **Sales**, **Support**, and
+  **Automation** — all five primary product modules — have their core
+  backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
 - **Compliance**: no audits (auditor portal), AI governance, privacy
   workflows (RoPA/DPIA/DSAR), vendor risk, questionnaires, or Trust
@@ -39,6 +38,19 @@ implied to work.
   Support into it yet), no knowledge-gap detection or FAQ generation. The
   security-category cross-module hook creates a `SecurityAlert` (Security's
   triage inbox), not a full `SecurityIncident` — see ADR-0020 for why.
+- **Automation**: only three step types actually execute
+  (`create_task`, `send_notification`, `human_approval`) out of spec §37's
+  much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,
+  Subworkflow, AI Step are not implemented). Only the `manual` trigger
+  works — email, webhook, CRM-stage-change, and schedule triggers (spec
+  §38) all need external connectors or public endpoints that don't exist
+  yet. There's no visual drag-and-drop builder — workflows are defined as
+  a JSON-backed ordered step list via a plain form. No templates, no
+  automation analytics (spec §43), no retry/backoff policies beyond "a
+  failed step fails the run." Workflow governance is real but simple: a
+  workflow's steps can only be edited while `status = draft`; there's no
+  parallel draft/published dual-version editing of an already-active
+  workflow (spec §41's fuller versioning model).
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,

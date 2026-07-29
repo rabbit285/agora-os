@@ -15,6 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.gateway import ModelGateway
+from app.automation.models import Workflow
+from app.automation.service import start_run
 from app.compliance.models import Control, ControlMapping, Evidence, Framework, Requirement, Risk
 from app.compliance.service import record_assessment
 from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
@@ -189,6 +191,14 @@ async def seed() -> None:
                 admin_id=admin.id,
                 sales_account_id=nordwind_account.id if nordwind_account else None,
             )
+
+        existing_workflows = (
+            (await db.execute(select(Workflow).where(Workflow.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_workflows:
+            await _seed_demo_automation_data(db, organization_id=organization.id, admin_id=admin.id)
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -671,6 +681,103 @@ async def _seed_demo_support_data(
     logger.info(
         "Seeded demo support data (1 customer, 2 tickets - 1 resolved with CSAT, "
         "1 security-flagged ticket that auto-created a SecurityAlert, 1 knowledge article)"
+    )
+
+
+async def _seed_demo_automation_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds two active workflows and one draft. One active workflow is
+    triggered end to end: its first step (create_task) succeeds, its
+    second step (human_approval) is the cross-module hook (spec section
+    42, ADR-0021) - it creates a real core.Approval and leaves the run
+    "awaiting_approval", genuinely visible and decidable through the
+    existing /approvals UI, not a fabricated pending state. The other
+    active workflow has no approval step and its run completes to
+    "succeeded" in one pass, showing the non-blocked happy path too."""
+    vendor_workflow = Workflow(
+        organization_id=organization_id,
+        name="New Vendor Onboarding",
+        description="Spec section 36 example: collect vendor info, assess risk, get approval.",
+        status="active",
+        owner_id=admin_id,
+        steps=[
+            {
+                "step_type": "create_task",
+                "config": {
+                    "title": "Collect vendor security questionnaire",
+                    "priority": "high",
+                },
+            },
+            {
+                "step_type": "human_approval",
+                "config": {
+                    "action_type": "Approve new vendor: Helvetia Cloud Services",
+                    "risk_class": "moderate",
+                },
+            },
+            {
+                "step_type": "create_task",
+                "config": {"title": "Provision vendor in accounting system"},
+            },
+        ],
+    )
+    db.add(vendor_workflow)
+    await db.flush()
+    await start_run(
+        db,
+        organization_id=organization_id,
+        workflow=vendor_workflow,
+        trigger_payload={"vendor_name": "Helvetia Cloud Services"},
+        actor_user_id=admin_id,
+    )
+
+    reminder_workflow = Workflow(
+        organization_id=organization_id,
+        name="Weekly Compliance Reminder",
+        description="A simple single-step notification workflow (no approval needed).",
+        status="active",
+        owner_id=admin_id,
+        steps=[
+            {
+                "step_type": "send_notification",
+                "config": {
+                    "title": "Weekly compliance check",
+                    "body": "Review open control assessments before Friday.",
+                },
+            },
+        ],
+    )
+    db.add(reminder_workflow)
+    await db.flush()
+    await start_run(
+        db,
+        organization_id=organization_id,
+        workflow=reminder_workflow,
+        trigger_payload=None,
+        actor_user_id=admin_id,
+    )
+
+    db.add(
+        Workflow(
+            organization_id=organization_id,
+            name="Support Escalation Follow-up",
+            description="Draft — not yet published. Demonstrates the draft/active governance gate.",
+            status="draft",
+            owner_id=admin_id,
+            steps=[
+                {
+                    "step_type": "create_task",
+                    "config": {"title": "Follow up on escalated support ticket"},
+                },
+            ],
+        )
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo automation data (2 active workflows - 1 run awaiting approval, "
+        "1 run succeeded, 1 draft workflow)"
     )
 
 
