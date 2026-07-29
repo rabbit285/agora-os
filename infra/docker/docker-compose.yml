@@ -1,0 +1,150 @@
+name: agora-origin
+
+# Host-side port mappings are configurable (defaults match the ports
+# documented in docs/ENVIRONMENT_VARIABLES.md) so a machine that already has
+# something bound to a default port — e.g. another local project — can
+# override it via infra/docker/.env without editing this file. Container-to
+# -container traffic always uses the fixed internal ports below regardless
+# of these overrides.
+x-api-env: &api-env
+  APP_ENV: development
+  APP_URL: http://localhost:${WEB_HOST_PORT:-3000}
+  API_URL: http://localhost:${API_HOST_PORT:-8000}
+  SECRET_KEY: dev-insecure-secret-change-me
+  DATABASE_URL: postgresql+psycopg://agora:agora@postgres:5432/agora
+  REDIS_URL: redis://redis:6379/0
+  TEMPORAL_ADDRESS: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  TEMPORAL_DEPLOYMENT_MODE: local
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_BUCKET: agora-local
+  S3_ACCESS_KEY_ID: agora
+  S3_SECRET_ACCESS_KEY: agora-secret
+  S3_REGION: eu-central-1
+  AI_PROVIDER: ${AI_PROVIDER:-demo}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agora
+      POSTGRES_PASSWORD: agora
+      POSTGRES_DB: agora
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agora -d agora"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: agora
+      MINIO_ROOT_PASSWORD: agora-secret
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    volumes:
+      - ./.data/minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal:
+    image: temporalio/auto-setup:1.25
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: agora
+      POSTGRES_PWD: agora
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "${TEMPORAL_HOST_PORT:-7233}:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:${WEB_HOST_PORT:-3000}
+    ports:
+      - "${TEMPORAL_UI_HOST_PORT:-8088}:8080"
+    depends_on:
+      - temporal
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    volumes:
+      - ../../apps/api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+    volumes:
+      - ../../apps/api:/app/api_lib
+      - ../../apps/worker:/app/worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${API_HOST_PORT:-8000}
+    ports:
+      - "${WEB_HOST_PORT:-3000}:3000"
+    volumes:
+      - ../../apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
