@@ -24,6 +24,8 @@ from app.core.rbac import ensure_system_roles, get_system_role
 from app.core.storage import ensure_bucket, upload_object
 from app.db.session import AsyncSessionLocal
 from app.identity.models import User
+from app.integrations.models import IntegrationConnection
+from app.integrations.service import generate_webhook_secret, receive_webhook_event, sign_payload
 from app.knowledge.models import Document
 from app.knowledge.service import get_or_create_default_knowledge_base, ingest_document
 from app.sales.models import Account, Contact, Opportunity, OutreachMessage
@@ -199,6 +201,22 @@ async def seed() -> None:
         )
         if not existing_workflows:
             await _seed_demo_automation_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_connections = (
+            (
+                await db.execute(
+                    select(IntegrationConnection).where(
+                        IntegrationConnection.organization_id == organization.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_connections:
+            await _seed_demo_integrations_data(
+                db, organization_id=organization.id, admin_id=admin.id
+            )
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -810,6 +828,62 @@ async def _seed_demo_automation_data(
     logger.info(
         "Seeded demo automation data (2 active workflows - 1 run awaiting approval, "
         "1 run succeeded, 1 draft workflow)"
+    )
+
+
+async def _seed_demo_integrations_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one webhook-triggered workflow, one connection linked to it,
+    and two received events - one genuinely HMAC-verified (which triggers
+    a real workflow run) and one with a deliberately wrong signature
+    (recorded but never reaches the workflow engine) - so the Phase 9
+    cross-module hook (spec section 38 "Webhook" trigger) has a real,
+    non-trivial demonstration of both the accept and reject paths."""
+    webhook_workflow = Workflow(
+        organization_id=organization_id,
+        name="New Lead Webhook Intake",
+        description="Triggered by an inbound webhook - spec section 38.",
+        trigger_type="webhook",
+        status="active",
+        owner_id=admin_id,
+        steps=[
+            {
+                "step_type": "create_task",
+                "config": {"title": "Follow up on new inbound lead", "priority": "high"},
+            }
+        ],
+    )
+    db.add(webhook_workflow)
+    await db.flush()
+
+    connection = IntegrationConnection(
+        organization_id=organization_id,
+        name="Inbound Lead Webhook",
+        webhook_secret=generate_webhook_secret(),
+        linked_workflow_id=webhook_workflow.id,
+        created_by=admin_id,
+    )
+    db.add(connection)
+    await db.flush()
+
+    verified_body = b'{"lead_name": "Jonas Keller", "source": "website_form"}'
+    await receive_webhook_event(
+        db,
+        connection=connection,
+        raw_body=verified_body,
+        signature=sign_payload(connection.webhook_secret, verified_body),
+    )
+
+    unverified_body = b'{"lead_name": "Suspicious Sender"}'
+    await receive_webhook_event(
+        db, connection=connection, raw_body=unverified_body, signature="not-a-real-signature"
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo integrations data (1 webhook-triggered workflow, 1 connection, "
+        "2 events - 1 verified that triggered a real run, 1 rejected for a bad signature)"
     )
 
 

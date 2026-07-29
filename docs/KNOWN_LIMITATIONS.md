@@ -11,6 +11,11 @@ implied to work.
   **Automation** — all five primary product modules — have their core
   backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
+- **Integrations (Phase 9)**: only a generic inbound Webhook connector is
+  implemented — see the dedicated bullet below. No CRM/Email/Cloud/
+  Identity/Engineering/Communication/Documents/Accounting connectors
+  exist (spec §48); all need real third-party OAuth apps or API keys this
+  environment doesn't have.
 - **Compliance**: no audits (auditor portal), AI governance, privacy
   workflows (RoPA/DPIA/DSAR), vendor risk, questionnaires, or Trust
   Center.
@@ -55,16 +60,32 @@ implied to work.
 - **Automation**: only three step types actually execute
   (`create_task`, `send_notification`, `human_approval`) out of spec §37's
   much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,
-  Subworkflow, AI Step are not implemented). Only the `manual` trigger
-  works — email, webhook, CRM-stage-change, and schedule triggers (spec
-  §38) all need external connectors or public endpoints that don't exist
-  yet. There's no visual drag-and-drop builder — workflows are defined as
-  a JSON-backed ordered step list via a plain form. No templates, no
-  automation analytics (spec §43), no retry/backoff policies beyond "a
-  failed step fails the run." Workflow governance is real but simple: a
-  workflow's steps can only be edited while `status = draft`; there's no
-  parallel draft/published dual-version editing of an already-active
-  workflow (spec §41's fuller versioning model).
+  Subworkflow, AI Step are not implemented). `manual` and `webhook`
+  triggers work (the latter added in Phase 9 — see below); email,
+  CRM-stage-change, and schedule triggers (spec §38) still need
+  connectors that don't exist. There's no visual drag-and-drop builder —
+  workflows are defined as a JSON-backed ordered step list via a plain
+  form. No templates, no automation analytics (spec §43), no
+  retry/backoff policies beyond "a failed step fails the run." Workflow
+  governance is real but simple: a workflow's steps can only be edited
+  while `status = draft`; there's no parallel draft/published dual-version
+  editing of an already-active workflow (spec §41's fuller versioning
+  model).
+- **Integrations**: `IntegrationConnection.connector_key` supports exactly
+  one value, `"webhook"` — every other spec §48 category (CRM, Email,
+  Marketing, Customer Support, Cloud, Identity, Engineering,
+  Communication, Documents, Accounting) needs a real third-party OAuth app
+  or API key this environment doesn't have, and none are stubbed as
+  "connected" (spec §82). No secrets vault exists yet — a connection's
+  `webhook_secret` is returned in plain text by the API to whoever can
+  read the connection (session-authenticated, tenant-isolated, but not
+  masked/rotatable). The full Connector SDK contract (spec §49:
+  `connect()`, `disconnect()`, `refresh_credentials()`, `subscribe()`,
+  `execute_action()`, `collect_evidence()`) isn't implemented — this slice
+  only needed a receiver and a signature check. No sync safety features
+  (spec §G2: incremental cursors, checkpointing, replay safety,
+  rate-limit handling) since there's no polling/sync connector yet, only
+  a push receiver. No API keys for outbound platform access.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,
@@ -108,11 +129,18 @@ implied to work.
 
 ## Trust and progressive access model (spec §B)
 
-- **No connectors exist yet**, so Stage 1–4 of the progressive trust model
-  (read-only → scoped write → approved automation → bounded
-  auto-execution) has nothing to apply to. The `Approval` primitive and
-  risk-classification fields exist and are wired into the Tasks/Approvals
-  UI so the pattern is ready for the first connector (Phase 9).
+- **No outbound (read) connectors exist yet**, so Stage 1–4 of the
+  progressive trust model (read-only → scoped write → approved automation
+  → bounded auto-execution) has nothing to apply to for the "connect a
+  source read-only" onboarding flow (spec §I1). The one Phase 9 connector
+  (generic inbound Webhook) is a different shape — it *receives* external
+  events rather than reading from a third-party API — and its own
+  guardrail is which Automation workflow it's allowed to trigger (only
+  `active` workflows with `trigger_type="webhook"`), not the Stage
+  1–4 ladder. The `Approval` primitive and risk-classification fields
+  exist and are wired into the Tasks/Approvals UI (and now exercised by
+  Automation's `human_approval` step, ADR-0021) so the pattern is ready
+  for the first real outbound connector.
 - **No Trust Center page.** Reserved for the Compliance module (Phase 3).
 
 ## Security

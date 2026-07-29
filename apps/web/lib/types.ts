@@ -400,3 +400,24 @@ export type WorkflowStepRun = {
 export type WorkflowRunDetail = WorkflowRun & {
   step_runs: WorkflowStepRun[];
 };
+
+export type IntegrationConnection = {
+  id: string;
+  connector_key: string;
+  name: string;
+  status: "active" | "disabled";
+  webhook_secret: string;
+  linked_workflow_id: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type WebhookEvent = {
+  id: string;
+  connection_id: string;
+  verified: boolean;
+  payload: Record<string, unknown> | null;
+  triggered_run_id: string | null;
+  received_at: string;
+};

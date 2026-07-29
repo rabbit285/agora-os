@@ -393,3 +393,42 @@ incident-response-specific types — the same reasoning as ADR-0015, -0018,
 and `test_critical_incident_with_owner_notifies_owner` (asserts the
 notification via `/api/v1/notifications`); `test_high_severity_incident_does_not_create_risk_or_task`
 confirms the severity gate still applies to both consequences together.
+
+## ADR-0024 — Phase 9's first connector is a generic inbound Webhook, not a third-party OAuth integration
+
+**Decision**: `app/integrations/models.py::IntegrationConnection.connector_key`
+supports exactly one value in this build — `"webhook"`. There is no
+HubSpot/Gmail/Salesforce/Slack/etc. adapter. The connection's security
+boundary is an HMAC-SHA256 signature over the raw request body
+(`app/integrations/service.py::verify_signature`, constant-time via
+`hmac.compare_digest`), not OAuth. A verified event on a connection whose
+`linked_workflow_id` points at an `active` workflow with
+`trigger_type="webhook"` triggers that workflow through the existing
+`app.automation.service.start_run` — Automation's engine is reused, not
+duplicated. The receiver route
+(`POST /api/v1/integrations/webhooks/{connection_id}/receive`) is the one
+route in this app with no session/`OrgContext` dependency: the caller is
+an external system, not a logged-in platform user, so there is no cookie
+to key tenant resolution off of — the connection's own secret is the
+auth mechanism instead.
+
+**Why**: Spec §48 lists a dozen-plus provider categories (CRM, Email,
+Cloud, Identity, Engineering, Communication, Documents, Accounting),
+every one of which needs a real third-party OAuth app or API key this
+environment doesn't have — building any of them now would mean either
+faking a "connected" state (forbidden by spec §82 "No Fake Features") or
+asking for secrets in chat (forbidden by spec §C2). "Webhook" and "REST
+API" are their own category in spec §48 and are the only ones
+implementable with zero external credentials: this build can genuinely
+receive, verify, and act on an inbound HTTP call. Choosing this slice
+also closes two gaps flagged in earlier phases' `KNOWN_LIMITATIONS.md`
+entries without inventing new mechanisms: Automation's non-manual
+triggers (spec §38 lists "Webhook") and the Security Release Baseline's
+explicit "webhook signature verification" requirement (spec §H). Every
+other Phase 9 category remains explicitly not started until real
+credentials and a concrete consuming feature justify building one — the
+same "don't build ahead of demand" principle used since Phase 2 (ADR-0007
+docstring). Tested in `tests/test_integrations.py::test_verified_webhook_triggers_linked_workflow`
+(asserts the triggered run via `/api/v1/automation/runs`, not just the
+event's own view) and `test_invalid_signature_does_not_trigger_workflow`
+(a forged signature is recorded but never reaches the workflow engine).

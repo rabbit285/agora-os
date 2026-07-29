@@ -21,6 +21,7 @@ from app.routers import (
     compliance,
     files,
     health,
+    integrations,
     knowledge,
     notifications,
     organizations,
@@ -105,3 +106,4 @@ app.include_router(security.router)
 app.include_router(sales.router)
 app.include_router(support.router)
 app.include_router(automation.router)
+app.include_router(integrations.router)

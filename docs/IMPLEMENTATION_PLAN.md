@@ -157,11 +157,34 @@ organization memory. Most of the remaining named scenarios need modules
 or data that don't exist yet (customer questionnaires, an AI system
 inventory) — see `docs/RESUME_BUILD.md` for suggested ordering.
 
-## Phase 9 — Integrations
+## Phase 9 — Integrations (first slice in progress)
 
-Connector SDK implementation for CRM, email, support, cloud, identity,
-engineering, documents, communication, accounting categories (spec §48),
-each starting read-only per the progressive trust model (spec §B1).
+Spec §48 lists a dozen-plus provider categories (CRM, Email, Marketing,
+Customer Support, Cloud, Identity, Engineering, Communication, Documents,
+Accounting). Every one of them needs a real third-party OAuth app or API
+key this environment doesn't have and shouldn't fabricate (spec §82 "No
+Fake Features", §C2 secrets contract). Done: a generic inbound **Webhook**
+connector — the one category in spec §48 buildable with zero external
+credentials. `IntegrationConnection` (HMAC-SHA256 secret per connection)
+and `WebhookEvent` (an audit trail of every inbound call, verified or
+not) are real, tenant-isolated, tested. A verified event on a connection
+linked to an `active` Automation workflow with `trigger_type="webhook"`
+triggers that workflow through the existing execution engine
+(`app.automation.service.start_run`) — Automation's first non-manual
+trigger, and the Security Release Baseline's "webhook signature
+verification" requirement (spec §H), both satisfied by the same slice
+(ADR-0024).
+
+Remaining: every other connector category and the full Connector SDK
+contract (spec §49: `connect()`, `disconnect()`, `refresh_credentials()`,
+`subscribe()`, `execute_action()`, `collect_evidence()`), sync safety
+(spec §G2: incremental cursors, checkpointing, replay safety), API keys
+for outbound access. Each real connector needs its own OAuth app
+registration and a concrete consuming feature to justify building it —
+not attempted speculatively, per the same "don't build ahead of demand"
+principle used since Phase 2.
+
+## Phase 10 — Enterprise
 
 ## Phase 10 — Enterprise
 

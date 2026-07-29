@@ -17,6 +17,9 @@ class WorkflowStep(BaseModel):
 class WorkflowCreate(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     description: str | None = None
+    # manual (default) or webhook — see app.integrations for how a webhook
+    # connection links to a workflow with trigger_type="webhook".
+    trigger_type: str = Field(default="manual", pattern="^(manual|webhook)$")
     steps: list[WorkflowStep] = Field(default_factory=list)
 
     @field_validator("steps")

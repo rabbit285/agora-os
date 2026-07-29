@@ -65,6 +65,7 @@ async def create_workflow(
         organization_id=context.organization_id,
         name=payload.name,
         description=payload.description,
+        trigger_type=payload.trigger_type,
         steps=[step.model_dump() for step in payload.steps],
         owner_id=context.user.id,
     )

@@ -68,8 +68,8 @@ erDiagram
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
 | Support | ~~customers, tickets, ticket_messages, knowledge_articles, csat_responses~~ (implemented — see below), support_slas, support_qa_reviews (not yet) | 6 |
-| Automation | workflows, workflow_versions, workflow_runs | 7 |
-| Integrations | integration_connections, webhooks, api_keys | 9 |
+| Automation | ~~workflows, workflow_runs, workflow_step_runs~~ (implemented — see below), workflow_versions (not yet) | 7 |
+| Integrations | ~~integration_connections, webhook_events~~ (implemented — see below, webhook connector only), api_keys, real OAuth connectors (not yet) | 9 |
 | Billing | subscriptions, entitlements | 10 |
 
 ## Phase 2 entities (implemented)
@@ -312,6 +312,37 @@ not a built-in trigger), an AI daily briefing, business process
 discovery, an AI recommendation engine, and organization memory — all
 large, open-ended features with no existing primitive to hang them off
 of, unlike the two scenarios chosen here.
+
+## Phase 9 entities (implemented — Integrations backbone: one connector)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ INTEGRATION_CONNECTION : has
+  INTEGRATION_CONNECTION ||--o{ WEBHOOK_EVENT : receives
+  INTEGRATION_CONNECTION }o--o| WORKFLOW : "verified event triggers"
+  WEBHOOK_EVENT }o--o| WORKFLOW_RUN : "may trigger"
+```
+
+- **IntegrationConnection** — `connector_key` supports exactly one value,
+  `"webhook"` (spec §48 lists a dozen-plus provider categories; every
+  other one needs real third-party OAuth credentials this environment
+  doesn't have — ADR-0024). Its `webhook_secret` is the connection's own
+  auth mechanism (HMAC-SHA256), not a platform session. `linked_workflow_id`
+  is the cross-module hook: pointing it at an `active` Automation workflow
+  with `trigger_type="webhook"` means a verified inbound event triggers
+  that workflow via the existing `app.automation.service.start_run`.
+- **WebhookEvent** — an audit trail of every inbound call, `verified`
+  true or false, whether or not it triggered anything — spec §49's
+  "Connections must store... Last sync, Last error" at per-event
+  granularity, not just a rolled-up connection-level status.
+
+Not modeled yet: any real OAuth connector (CRM, Email, Cloud, Identity,
+Engineering, Communication, Documents, Accounting — spec §48), the full
+Connector SDK contract (`connect()`, `disconnect()`, `refresh_credentials()`,
+`subscribe()`, `execute_action()`, `collect_evidence()` — spec §49; this
+slice only needed a receiver and a signature check), sync safety features
+(incremental cursors, checkpointing, replay safety — spec §G2), API keys
+for outbound platform access.
 
 ## Cross-module entity linking (spec §81)
 

@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first two Cross-Module Intelligence slices — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first two Cross-Module Intelligence slices; Phase 9's first Integrations slice — verified end-to-end)
 
 ## Platform
 
@@ -111,8 +111,9 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Frontend: `/automation` overview (workflow list + step-by-step create form) + `/automation/workflows/[id]` detail (status governance, run now, run history with expandable step log)
 - [x] Seed script: 2 active workflows (1 run awaiting approval, 1 run succeeded), 1 draft workflow for the demo org
 - [x] Workflow governance: steps can only be edited while `status = draft`; publishing to `active` locks them (spec §41)
+- [x] `trigger_type` now supports `webhook` in addition to `manual` (Phase 9) — see Integrations section below
 - [ ] Only 3 of the spec's much larger step vocabulary implemented (create_task, send_notification, human_approval) — Condition/Delay/Loop/Data Transform/Webhook/Subworkflow/AI Step not started
-- [ ] Only `manual` trigger type implemented — email/webhook/CRM-event/schedule triggers need Phase 9 connectors
+- [ ] Non-webhook non-manual triggers (email, CRM-event, schedule) — not started, need further Phase 9 connectors
 - [ ] Visual drag-and-drop builder, templates, automation analytics — not started
 
 ## Cross-Module Intelligence
@@ -136,7 +137,16 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 ## Integrations
 
-- [ ] Not started (Phase 9)
+- [x] IntegrationConnection, WebhookEvent models + migration — `connector_key` supports `"webhook"` only (spec §48's other categories all need real third-party OAuth credentials this environment doesn't have, ADR-0024)
+- [x] Cross-module hook: a verified webhook event on a connection linked to an `active`, `trigger_type="webhook"` Automation workflow triggers that workflow via the existing `start_run` (tested, ADR-0024)
+- [x] `/api/v1/integrations` router — connections (create/list/patch), events (list); tenant-isolated, RBAC-gated, **plus** one deliberately unauthenticated route (`POST /webhooks/{id}/receive`) whose security boundary is HMAC-SHA256 signature verification, not a session
+- [x] RBAC: `integrations.connections.manage` permission granted to `org_admin` and `automation_manager`
+- [x] Frontend: `/settings/integrations` — create connections, copy webhook URL + secret, link/unlink a webhook-triggered workflow, view received events (verified/unverified)
+- [x] Seed script: 1 webhook-triggered workflow, 1 connection linked to it, 1 verified event that triggered a real run, 1 rejected event (bad signature)
+- [ ] Every other spec §48 connector category (CRM, Email, Marketing, Customer Support, Cloud, Identity, Engineering, Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
+- [ ] Full Connector SDK contract (spec §49: `connect()`, `disconnect()`, `refresh_credentials()`, `subscribe()`, `execute_action()`, `collect_evidence()`) — this slice only needed a receiver + signature check
+- [ ] Sync safety (spec §G2: incremental cursors, checkpointing, replay safety, rate-limit handling) — not applicable yet, no polling/sync connector exists
+- [ ] API keys for outbound platform access — not started
 
 ## Enterprise
 
@@ -155,7 +165,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 tests: upsell signal creates lead + notifies account owner, falls back to actor when no linked account, cannot flag the same ticket twice — plus the 2 new Security Incident chain tests counted above)
-- [x] 75/75 total, ruff+mypy strict clean
+- [x] Integrations tests (7 tests: RBAC grant/denial, link requires trigger_type=webhook, verified signature triggers the linked workflow run, invalid signature is recorded but does not trigger anything, disabled connection rejects a valid signature, unknown connection returns 404)
+- [x] 82/82 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -182,10 +193,13 @@ core backbones (see their sections above) but not their larger
 sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
 Center, identity/cloud provider integrations, incident playbooks,
 sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
-non-manual triggers, real external connectors). Phase 8 (Cross-Module
-Intelligence) has two real scenarios implemented (Support Upsell Signal,
-Security Incident chain) out of spec §69's five named scenarios plus its
-open-ended AI features (daily briefing, recommendation engine,
-organization memory) — none of that larger scope has started. The
-cross-module intent router, Phases 9–10, and the AWS production
-deployment have not started.
+most non-manual triggers). Phase 8 (Cross-Module Intelligence) has two
+real scenarios implemented (Support Upsell Signal, Security Incident
+chain) out of spec §69's five named scenarios plus its open-ended AI
+features (daily briefing, recommendation engine, organization memory) —
+none of that larger scope has started. Phase 9 (Integrations) has exactly
+one connector category implemented (a generic inbound Webhook receiver)
+out of spec §48's dozen-plus categories — every other one needs real
+third-party OAuth credentials this environment doesn't have and won't
+fabricate. The cross-module intent router, Phase 10, and the AWS
+production deployment have not started.

@@ -73,6 +73,7 @@ const STATUS_VARIANTS: Record<
   running: "warning",
   succeeded: "success",
   awaiting_approval: "warning",
+  disabled: "outline",
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -509,7 +509,7 @@ automation_workflows
   organization_id UUID FK organizations NOT NULL
   name TEXT NOT NULL
   description TEXT NULL
-  trigger_type TEXT NOT NULL DEFAULT 'manual'   -- manual only today
+  trigger_type TEXT NOT NULL DEFAULT 'manual'   -- manual|webhook (Phase 9)
   status TEXT NOT NULL DEFAULT 'draft'   -- draft|testing|active|paused|archived
   steps JSON NOT NULL DEFAULT '[]'   -- ordered [{step_type, config}, ...]
   version INTEGER NOT NULL DEFAULT 1
@@ -547,6 +547,41 @@ row in the existing `approvals` table (Phase 1) and pauses the run at
 `awaiting_approval` until that Approval is decided through
 `/api/v1/approvals/{id}/decide` — ADR-0021. Workflow steps can only be
 edited via `PATCH /workflows/{id}/steps` while `status = 'draft'`.
+
+## Tables (Phase 9 — Integrations)
+
+```text
+integration_connections
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  connector_key TEXT NOT NULL DEFAULT 'webhook'   -- "webhook" only in this build
+  name TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'active'   -- active|disabled
+  webhook_secret TEXT NOT NULL   -- HMAC-SHA256 key, generated per connection
+  linked_workflow_id UUID FK automation_workflows NULL   -- cross-module hook, see below
+  last_synced_at TIMESTAMPTZ NULL
+  last_error TEXT NULL
+  created_by UUID FK users NULL
+  created_at, updated_at
+
+integration_webhook_events
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  connection_id UUID FK integration_connections NOT NULL
+  verified BOOLEAN NOT NULL
+  payload JSON NULL
+  triggered_run_id UUID FK automation_workflow_runs NULL
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Every inbound call to `POST /api/v1/integrations/webhooks/{connection_id}/receive`
+is recorded as a `WebhookEvent`, verified or not (spec §49's "Last sync,
+Last error" requirement, at individual-event granularity). A verified
+event on a connection whose `linked_workflow_id` points at an `active`
+workflow with `trigger_type='webhook'` triggers that workflow via
+`app.automation.service.start_run`, giving Automation its first
+non-manual trigger without a second execution engine —
+`app/integrations/service.py::receive_webhook_event`, ADR-0024.
 
 ## Migration policy
 

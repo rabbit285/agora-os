@@ -2,7 +2,7 @@
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
-Phases 3-8 / local-only** checkpoint, not a production release — most
+Phases 3-9 / local-only** checkpoint, not a production release — most
 items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
@@ -118,11 +118,23 @@ Automation) now have a real, tested backbone.
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory, cross-module intent router — not started
 
-See `docs/RESUME_BUILD.md` for the next phase (Phase 9 — Integrations).
+## Phase 9 (Integrations) — one connector complete, all others remain
+
+- [x] IntegrationConnection, WebhookEvent models + migration — webhook connector only (ADR-0024)
+- [x] Cross-module hook: a verified webhook event triggers a linked, active, webhook-triggered Automation workflow (tested, ADR-0024)
+- [x] Tenant-isolated `/api/v1/integrations` API (+ one deliberately unauthenticated HMAC-verified receiver route) + frontend (`/settings/integrations`)
+- [x] RBAC: `integrations.connections.manage` granted to `org_admin`/`automation_manager`, tested
+- [x] Seed script: 1 webhook-triggered workflow, 1 connection, 1 verified event (triggered a real run), 1 rejected event
+- [x] Backend tests: 82 passing total; ruff/mypy clean
+- [ ] Every other spec §48 connector category (CRM, Email, Cloud, Identity, Engineering,
+      Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
+- [ ] Full Connector SDK contract (spec §49), sync safety (spec §G2) — not applicable yet,
+      no polling/sync connector exists
+
+See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 9 — Integrations / connectors
 - [ ] Phase 10 — Enterprise (SSO/SAML/SCIM)
 - [ ] AWS Terraform, ECS, RDS, CloudFront, WAF, GitHub Actions CI/CD (spec §L/§M/§N)
 - [ ] Trust Center
