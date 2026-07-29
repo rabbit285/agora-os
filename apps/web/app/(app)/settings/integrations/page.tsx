@@ -22,6 +22,8 @@ import type {
 const selectClassName =
   "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
 
+const IN_FLIGHT_SYNC_STATUSES = new Set(["running"]);
+
 function WebhookConnectionCard({
   connection,
   workflows,
@@ -153,6 +155,14 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
     queryFn: () =>
       apiFetch<SyncRun[]>(`/api/v1/integrations/connections/${connection.id}/sync-runs`),
     enabled: expanded,
+    // Sync runs as a durable Temporal workflow (IntegrationSyncWorkflow),
+    // not inline — poll while one is still running so "Sync now" reflects
+    // the real succeeded/failed outcome without a manual refresh, the same
+    // pattern the Knowledge module uses for document ingestion status.
+    refetchInterval: (query) => {
+      const runs = query.state.data ?? [];
+      return runs.some((r) => IN_FLIGHT_SYNC_STATUSES.has(r.status)) ? 2000 : false;
+    },
   });
 
   const invalidate = () =>
@@ -183,6 +193,7 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
       apiFetch(`/api/v1/integrations/connections/${connection.id}/sync`, { method: "POST" }),
     onSuccess: () => {
       invalidate();
+      setExpanded(true);
       queryClient.invalidateQueries({
         queryKey: ["integrations", "connections", connection.id, "sync-runs"],
       });
@@ -190,6 +201,7 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
   });
 
   const isConnected = connection.status === "connected";
+  const hasRunningSync = syncRuns?.some((r) => IN_FLIGHT_SYNC_STATUSES.has(r.status)) ?? false;
 
   return (
     <Card>
@@ -224,8 +236,13 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
             <Button size="sm" variant="outline" disabled={refreshToken.isPending} onClick={() => refreshToken.mutate()}>
               Refresh token
             </Button>
-            <Button size="sm" variant="outline" disabled={sync.isPending} onClick={() => sync.mutate()}>
-              Sync now
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={sync.isPending || hasRunningSync}
+              onClick={() => sync.mutate()}
+            >
+              {hasRunningSync ? "Syncing…" : "Sync now"}
             </Button>
             <Button size="sm" variant="destructive" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
               Disconnect
@@ -267,6 +284,7 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
 
 function ProviderCatalogSection() {
   const queryClient = useQueryClient();
+  const [previewing, setPreviewing] = useState<string | null>(null);
 
   const { data: providers } = useQuery<ProviderCatalogEntry[]>({
     queryKey: ["integrations", "providers"],
@@ -292,31 +310,65 @@ function ProviderCatalogSection() {
         OAuth Connectors
       </h2>
       <div className="flex flex-col gap-2">
-        {oauthProviders.map((provider) => (
-          <Card key={provider.connector_key}>
-            <CardContent className="flex items-center justify-between pt-6">
-              <div>
-                <div className="font-medium text-neutral-900">{provider.name}</div>
-                <div className="text-xs text-neutral-400">
-                  Read-only CRM scopes (spec §B1 — Stage 1)
+        {oauthProviders.map((provider) => {
+          const isPreviewing = previewing === provider.connector_key;
+          return (
+            <Card key={provider.connector_key}>
+              <CardContent className="flex flex-col gap-3 pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-neutral-900">{provider.name}</div>
+                    <div className="text-xs text-neutral-400">
+                      {provider.scopes.length} permission
+                      {provider.scopes.length === 1 ? "" : "s"} requested
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {provider.configured ? (
+                      <Button
+                        size="sm"
+                        variant={isPreviewing ? "outline" : "default"}
+                        disabled={connect.isPending}
+                        onClick={() =>
+                          setPreviewing(isPreviewing ? null : provider.connector_key)
+                        }
+                      >
+                        {isPreviewing ? "Cancel" : "Connect"}
+                      </Button>
+                    ) : (
+                      <Badge variant="outline">Not configured</Badge>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {provider.configured ? (
-                  <Button
-                    size="sm"
-                    disabled={connect.isPending}
-                    onClick={() => connect.mutate(provider.connector_key)}
-                  >
-                    Connect
-                  </Button>
-                ) : (
-                  <Badge variant="outline">Not configured</Badge>
+
+                {isPreviewing && (
+                  <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
+                    <p className="mb-2 text-xs font-medium text-neutral-600">
+                      Connecting {provider.name} will request:
+                    </p>
+                    <ul className="mb-3 flex flex-col gap-1">
+                      {provider.scopes.map((scope) => (
+                        <li
+                          key={scope}
+                          className="font-mono text-xs text-neutral-700 before:mr-1.5 before:content-['•']"
+                        >
+                          {scope}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      size="sm"
+                      disabled={connect.isPending}
+                      onClick={() => connect.mutate(provider.connector_key)}
+                    >
+                      Authorize on {provider.name}
+                    </Button>
+                  </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
       {oauthProviders.some((p) => !p.configured) && (
         <p className="mt-2 text-xs text-neutral-400">

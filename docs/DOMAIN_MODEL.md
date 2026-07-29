@@ -351,7 +351,7 @@ ADR-0027) — but the rest of spec §69's chain (vendor security
 questionnaire, Privacy/DPA review, approved-use policy publication) is
 still not implemented; see `docs/KNOWN_LIMITATIONS.md`.
 
-## Phase 9 entities (implemented — Integrations backbone: Webhook + HubSpot OAuth2)
+## Phase 9 entities (implemented — Integrations backbone: Webhook + six-provider OAuth2 framework)
 
 ```mermaid
 erDiagram
@@ -368,27 +368,34 @@ erDiagram
   cross-module hook — pointing it at an `active` Automation workflow with
   `trigger_type="webhook"` means a verified inbound event triggers that
   workflow via `app.automation.service.start_run`.
-  `connector_key="hubspot"` (ADR-0026): a real OAuth2 authorization-code
-  flow via `app.integrations.adapters.hubspot.HubSpotAdapter`, selected
-  only when `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET` are configured —
-  otherwise `MockOAuthAdapter` (same role as the AI gateway's
-  `DemoAdapter`). `encrypted_access_token`/`encrypted_refresh_token` are
-  Fernet-encrypted at rest; `oauth_state` is the flow's own single-use
-  CSRF token, since the callback route has no session to rely on.
-  `scopes`, `external_account_id`, and `health_status` make the
-  connection's real state (not a fabricated "connected" badge) visible.
+  connector_keys `hubspot`/`google`/`microsoft`/`github`/`slack`/
+  `salesforce` (ADR-0026, ADR-0028): a real OAuth2 authorization-code
+  flow via `app.integrations.adapters.{provider}.{Provider}Adapter`,
+  selected only when that provider's `*_CLIENT_ID`/`*_CLIENT_SECRET` are
+  configured — otherwise `MockOAuthAdapter` (same role as the AI
+  gateway's `DemoAdapter`), labeled with the real `provider_key` so a
+  mocked Google connection never looks like a mocked Slack one.
+  `encrypted_access_token`/`encrypted_refresh_token` are Fernet-encrypted
+  at rest; `oauth_state` is the flow's own single-use CSRF token, since
+  the callback route has no session to rely on. `scopes`,
+  `external_account_id`, and `health_status` make the connection's real
+  state (not a fabricated "connected" badge) visible, and the provider
+  catalog additionally exposes each provider's requested `scopes` as a
+  permission preview before a connection even exists.
 - **WebhookEvent** — an audit trail of every inbound call, `verified`
   true or false, whether or not it triggered anything — spec §49's
   "Connections must store... Last sync, Last error" at per-event
   granularity, not just a rolled-up connection-level status.
 - **SyncRun** — one "sync now" execution against an OAuth connection
-  (spec §49's `sync()`). Runs synchronously inline, not as a durable
-  Temporal job — a real but deliberately simplified version, see
-  `docs/KNOWN_LIMITATIONS.md`.
+  (spec §49's `sync()`), created synchronously (`status="running"`) and
+  finalized by `IntegrationSyncWorkflow` (`apps/worker`) — a durable
+  Temporal job, not inline in the request, the same request/durable-
+  execution split Knowledge's `DocumentIngestionWorkflow` uses.
 
-Not modeled yet: any OAuth connector beyond HubSpot (Email, Marketing,
-Customer Support, Cloud, Identity, Engineering, Communication, Documents,
-Accounting — spec §48; each needs its own real provider credentials),
+Not modeled yet: any OAuth connector beyond these six (Email, Marketing,
+Customer Support beyond generic webhook, Cloud, remaining Identity/
+Engineering/Communication/Documents/Accounting categories — spec §48;
+each needs its own real provider credentials),
 `subscribe()`/`execute_action()`/`collect_evidence()` from spec §49's
 full Connector Contract (this slice only needed authorize, token
 exchange/refresh, health, sync, and revoke), sync safety features

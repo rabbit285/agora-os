@@ -17,7 +17,13 @@ logger = logging.getLogger("agora.config")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # ".env.local" is read second so it overrides ".env" — the standard
+    # local-override convention (spec §C "Secrets and .env Contract"); both
+    # are gitignored, neither is ever built into a Docker image (see
+    # infra/docker/Dockerfile.api's explicit COPY list) or deployed to AWS,
+    # where config instead comes from Secrets Manager/Parameter Store (see
+    # docs/ENVIRONMENT_VARIABLES.md).
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # Core
     app_env: str = Field(default="development", alias="APP_ENV")
@@ -71,10 +77,29 @@ class Settings(BaseSettings):
 
     # Integrations — optional; absence means the connector's catalog entry
     # reports configured=false and no real OAuth flow can start (never a
-    # fake "connected" state, spec §82)
+    # fake "connected" state, spec §82). Every provider follows the same
+    # three-variable shape (CLIENT_ID/CLIENT_SECRET/REDIRECT_URI) so adding
+    # a seventh provider later is a config+adapter addition, not a
+    # structural change — see `app/integrations/adapters/__init__.py` and
+    # `docs/DECISIONS.md` ADR-0028.
     hubspot_client_id: str | None = Field(default=None, alias="HUBSPOT_CLIENT_ID")
     hubspot_client_secret: str | None = Field(default=None, alias="HUBSPOT_CLIENT_SECRET")
     hubspot_redirect_uri: str | None = Field(default=None, alias="HUBSPOT_REDIRECT_URI")
+    google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str | None = Field(default=None, alias="GOOGLE_REDIRECT_URI")
+    microsoft_client_id: str | None = Field(default=None, alias="MICROSOFT_CLIENT_ID")
+    microsoft_client_secret: str | None = Field(default=None, alias="MICROSOFT_CLIENT_SECRET")
+    microsoft_redirect_uri: str | None = Field(default=None, alias="MICROSOFT_REDIRECT_URI")
+    github_client_id: str | None = Field(default=None, alias="GITHUB_CLIENT_ID")
+    github_client_secret: str | None = Field(default=None, alias="GITHUB_CLIENT_SECRET")
+    github_redirect_uri: str | None = Field(default=None, alias="GITHUB_REDIRECT_URI")
+    slack_client_id: str | None = Field(default=None, alias="SLACK_CLIENT_ID")
+    slack_client_secret: str | None = Field(default=None, alias="SLACK_CLIENT_SECRET")
+    slack_redirect_uri: str | None = Field(default=None, alias="SLACK_REDIRECT_URI")
+    salesforce_client_id: str | None = Field(default=None, alias="SALESFORCE_CLIENT_ID")
+    salesforce_client_secret: str | None = Field(default=None, alias="SALESFORCE_CLIENT_SECRET")
+    salesforce_redirect_uri: str | None = Field(default=None, alias="SALESFORCE_REDIRECT_URI")
     # Encrypts stored OAuth tokens at rest (app/core/crypto.py). Falls back
     # to a key derived from SECRET_KEY when unset — fine for dev/test,
     # a real deployment should set its own (see docs/KNOWN_LIMITATIONS.md).
@@ -97,6 +122,11 @@ def _diagnose(settings: Settings) -> None:
         "SMTP_HOST": settings.smtp_host,
         "STRIPE_SECRET_KEY": settings.stripe_secret_key,
         "HUBSPOT_CLIENT_ID": settings.hubspot_client_id,
+        "GOOGLE_CLIENT_ID": settings.google_client_id,
+        "MICROSOFT_CLIENT_ID": settings.microsoft_client_id,
+        "GITHUB_CLIENT_ID": settings.github_client_id,
+        "SLACK_CLIENT_ID": settings.slack_client_id,
+        "SALESFORCE_CLIENT_ID": settings.salesforce_client_id,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:

@@ -11,11 +11,13 @@ implied to work.
   **Automation** — all five primary product modules — have their core
   backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
-- **Integrations (Phase 9)**: only a generic inbound Webhook connector is
-  implemented — see the dedicated bullet below. No CRM/Email/Cloud/
-  Identity/Engineering/Communication/Documents/Accounting connectors
-  exist (spec §48); all need real third-party OAuth apps or API keys this
-  environment doesn't have.
+- **Integrations (Phase 9)**: a generic inbound Webhook connector plus a
+  six-provider OAuth2 framework (HubSpot, Google, Microsoft, GitHub,
+  Slack, Salesforce) are implemented — see the dedicated bullet below.
+  Every other spec §48 category (Email, Marketing, Cloud, remaining
+  Identity/Engineering/Communication/Documents/Accounting connectors)
+  still needs a real third-party OAuth app or API key this environment
+  doesn't have.
 - **Compliance**: an AI System Inventory (`AISystem`/`AIAssessment`, EU AI
   Act risk tiers) now exists — registering a high/unacceptable-risk system
   auto-creates a real Approval and gates its `approved` status on that
@@ -83,22 +85,37 @@ implied to work.
   editing of an already-active workflow (spec §41's fuller versioning
   model).
 - **Integrations**: `IntegrationConnection.connector_key` supports
-  `"webhook"` and `"hubspot"` — every other spec §48 category (CRM
-  beyond HubSpot, Email, Marketing, Customer Support, Cloud, Identity,
-  Engineering, Communication, Documents, Accounting) needs a real
-  third-party OAuth app or API key this environment doesn't have, and
-  none are stubbed as "connected" (spec §82) — the provider catalog
-  endpoint reports `configured: bool` honestly, and HubSpot itself shows
-  "Not configured" without real `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET`.
-  A mock OAuth adapter (mirroring the AI gateway's `DemoAdapter`) lets the
-  full authorize→callback→connected→sync→disconnect flow be exercised for
-  testing/demo purposes even without real credentials — this is what the
+  `"webhook"` plus six OAuth2 providers — HubSpot, Google, Microsoft,
+  GitHub, Slack, Salesforce (ADR-0026, ADR-0028) — every other spec §48
+  category (Email, Marketing, Customer Support beyond generic webhook,
+  Cloud, remaining Identity/Engineering/Communication/Documents/
+  Accounting categories) still needs a real third-party OAuth app or API
+  key this environment doesn't have, and none are stubbed as "connected"
+  (spec §82) — the provider catalog endpoint reports `configured: bool`
+  honestly per provider (all six show "Not configured" without real
+  `<PROVIDER>_CLIENT_ID`/`<PROVIDER>_CLIENT_SECRET`) and additionally
+  exposes each provider's requested `scopes` as a permission preview. A
+  mock OAuth adapter (mirroring the AI gateway's `DemoAdapter`, labeled
+  with the real `provider_key`) lets the full authorize→callback→
+  connected→sync→disconnect flow be exercised for testing/demo purposes
+  for every provider even without real credentials — this is what the
   automated test suite runs against, and the demo seed data deliberately
-  does *not* create a "connected" HubSpot row, to avoid any appearance of
-  a fabricated live connection. Stored OAuth tokens are encrypted at rest
-  (Fernet, `app/core/crypto.py`), but the encryption key falls back to one
-  derived from `SECRET_KEY` when `TOKEN_ENCRYPTION_KEY` is unset — fine
-  for dev/test, but a real deployment must set its own key (rotating
+  does *not* create a "connected" row for any provider, to avoid any
+  appearance of a fabricated live connection. Two providers (GitHub
+  classic OAuth Apps, Slack bot tokens without rotation) genuinely have no
+  refresh flow for the token type used here — `refresh_access_token`
+  raises a clear error rather than faking support, but callers never reach
+  it since no refresh token is ever stored for them in the first place.
+  Salesforce's adapter is a documented simplification: it calls the
+  generic `login.salesforce.com` identity endpoint rather than the org's
+  own instance-specific API domain (`instance_url`, returned at token
+  exchange but not persisted), since threading that through would mean a
+  Salesforce-only parameter on every other provider's adapter methods — a
+  real Salesforce connector needs to store and use `instance_url` for
+  anything beyond identity/revoke. Stored OAuth tokens are encrypted at
+  rest (Fernet, `app/core/crypto.py`), but the encryption key falls back
+  to one derived from `SECRET_KEY` when `TOKEN_ENCRYPTION_KEY` is unset —
+  fine for dev/test, but a real deployment must set its own key (rotating
   `SECRET_KEY` would otherwise silently break every stored token). A
   webhook connection's `webhook_secret` is still returned in plain text by
   the API to whoever can read the connection (session-authenticated,
@@ -106,12 +123,18 @@ implied to work.
   yet. `subscribe()`, `execute_action()`, and `collect_evidence()` from
   spec §49's full Connector Contract aren't implemented — this slice only
   needed authorize/token-exchange/refresh/health/sync/revoke. "Sync now"
-  (`run_sync`) executes synchronously inline, not as a durable Temporal
-  job, and fetches a small page of HubSpot contacts purely to prove
-  connectivity — it doesn't import them into Sales yet. No sync safety
+  runs as a durable Temporal workflow (`IntegrationSyncWorkflow`) rather
+  than inline in the request, and fetches a small page of the provider's
+  own read-only data (contacts, calendar events, public repos, channels,
+  etc. depending on provider) purely to prove connectivity — it doesn't
+  import any of it into Sales/Support/Knowledge yet. No sync safety
   features (spec §G2: incremental cursors, checkpointing, replay safety,
   rate-limit handling) since there's no polling/scheduled sync, only
-  on-demand. No API keys for outbound platform access.
+  on-demand. No API keys for outbound platform access. No AWS
+  infrastructure exists yet to exercise the Secrets Manager/Parameter
+  Store/ECS secret-injection design documented in
+  `docs/ENVIRONMENT_VARIABLES.md` — it's a commitment for whoever builds
+  Phase 10's AWS deployment, not yet built or tested.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,

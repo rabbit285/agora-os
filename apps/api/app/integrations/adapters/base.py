@@ -36,6 +36,12 @@ class SyncResult:
 
 class OAuthConnectorAdapter(Protocol):
     provider_key: str
+    # The scopes this provider requests, requested-form (space/comma exact
+    # syntax is provider-specific — see each adapter's authorization_url).
+    # Class-level so the provider catalog can show a permission preview
+    # without constructing an adapter (real adapters require client
+    # credentials to construct; this list is needed even when unconfigured).
+    SCOPES: list[str]
 
     def authorization_url(self, *, state: str, redirect_uri: str) -> str: ...
 

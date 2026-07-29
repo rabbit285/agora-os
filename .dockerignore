@@ -1,0 +1,44 @@
+# Defense in depth: even though each Dockerfile's COPY is scoped to a
+# single app directory, this repo-root .dockerignore guarantees no local
+# secret file is ever readable inside a build context, regardless of
+# which service's image is being built (spec §C: secrets never in
+# frontend bundles, Docker images, or Git history).
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+!infra/**/*.example
+
+.git/
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+npm-debug.log*
+*.tsbuildinfo
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+infra/docker/.data/

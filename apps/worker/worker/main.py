@@ -21,8 +21,12 @@ from temporalio.worker import Worker
 
 from app.config import settings
 from app.core.storage import ensure_bucket
-from worker.activities import ingest_document_activity, ping_activity
-from worker.workflows import DocumentIngestionWorkflow, HealthCheckWorkflow
+from worker.activities import (
+    execute_integration_sync_activity,
+    ingest_document_activity,
+    ping_activity,
+)
+from worker.workflows import DocumentIngestionWorkflow, HealthCheckWorkflow, IntegrationSyncWorkflow
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agora.worker")
@@ -36,8 +40,8 @@ async def main() -> None:
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[HealthCheckWorkflow, DocumentIngestionWorkflow],
-        activities=[ping_activity, ingest_document_activity],
+        workflows=[HealthCheckWorkflow, DocumentIngestionWorkflow, IntegrationSyncWorkflow],
+        activities=[ping_activity, ingest_document_activity, execute_integration_sync_activity],
     )
     logger.info("Worker started on task queue '%s'", TASK_QUEUE)
     await worker.run()

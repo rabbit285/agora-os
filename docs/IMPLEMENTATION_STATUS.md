@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus the AI System Inventory (Phase 3 extension) that partially unblocks a fourth; Phase 9's Webhook connector and provider-neutral OAuth2 framework with HubSpot — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus the AI System Inventory (Phase 3 extension) that partially unblocks a fourth; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end)
 
 ## Platform
 
@@ -153,19 +153,26 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 ## Integrations
 
-- [x] IntegrationConnection, WebhookEvent models + migration — webhook connector (ADR-0024)
+- [x] IntegrationConnection, WebhookEvent, SyncRun models + migration — webhook connector (ADR-0024)
 - [x] Cross-module hook: a verified webhook event on a connection linked to an `active`, `trigger_type="webhook"` Automation workflow triggers that workflow via the existing `start_run` (tested, ADR-0024)
-- [x] Provider-neutral OAuth2 connector framework — `OAuthConnectorAdapter` Protocol mirroring the AI gateway's `ModelAdapter`/`DemoAdapter` pattern; `HubSpotAdapter` (real HTTP calls to HubSpot's OAuth/CRM endpoints) selected only when `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET` are configured, otherwise `MockOAuthAdapter` (tested, ADR-0026)
+- [x] Provider-neutral OAuth2 connector framework — `OAuthConnectorAdapter` Protocol mirroring the AI gateway's `ModelAdapter`/`DemoAdapter` pattern; six real adapters (HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — each real HTTP calls against that provider's documented OAuth/API endpoints), each selected only when its own `*_CLIENT_ID`/`*_CLIENT_SECRET` are configured, otherwise `MockOAuthAdapter` labeled with the real provider key (tested, ADR-0026, ADR-0028)
+- [x] Adding a seventh provider is one adapter module + one registry entry + three env vars — no change to the OAuth flow, router, service layer, or frontend (`app/integrations/adapters/__init__.py::_provider_specs`)
+- [x] Permission preview: provider catalog exposes each provider's requested `scopes`; frontend shows them before the user clicks "Authorize", not just after connecting
 - [x] Encrypted token storage: `app/core/crypto.py` (Fernet), `TOKEN_ENCRYPTION_KEY` with a dev-only fallback derived from `SECRET_KEY`
-- [x] OAuth authorize (`POST /connections/oauth/{provider}/start`) + callback (`GET /connections/oauth/{provider}/callback`, no session — `oauth_state` is the CSRF/capability token) + refresh + health-check + disconnect/revoke + "sync now" (logs a `SyncRun` row) endpoints
-- [x] Provider catalog endpoint (`GET /api/v1/integrations/providers`) reports `configured: bool` per provider — HubSpot honestly shows "Not configured" without real credentials, never a fake connected state
+- [x] OAuth authorize (`POST /connections/oauth/{provider}/start`) + callback (`GET /connections/oauth/{provider}/callback`, no session — `oauth_state` is the CSRF/capability token) + refresh + health-check + disconnect/revoke + "sync now" endpoints
+- [x] Sync runs as a durable Temporal workflow (`IntegrationSyncWorkflow`, `apps/worker`) rather than inline in the request — the endpoint creates the `SyncRun` row and returns immediately, the frontend polls to completion (tested, ADR-0028)
+- [x] Audit logging for the full OAuth lifecycle: connect, refresh (success + failure), sync (started/succeeded/failed), disconnect (including whether the provider's own revoke call succeeded) — every failure path normalized to a 422, never an unhandled 500
+- [x] Provider catalog endpoint (`GET /api/v1/integrations/providers`) reports `configured: bool` per provider — all six honestly show "Not configured" without real credentials, never a fake connected state
 - [x] `/api/v1/integrations` router — connections (create/list/patch), events (list), OAuth lifecycle; tenant-isolated, RBAC-gated, **plus** two deliberately unauthenticated routes (webhook receiver, OAuth callback) whose security boundaries are HMAC verification and single-use state tokens respectively, not sessions
 - [x] RBAC: `integrations.connections.manage` permission granted to `org_admin` and `automation_manager`
-- [x] Frontend: `/settings/integrations` — provider catalog (Connect/Not-configured), OAuth connection cards (health/scopes/sync history, refresh/disconnect/sync-now buttons), webhook connections (copy URL + secret, link/unlink workflow, received events)
-- [x] Seed script: 1 webhook-triggered workflow, 1 connection linked to it, 1 verified event that triggered a real run, 1 rejected event (bad signature) — deliberately no seeded HubSpot connection, so the demo org shows the honest "Not configured" state rather than a fabricated connected one
-- [ ] Every other spec §48 connector category (CRM beyond HubSpot, Email, Marketing, Customer Support, Cloud, Identity, Engineering, Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
+- [x] Frontend: `/settings/integrations` — provider catalog with a permission-preview step before Connect, OAuth connection cards (health/scopes/sync history with live polling, refresh/disconnect/sync-now buttons), webhook connections (copy URL + secret, link/unlink workflow, received events)
+- [x] Frontend test suite (Vitest + React Testing Library) covering the provider catalog, permission preview, and OAuth connection lifecycle UI
+- [x] `.env`/`.env.local` support (later overrides earlier); repo-root `.dockerignore` keeps both out of every Docker build context; `docs/ENVIRONMENT_VARIABLES.md` documents the intended (not yet built) AWS Secrets Manager/Parameter Store/ECS production shape
+- [x] Seed script: 1 webhook-triggered workflow, 1 connection linked to it, 1 verified event that triggered a real run, 1 rejected event (bad signature) — deliberately no seeded OAuth connection for any provider, so the demo org shows the honest "Not configured" state rather than a fabricated connected one
+- [ ] Every other spec §48 connector category (Email, Marketing, Customer Support beyond generic webhook, Cloud, remaining Identity/Engineering/Communication/Documents/Accounting categories) — not started, all need real OAuth apps/API keys
 - [ ] `subscribe()`, `execute_action()`, `collect_evidence()` from spec §49's full Connector Contract — this slice only needed authorize/token-exchange/refresh/health/sync/revoke
-- [ ] Sync safety (spec §G2: incremental cursors, checkpointing, replay safety, rate-limit handling) — `run_sync` executes synchronously inline, not as a durable Temporal job
+- [ ] Sync safety (spec §G2: incremental cursors, checkpointing, replay safety, rate-limit handling) — sync is durable now but still on-demand only, no polling/scheduled sync
+- [ ] AWS deployment itself (Secrets Manager/Parameter Store/ECS) — documented design, not built; Phase 10/AWS hasn't started
 - [ ] API keys for outbound platform access — not started
 
 ## Enterprise
@@ -185,8 +192,9 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
-- [x] Integrations tests (14 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1, plus OAuth provider-catalog honesty, RBAC denial, full start→callback→connected round trip against the mock adapter, expired/unknown-state rejection, refresh/health/sync/disconnect lifecycle, tenant isolation)
-- [x] 101/101 total, ruff+mypy strict clean
+- [x] Integrations tests (50 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1; OAuth provider-catalog honesty across all six providers with scope previews, RBAC denial, full start→callback→connected round trip against the mock adapter (proven generic via a second, non-HubSpot provider), expired/unknown-state/unknown-provider rejection, refresh/health/sync/disconnect lifecycle with the durable-sync split (`create_sync_run`/`execute_sync_run`) exercised directly including its failure path, an audit-trail assertion across the full OAuth lifecycle, tenant isolation; plus pure adapter unit tests for every provider's authorization-URL construction, scope preview, mock-fallback labeling, and the two no-refresh providers' explicit errors — no network, no live credentials needed)
+- [x] 137/137 total backend, ruff+mypy strict clean
+- [x] Frontend: 5 Vitest + React Testing Library tests for `/settings/integrations` (provider catalog Connect/Not-configured states, permission-preview scope disclosure gating the real OAuth-start call, connected-connection controls, in-flight sync disabling "Sync now", disconnect)
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -221,10 +229,14 @@ spec §69's five named scenarios, plus its open-ended AI features (daily
 briefing, recommendation engine, organization memory) — none of that
 larger scope has started. Phase 9
 (Integrations) has two connector shapes implemented — a generic inbound
-Webhook receiver and a provider-neutral OAuth2 framework with HubSpot as
-the first real provider — out of spec §48's dozen-plus categories; every
-other category needs real third-party OAuth credentials this environment
-doesn't have and won't fabricate (HubSpot itself reports honestly as
-"Not configured" until real credentials are supplied). The cross-module
-intent router, Phase 10, and the AWS production deployment have not
-started.
+Webhook receiver and a provider-neutral OAuth2 framework with six real
+adapters (HubSpot, Google, Microsoft, GitHub, Slack, Salesforce), sync
+running as a durable Temporal job — out of spec §48's dozen-plus
+categories; every configured provider needs real third-party OAuth
+credentials this environment doesn't have and won't fabricate (every one
+reports honestly as "Not configured" until real credentials are
+supplied, with a permission preview of the scopes it would request). The
+cross-module intent router, Phase 10, and the AWS production deployment
+have not started — the AWS Secrets Manager/Parameter Store/ECS design in
+`docs/ENVIRONMENT_VARIABLES.md` is a documented commitment for that future
+work, not yet built or tested.

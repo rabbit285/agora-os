@@ -461,6 +461,7 @@ export type ProviderCatalogEntry = {
   name: string;
   auth_type: "hmac" | "oauth2";
   configured: boolean;
+  scopes: string[];
 };
 
 export type OAuthStartResponse = {

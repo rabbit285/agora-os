@@ -564,3 +564,94 @@ system alone), `test_cannot_approve_high_risk_system_before_approval_granted`
 (422), and `test_can_approve_high_risk_system_after_approval_granted`
 (decides the Approval through the real, unmodified
 `/api/v1/approvals/{id}/decide` endpoint).
+
+## ADR-0028 — OAuth framework completion: six-provider adapter registry, Temporal-backed sync, and the AWS secrets contract
+
+**Decision**: Three extensions to ADR-0026's OAuth framework, all without
+touching its shape:
+
+1. **Five more providers behind the same `OAuthConnectorAdapter`
+   Protocol**: `app/integrations/adapters/{google,microsoft,github,slack,salesforce}.py`,
+   each a real implementation against that provider's documented OAuth/API
+   endpoints (never a stub), none exercised end to end in this environment
+   (no real developer app for any of them). Registration moved from
+   HubSpot-only `if` branches into a single table,
+   `app/integrations/adapters/__init__.py::_provider_specs()` — a
+   `connector_key -> (adapter class, client_id, client_secret,
+   redirect_uri)` map read once. Adding a seventh provider is one adapter
+   module + one table entry + three environment variables, never a
+   change to the OAuth flow, router, service layer, or frontend. Every
+   adapter class carries a `SCOPES: list[str]` class attribute so the
+   provider catalog (`GET /api/v1/integrations/providers`) can show a
+   **permission preview** — the exact scopes a real connection would
+   request — even for unconfigured providers, without constructing an
+   adapter (which needs real credentials). `MockOAuthAdapter` now takes a
+   `provider_key` constructor argument so a mocked Google connection is
+   labeled as Google, not a generic "mock", in every audit event and UI
+   badge (still never presented as live — spec §82).
+2. **Sync runs as a durable Temporal workflow**
+   (`IntegrationSyncWorkflow`, `apps/worker/worker/workflows.py` +
+   `execute_integration_sync_activity`, `apps/worker/worker/activities.py`),
+   not inline in the HTTP request. `app.integrations.service.create_sync_run`
+   writes the `SyncRun` row (`status="running"`) and returns immediately;
+   `POST /connections/{id}/sync` commits that row, then fires the
+   workflow via `app.integrations.workflow_client.start_sync` (fire-and-
+   forget, mirroring `app.knowledge.workflow_client.start_ingestion`'s
+   document-ingestion pattern exactly) and returns without waiting.
+   `execute_sync_run` — the actual provider call — runs inside the
+   Temporal activity in production and is called directly by tests
+   (`run_sync` composes both for tests/seed data), the same
+   request/durable-execution split the Knowledge module already
+   established for `ingest_document` vs. `DocumentIngestionWorkflow`.
+3. **Audit logging for every lifecycle transition**, not just connect:
+   `integrations.oauth.refreshed` / `.refresh_failed`,
+   `integrations.sync.started` / `.succeeded` / `.failed`, and
+   `integrations.oauth.disconnected` (now recording whether the
+   provider's own revoke call succeeded, not just that local tokens were
+   cleared). Every failure path (adapter throws on refresh or sync) is
+   caught, recorded with `policy_decision="denied"`, and normalized to a
+   `ValueError` (422) rather than an unhandled 500.
+
+Also: `Settings` now reads `.env` then `.env.local` (later wins), a
+repo-root `.dockerignore` excludes both from every Docker build context
+(defense in depth — no Dockerfile's `COPY` currently reaches a `.env` file,
+but none should ever be able to), and `docs/ENVIRONMENT_VARIABLES.md`
+commits to a specific (not yet built) AWS production shape: secrets in
+Secrets Manager injected via ECS task-definition `secrets` (never a
+deployed `.env` or a Terraform-visible plaintext value), least-privilege
+per-service IAM task roles, non-secret config in SSM Parameter Store.
+
+**Why**: The user supplied no live credentials for any provider and asked
+for the framework completed anyway, with real per-provider adapters
+"prepared" (Google, Microsoft, GitHub, Slack, Salesforce) so that supplying
+credentials later needs no structural change — exactly the trust-building
+posture spec §B1's progressive trust model describes, and the same reason
+ADR-0026 built the Protocol/registry split before HubSpot was the only
+provider. Moving sync onto Temporal closes the gap ADR-0026 and
+`docs/KNOWN_LIMITATIONS.md` both flagged ("`run_sync` executes
+synchronously inline... a real but deliberately simplified version") using
+infrastructure (Temporal, the worker task queue) the platform already runs
+for document ingestion — not a new job system. The permission-preview
+scopes make the "progressive trust" principle visible in the product
+itself: a user can see exactly what a Connect click will ask for before
+clicking it, configured or not. Two providers (GitHub, Slack) genuinely
+have no refresh flow for the token type this integration uses (classic
+OAuth App tokens, non-rotating bot tokens) — `refresh_access_token` says
+so via a `RuntimeError` rather than pretending to support it; callers
+never reach that path anyway, since `refresh_connection_token` first
+checks for a stored refresh token and these providers' token exchange
+never sets one. Salesforce's real per-org API domain (`instance_url`)
+isn't threaded through the adapter Protocol — doing so would mean adding a
+Salesforce-only parameter to every other provider's method signatures for
+one provider's quirk — so `test_connection`/`sync` use the generic
+`login.salesforce.com` identity endpoint instead, documented as a known
+simplification in `docs/KNOWN_LIMITATIONS.md` rather than silently
+under-scoped. Tested in `tests/test_integration_adapters.py` (pure unit
+tests: every provider's `authorization_url` construction, scope preview,
+mock fallback, and the two no-refresh providers' explicit errors — no
+network, no live credentials needed) and `tests/test_integrations.py`
+(the generic OAuth flow proven against a second provider, not just
+HubSpot; `execute_sync_run` exercised directly including its failure
+path; an audit-trail test asserting `integrations.oauth.started/
+connected/refreshed/disconnected` all appear against the connection's
+`object_id`).

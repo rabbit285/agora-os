@@ -126,21 +126,23 @@ Automation) now have a real, tested backbone.
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory, cross-module intent router — not started
 
-## Phase 9 (Integrations) — two connector shapes complete, all real providers beyond HubSpot remain
+## Phase 9 (Integrations) — two connector shapes complete, OAuth framework complete for six providers
 
-- [x] IntegrationConnection, WebhookEvent, SyncRun models + migration — webhook connector (ADR-0024) + OAuth2 connector framework with HubSpot (ADR-0026)
+- [x] IntegrationConnection, WebhookEvent, SyncRun models + migration — webhook connector (ADR-0024) + OAuth2 connector framework (ADR-0026, ADR-0028)
 - [x] Cross-module hook: a verified webhook event triggers a linked, active, webhook-triggered Automation workflow (tested, ADR-0024)
-- [x] Provider-neutral `OAuthConnectorAdapter` (mirrors the AI gateway's Demo/real-provider pattern); real `HubSpotAdapter` + `MockOAuthAdapter` fallback when unconfigured (tested, ADR-0026)
+- [x] Provider-neutral `OAuthConnectorAdapter` (mirrors the AI gateway's Demo/real-provider pattern); real `HubSpotAdapter`/`GoogleAdapter`/`MicrosoftAdapter`/`GitHubAdapter`/`SlackAdapter`/`SalesforceAdapter` + `MockOAuthAdapter` (labeled per provider) fallback when unconfigured (tested, ADR-0026, ADR-0028)
 - [x] Encrypted token storage (Fernet), OAuth authorize/callback (no-session, state-verified)/refresh/health/disconnect/sync endpoints
-- [x] Provider catalog reports `configured: bool` honestly — HubSpot shows "Not configured" without real credentials, never a fake connected state
-- [x] Tenant-isolated `/api/v1/integrations` API (+ two deliberately unauthenticated routes: HMAC-verified webhook receiver, state-verified OAuth callback) + frontend (`/settings/integrations`)
+- [x] Provider catalog reports `configured: bool` honestly for all six providers, plus a permission preview of each provider's requested scopes
+- [x] Sync runs as a durable Temporal workflow (`IntegrationSyncWorkflow`) rather than inline; audit logging for refresh/sync/disconnect success and failure
+- [x] Tenant-isolated `/api/v1/integrations` API (+ two deliberately unauthenticated routes: HMAC-verified webhook receiver, state-verified OAuth callback) + frontend (`/settings/integrations`, with a permission-preview step before Connect)
 - [x] RBAC: `integrations.connections.manage` granted to `org_admin`/`automation_manager`, tested
-- [x] Seed script: 1 webhook-triggered workflow, 1 connection, 1 verified event (triggered a real run), 1 rejected event — no seeded HubSpot connection, so the demo org shows the honest "Not configured" state
-- [x] Backend tests: 92 passing total; ruff/mypy clean
-- [ ] Every other spec §48 connector category (CRM beyond HubSpot, Email, Cloud, Identity, Engineering,
-      Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
+- [x] Seed script: 1 webhook-triggered workflow, 1 connection, 1 verified event (triggered a real run), 1 rejected event — no seeded OAuth connection for any provider, so the demo org shows the honest "Not configured" state
+- [x] Backend tests: 137 passing total; ruff/mypy clean
+- [x] Frontend tests: 5 Vitest + React Testing Library tests (new test infra this slice) covering the provider catalog, permission preview, and OAuth connection lifecycle UI
+- [ ] Every other spec §48 connector category (Email, Marketing, Cloud, remaining Identity/Engineering/
+      Communication/Documents/Accounting categories) — not started, all need real OAuth apps/API keys
 - [ ] `subscribe()`, `execute_action()`, `collect_evidence()` from spec §49's full Connector Contract,
-      sync safety (spec §G2) — not applicable yet, no polling/scheduled sync exists
+      sync safety (spec §G2) — sync is durable now but still on-demand only, no polling/scheduled sync
 
 ## Phase 3 extension (AI System Inventory) — added alongside Phase 8/9
 

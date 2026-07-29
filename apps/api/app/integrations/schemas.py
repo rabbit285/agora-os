@@ -51,6 +51,7 @@ class ProviderCatalogEntry(BaseModel):
     name: str
     auth_type: str
     configured: bool
+    scopes: list[str] = Field(default_factory=list)
 
 
 class OAuthStartResponse(BaseModel):

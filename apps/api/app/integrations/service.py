@@ -13,15 +13,25 @@ is still recorded as a `WebhookEvent` (verified=False) so a misconfigured
 sender is diagnosable, but it never reaches the workflow engine.
 
 `start_oauth_flow` / `handle_oauth_callback` / `refresh_connection_token`
-/ `check_connection_health` / `disconnect_connection` / `run_sync`
-implement the second connector shape — a real OAuth2 authorization-code
-flow (spec §49's Connector Contract), with HubSpot as the first real
-provider (ADR-0026). `oauth_state` is this flow's own "capability token":
-the callback route has no session (the redirect comes from HubSpot, not
+/ `check_connection_health` / `disconnect_connection` /
+`create_sync_run` + `execute_sync_run` implement the second connector
+shape — a real OAuth2 authorization-code flow (spec §49's Connector
+Contract) behind a provider-neutral adapter registry (six providers:
+HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — ADR-0026,
+ADR-0028). `oauth_state` is this flow's own "capability token": the
+callback route has no session (the redirect comes from the provider, not
 necessarily the tab that started the flow), so the state parameter alone
 — not a cookie — proves which pending connection a callback belongs to,
 the same pattern `receive_webhook_event`'s HMAC signature plays for the
 webhook connector.
+
+Sync runs as a durable Temporal job (`IntegrationSyncWorkflow`), not
+inline in the request: `create_sync_run` writes the `running` row and
+returns immediately (called from the router), `execute_sync_run` does the
+actual provider call and is invoked by the Temporal activity — the same
+request/durable-execution split `app.knowledge.workflow_client` uses for
+document ingestion. `run_sync` composes both for tests/seed data that want
+a synchronous result without a live Temporal connection.
 """
 
 from __future__ import annotations
@@ -42,7 +52,7 @@ from app.automation.models import Workflow
 from app.automation.service import start_run
 from app.core.crypto import decrypt_token, encrypt_token
 from app.db.base import as_aware_utc, utcnow
-from app.integrations.adapters import get_oauth_adapter
+from app.integrations.adapters import default_redirect_uri, get_oauth_adapter
 from app.integrations.models import IntegrationConnection, SyncRun, WebhookEvent
 
 OAUTH_STATE_TTL_SECONDS = 600
@@ -148,11 +158,7 @@ async def link_workflow(
 
 
 def oauth_redirect_uri(connector_key: str) -> str:
-    from app.config import settings
-
-    if connector_key == "hubspot" and settings.hubspot_redirect_uri:
-        return settings.hubspot_redirect_uri
-    return f"{settings.api_url}/api/v1/integrations/connections/oauth/{connector_key}/callback"
+    return default_redirect_uri(connector_key)
 
 
 async def start_oauth_flow(
@@ -267,14 +273,31 @@ async def ensure_fresh_access_token(db: AsyncSession, *, connection: Integration
 
 
 async def refresh_connection_token(
-    db: AsyncSession, *, connection: IntegrationConnection
+    db: AsyncSession,
+    *,
+    connection: IntegrationConnection,
+    actor_user_id: uuid.UUID | None = None,
 ) -> IntegrationConnection:
     if connection.encrypted_refresh_token is None:
         raise ValueError("Connection has no refresh token to use")
 
     adapter = get_oauth_adapter(connection.connector_key)
     refresh_token = decrypt_token(connection.encrypted_refresh_token)
-    tokens = await adapter.refresh_access_token(refresh_token=refresh_token)
+    try:
+        tokens = await adapter.refresh_access_token(refresh_token=refresh_token)
+    except Exception as exc:  # noqa: BLE001 - normalized to ValueError + audited below
+        connection.last_error = str(exc)
+        await record_event(
+            db,
+            organization_id=connection.organization_id,
+            actor_user_id=actor_user_id,
+            action="integrations.oauth.refresh_failed",
+            object_type="integration_connection",
+            object_id=str(connection.id),
+            policy_decision="denied",
+            after_state={"error": str(exc)},
+        )
+        raise ValueError(f"Token refresh failed: {exc}") from exc
 
     connection.encrypted_access_token = encrypt_token(tokens.access_token)
     if tokens.refresh_token:
@@ -283,6 +306,15 @@ async def refresh_connection_token(
         utcnow() + timedelta(seconds=tokens.expires_in_seconds)
         if tokens.expires_in_seconds
         else None
+    )
+    connection.last_error = None
+    await record_event(
+        db,
+        organization_id=connection.organization_id,
+        actor_user_id=actor_user_id,
+        action="integrations.oauth.refreshed",
+        object_type="integration_connection",
+        object_id=str(connection.id),
     )
     return connection
 
@@ -315,15 +347,19 @@ async def check_connection_health(
 
 
 async def disconnect_connection(
-    db: AsyncSession, *, connection: IntegrationConnection
+    db: AsyncSession,
+    *,
+    connection: IntegrationConnection,
+    actor_user_id: uuid.UUID | None = None,
 ) -> IntegrationConnection:
+    revoke_error: str | None = None
     if connection.encrypted_access_token is not None:
         adapter = get_oauth_adapter(connection.connector_key)
         try:
             access_token = decrypt_token(connection.encrypted_access_token)
             await adapter.revoke(access_token=access_token)
         except Exception as exc:  # noqa: BLE001 - best-effort revoke; tokens are cleared regardless
-            connection.last_error = f"Revoke request failed (tokens cleared locally): {exc}"
+            revoke_error = str(exc)
 
     connection.encrypted_access_token = None
     connection.encrypted_refresh_token = None
@@ -331,13 +367,38 @@ async def disconnect_connection(
     connection.scopes = None
     connection.status = "disconnected"
     connection.health_status = None
+    connection.last_error = (
+        f"Revoke request failed (tokens cleared locally): {revoke_error}" if revoke_error else None
+    )
+
+    await record_event(
+        db,
+        organization_id=connection.organization_id,
+        actor_user_id=actor_user_id,
+        action="integrations.oauth.disconnected",
+        object_type="integration_connection",
+        object_id=str(connection.id),
+        policy_decision="denied" if revoke_error else "allowed",
+        after_state={"revoke_error": revoke_error} if revoke_error else None,
+    )
     return connection
 
 
-async def run_sync(db: AsyncSession, *, connection: IntegrationConnection) -> SyncRun:
-    """Runs synchronously inline rather than as a durable Temporal job —
-    a real but simplified version of spec §49's `sync()` capability; see
-    docs/KNOWN_LIMITATIONS.md."""
+async def create_sync_run(
+    db: AsyncSession,
+    *,
+    connection: IntegrationConnection,
+    actor_user_id: uuid.UUID | None = None,
+) -> SyncRun:
+    """Creates the SyncRun row and records the audit trail entry for the
+    request; the actual provider call happens in `execute_sync_run`, run
+    from a durable Temporal workflow (`IntegrationSyncWorkflow`) rather than
+    inline in the request — see `apps/worker/worker/workflows.py` and
+    `docs/DECISIONS.md` ADR-0028. Split into two functions so tests can
+    exercise the real adapter logic (`execute_sync_run`) without requiring
+    a live Temporal connection, the same pattern
+    `app.knowledge.service.ingest_document` uses relative to
+    `DocumentIngestionWorkflow`."""
     sync_run = SyncRun(
         organization_id=connection.organization_id,
         connection_id=connection.id,
@@ -345,7 +406,30 @@ async def run_sync(db: AsyncSession, *, connection: IntegrationConnection) -> Sy
     )
     db.add(sync_run)
     await db.flush()
+    await record_event(
+        db,
+        organization_id=connection.organization_id,
+        actor_user_id=actor_user_id,
+        action="integrations.sync.started",
+        object_type="integration_sync_run",
+        object_id=str(sync_run.id),
+        after_state={"connection_id": str(connection.id)},
+    )
+    return sync_run
 
+
+async def execute_sync_run(
+    db: AsyncSession,
+    *,
+    connection: IntegrationConnection,
+    sync_run: SyncRun,
+    actor_user_id: uuid.UUID | None = None,
+) -> SyncRun:
+    """Runs the actual provider sync call and finalizes `sync_run` — a real
+    but deliberately simplified version of spec §49's `sync()` capability
+    (no incremental cursors/checkpointing yet, see
+    docs/KNOWN_LIMITATIONS.md). Called by the Temporal activity in
+    production; called directly in tests."""
     try:
         access_token = await ensure_fresh_access_token(db, connection=connection)
         adapter = get_oauth_adapter(connection.connector_key)
@@ -354,10 +438,42 @@ async def run_sync(db: AsyncSession, *, connection: IntegrationConnection) -> Sy
         sync_run.items_synced = result.items_synced
         connection.last_synced_at = utcnow()
         connection.last_error = None
+        await record_event(
+            db,
+            organization_id=connection.organization_id,
+            actor_user_id=actor_user_id,
+            action="integrations.sync.succeeded",
+            object_type="integration_sync_run",
+            object_id=str(sync_run.id),
+            after_state={"items_synced": result.items_synced},
+        )
     except Exception as exc:  # noqa: BLE001 - recorded on the SyncRun, not re-raised to the caller
         sync_run.status = "failed"
         sync_run.error = str(exc)
         connection.last_error = str(exc)
+        await record_event(
+            db,
+            organization_id=connection.organization_id,
+            actor_user_id=actor_user_id,
+            action="integrations.sync.failed",
+            object_type="integration_sync_run",
+            object_id=str(sync_run.id),
+            policy_decision="denied",
+            after_state={"error": str(exc)},
+        )
 
     sync_run.completed_at = utcnow()
     return sync_run
+
+
+async def run_sync(
+    db: AsyncSession, *, connection: IntegrationConnection, actor_user_id: uuid.UUID | None = None
+) -> SyncRun:
+    """Convenience wrapper used only by tests/seed data that want a
+    synchronous, single-call sync without going through Temporal — the
+    `/connections/{id}/sync` endpoint uses `create_sync_run` +
+    `IntegrationSyncWorkflow` instead (see `app.routers.integrations`)."""
+    sync_run = await create_sync_run(db, connection=connection, actor_user_id=actor_user_id)
+    return await execute_sync_run(
+        db, connection=connection, sync_run=sync_run, actor_user_id=actor_user_id
+    )

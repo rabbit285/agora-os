@@ -15,6 +15,7 @@ import app.db.register_all_models  # noqa: F401 — registers every model's tabl
 from app.core.rbac import ensure_system_roles
 from app.db.base import Base
 from app.db.session import get_db
+from app.integrations.workflow_client import get_sync_starter
 from app.knowledge.workflow_client import get_ingestion_starter
 from app.main import app
 
@@ -55,8 +56,18 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
         return _start
 
+    async def _noop_sync_starter():  # type: ignore[no-untyped-def]
+        async def _start(connection_id: object, sync_run_id: object) -> None:
+            # Tests never have a real Temporal server; sync execution is
+            # tested directly against app.integrations.service.execute_sync_run
+            # (see tests/test_integrations.py), not through the workflow.
+            return None
+
+        return _start
+
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_ingestion_starter] = _noop_ingestion_starter
+    app.dependency_overrides[get_sync_starter] = _noop_sync_starter
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

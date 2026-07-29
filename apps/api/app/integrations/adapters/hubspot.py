@@ -18,12 +18,14 @@ AUTHORIZE_URL = "https://app.hubspot.com/oauth/authorize"
 TOKEN_URL = "https://api.hubapi.com/oauth/v1/token"
 TOKEN_INFO_URL = "https://api.hubapi.com/oauth/v1/access-tokens/{token}"
 CONTACTS_URL = "https://api.hubapi.com/crm/v3/objects/contacts"
-DEFAULT_SCOPES = "crm.objects.contacts.read crm.objects.companies.read"
+SCOPES = ["crm.objects.contacts.read", "crm.objects.companies.read"]
+DEFAULT_SCOPES = " ".join(SCOPES)
 REQUEST_TIMEOUT_SECONDS = 15.0
 
 
 class HubSpotAdapter:
     provider_key = "hubspot"
+    SCOPES = SCOPES
 
     def __init__(self, *, client_id: str, client_secret: str) -> None:
         self._client_id = client_id

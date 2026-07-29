@@ -238,6 +238,22 @@ async def test_provider_catalog_reports_hubspot_not_configured(client: AsyncClie
     assert catalog["hubspot"]["auth_type"] == "oauth2"
 
 
+async def test_provider_catalog_lists_all_six_oauth_providers_with_scope_previews(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "provcat2@example.com", "Provider Catalog Org 2")
+    response = await client.get("/api/v1/integrations/providers")
+    assert response.status_code == 200
+    catalog = {p["connector_key"]: p for p in response.json()}
+
+    for key in ("hubspot", "google", "microsoft", "github", "slack", "salesforce"):
+        assert catalog[key]["auth_type"] == "oauth2"
+        # None of these have real credentials in this environment — every
+        # one must report Not-configured honestly, never a fake connection.
+        assert catalog[key]["configured"] is False
+        assert len(catalog[key]["scopes"]) > 0
+
+
 async def test_employee_role_cannot_start_oauth(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -290,7 +306,7 @@ async def test_oauth_callback_connects_and_checks_health(client: AsyncClient) ->
     matching = next(c for c in connections.json() if c["id"] == connection_id)
     assert matching["status"] == "connected"
     assert matching["health_status"] == "ok"
-    assert matching["external_account_id"] == "mock-account-0001"
+    assert matching["external_account_id"] == "mock-hubspot-account-0001"
     assert matching["scopes"] == ["mock.read"]
 
 
@@ -320,10 +336,16 @@ async def test_refresh_health_sync_and_disconnect_lifecycle(client: AsyncClient)
     assert health.status_code == 200
     assert health.json()["health_status"] == "ok"
 
+    # Sync is fired off as a durable Temporal workflow (IntegrationSyncWorkflow)
+    # rather than run inline — the endpoint only creates the SyncRun row and
+    # kicks off the workflow (a no-op in tests, see conftest's sync-starter
+    # override), so it comes back "running", not "succeeded". The real
+    # execution path is exercised directly in
+    # test_execute_sync_run_against_mock_adapter_succeeds below, the same
+    # split test_knowledge.py uses for ingest_document vs. the upload route.
     synced = await client.post(f"/api/v1/integrations/connections/{connection_id}/sync")
     assert synced.status_code == 200
-    assert synced.json()["status"] == "succeeded"
-    assert synced.json()["items_synced"] == 3
+    assert synced.json()["status"] == "running"
 
     sync_runs = await client.get(f"/api/v1/integrations/connections/{connection_id}/sync-runs")
     assert sync_runs.status_code == 200
@@ -333,6 +355,122 @@ async def test_refresh_health_sync_and_disconnect_lifecycle(client: AsyncClient)
     assert disconnected.status_code == 200
     assert disconnected.json()["status"] == "disconnected"
     assert disconnected.json()["health_status"] is None
+
+
+async def test_execute_sync_run_against_mock_adapter_succeeds(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from app.integrations.models import IntegrationConnection as _Connection
+    from app.integrations.service import run_sync
+
+    await _signup(client, "oauth-sync1@example.com", "OAuth Sync Org 1")
+    connection_id, state = await _start_hubspot_oauth(client)
+    await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+
+    connection = await db_session.get(_Connection, uuid.UUID(connection_id))
+    assert connection is not None
+    sync_run = await run_sync(db_session, connection=connection)
+    await db_session.commit()
+
+    assert sync_run.status == "succeeded"
+    assert sync_run.items_synced == 3
+    assert sync_run.completed_at is not None
+
+    # execute_sync_run also handles a failing adapter honestly rather than
+    # silently succeeding.
+    class _FailingAdapter:
+        provider_key = "hubspot"
+        SCOPES: list[str] = []
+
+        async def sync(self, *, access_token: str) -> None:
+            raise RuntimeError("simulated provider outage")
+
+    import app.integrations.service as integrations_service
+
+    original_get_adapter = integrations_service.get_oauth_adapter
+    integrations_service.get_oauth_adapter = lambda connector_key: _FailingAdapter()  # type: ignore[assignment]
+    try:
+        failing_run = await run_sync(db_session, connection=connection)
+    finally:
+        integrations_service.get_oauth_adapter = original_get_adapter
+    assert failing_run.status == "failed"
+    assert failing_run.error is not None
+
+
+async def test_generic_oauth_flow_works_for_a_non_hubspot_provider(client: AsyncClient) -> None:
+    """Proves the OAuth framework is genuinely provider-neutral rather than
+    hardcoded to HubSpot: starting/completing a flow for Google (also
+    unconfigured, also mock-backed in this environment) goes through the
+    exact same generic endpoints and service functions."""
+    await _signup(client, "oauth-google1@example.com", "OAuth Google Org 1")
+
+    started = await client.post("/api/v1/integrations/connections/oauth/google/start")
+    assert started.status_code == 200, started.text
+    parsed = urlparse(started.json()["authorization_url"])
+    state = parse_qs(parsed.query)["state"][0]
+    connection_id = started.json()["connection_id"]
+
+    callback = await client.get(
+        "/api/v1/integrations/connections/oauth/google/callback",
+        params={"code": "fake-code", "state": state},
+    )
+    assert callback.status_code in (302, 307)
+    assert "connected=google" in callback.headers["location"]
+
+    connections = await client.get("/api/v1/integrations/connections")
+    matching = next(c for c in connections.json() if c["id"] == connection_id)
+    assert matching["connector_key"] == "google"
+    assert matching["status"] == "connected"
+    assert matching["external_account_id"] == "mock-google-account-0001"
+
+
+async def test_unknown_oauth_provider_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "oauth-unknown1@example.com", "OAuth Unknown Org 1")
+    response = await client.post("/api/v1/integrations/connections/oauth/not-a-provider/start")
+    assert response.status_code == 404
+
+
+async def test_oauth_lifecycle_records_audit_events(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from sqlalchemy import select as _select
+
+    from app.audit.models import AuditEvent
+    from app.integrations.models import IntegrationConnection as _Connection
+    from app.integrations.service import run_sync
+
+    await _signup(client, "oauth-audit1@example.com", "OAuth Audit Org 1")
+    connection_id, state = await _start_hubspot_oauth(client)
+    await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+    await client.post(f"/api/v1/integrations/connections/{connection_id}/refresh")
+
+    connection = await db_session.get(_Connection, uuid.UUID(connection_id))
+    assert connection is not None
+    await run_sync(db_session, connection=connection)
+    await db_session.commit()
+
+    await client.post(f"/api/v1/integrations/connections/{connection_id}/disconnect")
+
+    events = (
+        (
+            await db_session.execute(
+                _select(AuditEvent.action).where(AuditEvent.object_id == connection_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    actions = set(events)
+    assert "integrations.oauth.started" in actions
+    assert "integrations.oauth.connected" in actions
+    assert "integrations.oauth.refreshed" in actions
+    assert "integrations.oauth.disconnected" in actions
 
 
 async def test_oauth_connection_from_other_org_returns_not_found(client: AsyncClient) -> None:

@@ -170,7 +170,7 @@ organization memory. Both remaining named scenarios need modules or data
 that don't exist yet (customer questionnaires, an AI system inventory) —
 see `docs/RESUME_BUILD.md` for suggested ordering.
 
-## Phase 9 — Integrations (two connector shapes in progress)
+## Phase 9 — Integrations (two connector shapes; OAuth framework complete for six providers)
 
 Spec §48 lists a dozen-plus provider categories (CRM, Email, Marketing,
 Customer Support, Cloud, Identity, Engineering, Communication, Documents,
@@ -190,14 +190,20 @@ Fake Features", §C2 secrets contract). Done:
   both satisfied by the same slice (ADR-0024).
 - A provider-neutral **OAuth2 connector framework**
   (`OAuthConnectorAdapter`, mirroring the AI gateway's
-  `ModelAdapter`/`DemoAdapter` pattern) with **HubSpot** as the first real
-  provider — genuine HTTP calls to HubSpot's OAuth/CRM endpoints, only
-  activated when `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET` are
-  configured; `MockOAuthAdapter` otherwise, which is also what the test
-  suite exercises. Encrypted token storage (`app/core/crypto.py`), a
-  provider catalog endpoint reporting honest `configured: bool` status,
-  authorize/callback/refresh/health/disconnect/sync endpoints, and a
-  `SyncRun` log — all real, tenant-isolated, tested (ADR-0026).
+  `ModelAdapter`/`DemoAdapter` pattern) with **six real adapters** —
+  HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — genuine HTTP
+  calls against each provider's documented OAuth/API endpoints, each only
+  activated when its own `*_CLIENT_ID`/`*_CLIENT_SECRET` are configured;
+  `MockOAuthAdapter` (labeled per provider) otherwise, which is also what
+  the test suite exercises for all six. Encrypted token storage
+  (`app/core/crypto.py`), a provider catalog endpoint reporting honest
+  `configured: bool` status plus a permission preview of each provider's
+  requested scopes, authorize/callback/refresh/health/disconnect/sync
+  endpoints, full-lifecycle audit logging, and sync running as a durable
+  Temporal job (`IntegrationSyncWorkflow`) rather than inline — all real,
+  tenant-isolated, tested (ADR-0026, ADR-0028). Adding a seventh provider
+  is one adapter module + one registry entry + three env vars, not a
+  structural change.
 
 Remaining: every other connector category, the rest of spec §49's
 Connector Contract (`subscribe()`, `execute_action()`,

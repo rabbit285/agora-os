@@ -13,7 +13,7 @@ from app.automation.models import Workflow
 from app.config import settings
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
-from app.integrations.adapters import OAUTH_PROVIDER_KEYS, is_provider_configured
+from app.integrations.adapters import OAUTH_PROVIDER_KEYS, is_provider_configured, provider_scopes
 from app.integrations.models import IntegrationConnection, SyncRun, WebhookEvent
 from app.integrations.schemas import (
     ConnectionCreate,
@@ -26,21 +26,27 @@ from app.integrations.schemas import (
 )
 from app.integrations.service import (
     check_connection_health,
+    create_sync_run,
     disconnect_connection,
     generate_webhook_secret,
     handle_oauth_callback,
     link_workflow,
     receive_webhook_event,
     refresh_connection_token,
-    run_sync,
     start_oauth_flow,
 )
+from app.integrations.workflow_client import SyncStarter, get_sync_starter
 
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
 
 PROVIDER_CATALOG: list[dict[str, str]] = [
     {"connector_key": "webhook", "name": "Webhook", "auth_type": "hmac"},
     {"connector_key": "hubspot", "name": "HubSpot", "auth_type": "oauth2"},
+    {"connector_key": "google", "name": "Google", "auth_type": "oauth2"},
+    {"connector_key": "microsoft", "name": "Microsoft", "auth_type": "oauth2"},
+    {"connector_key": "github", "name": "GitHub", "auth_type": "oauth2"},
+    {"connector_key": "slack", "name": "Slack", "auth_type": "oauth2"},
+    {"connector_key": "salesforce", "name": "Salesforce", "auth_type": "oauth2"},
 ]
 
 
@@ -67,6 +73,7 @@ async def list_providers(
                 if entry["connector_key"] == "webhook"
                 else is_provider_configured(entry["connector_key"])
             ),
+            scopes=provider_scopes(entry["connector_key"]),
         )
         for entry in PROVIDER_CATALOG
     ]
@@ -208,7 +215,9 @@ async def refresh_connection(
 ) -> IntegrationConnection:
     connection = await _get_org_connection(db, connection_id, context.organization_id)
     try:
-        connection = await refresh_connection_token(db, connection=connection)
+        connection = await refresh_connection_token(
+            db, connection=connection, actor_user_id=context.user.id
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
@@ -238,14 +247,8 @@ async def disconnect(
     context: OrgContext = Depends(require_permission("integrations.connections.manage")),
 ) -> IntegrationConnection:
     connection = await _get_org_connection(db, connection_id, context.organization_id)
-    connection = await disconnect_connection(db, connection=connection)
-    await record_event(
-        db,
-        organization_id=context.organization_id,
-        actor_user_id=context.user.id,
-        action="integrations.oauth.disconnected",
-        object_type="integration_connection",
-        object_id=str(connection.id),
+    connection = await disconnect_connection(
+        db, connection=connection, actor_user_id=context.user.id
     )
     await db.commit()
     await db.refresh(connection)
@@ -257,11 +260,19 @@ async def sync_connection(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+    start_sync: SyncStarter = Depends(get_sync_starter),
 ) -> SyncRun:
+    """Creates the SyncRun row synchronously (so the response and the
+    sync-runs list are consistent immediately) then kicks off
+    `IntegrationSyncWorkflow` durably and returns without waiting for it —
+    the frontend polls `GET .../sync-runs` for the running -> succeeded/
+    failed transition, the same async UX `POST /knowledge/documents`
+    uses for ingestion."""
     connection = await _get_org_connection(db, connection_id, context.organization_id)
-    sync_run = await run_sync(db, connection=connection)
+    sync_run = await create_sync_run(db, connection=connection, actor_user_id=context.user.id)
     await db.commit()
     await db.refresh(sync_run)
+    await start_sync(connection.id, sync_run.id)
     return sync_run
 
 
