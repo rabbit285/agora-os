@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -142,7 +143,14 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
           {account.opportunities.map((opportunity) => (
             <Card key={opportunity.id}>
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{opportunity.title}</div>
+                <div>
+                  <div className="font-medium text-neutral-900">{opportunity.title}</div>
+                  {opportunity.onboarding_customer_id && (
+                    <Link href="/support" className="text-xs text-neutral-500 hover:underline">
+                      Onboarded as a Support customer →
+                    </Link>
+                  )}
+                </div>
                 <StatusBadge status={opportunity.stage} />
               </CardContent>
             </Card>

@@ -34,7 +34,12 @@ implied to work.
   (multi-step automation), no lead-finding/enrichment (needs external
   data connectors), no meetings or sales inbox. The suppression check
   itself is a single boolean, not the fuller jurisdiction/consent/
-  marketing-basis engine spec §91 describes (ADR-0019).
+  marketing-basis engine spec §91 describes (ADR-0019). A `closed_won`
+  Opportunity creates a real Support Customer + onboarding Task
+  (ADR-0025), but not a real welcome email or a billing/accounting
+  system update — no email provider or accounting connector exists yet.
+  If the account has no Contact yet, onboarding is honestly skipped, not
+  faked with a placeholder email.
 - **Support**: tickets have a `channel` field (`email`/`chat`/`api`) but
   no real channel connectors — there's no inbound email parsing or chat
   widget, only the API. No SLA policies/timers, no QA review scoring, no
@@ -47,11 +52,12 @@ implied to work.
   notifies the linked account's owner (or the flagging agent if there's no
   linked Sales Account or no account owner), but does not auto-create an
   Opportunity — that conversion is left to a human sales rep (ADR-0022).
-- **Cross-Module Intelligence (Phase 8)**: only two of spec §69's five
-  named cross-module scenarios are implemented ("Support Upsell Signal"
-  and the "Security Incident" chain). The other three (Enterprise Sales
-  Security Review, New AI Tool Adoption, New Customer) are not started —
-  they need modules/data that don't exist yet (customer questionnaires, an
+- **Cross-Module Intelligence (Phase 8)**: three of spec §69's five
+  named cross-module scenarios are implemented ("Support Upsell Signal",
+  the "Security Incident" chain, and "New Customer"). The other two
+  (Enterprise Sales Security Review, New AI Tool Adoption) are not
+  started — they need modules/data that don't exist yet (customer
+  questionnaires, an
   AI system inventory). No AI daily briefing, business process discovery,
   AI recommendation engine, or organization memory exist either. The
   Security Incident chain's Task/Notification are only created for

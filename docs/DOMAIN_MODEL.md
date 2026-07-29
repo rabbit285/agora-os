@@ -176,6 +176,7 @@ erDiagram
   SALES_ACCOUNT ||--o{ SALES_LEAD : "may relate to"
   SALES_CONTACT ||--o{ SALES_LEAD : "may relate to"
   SALES_CONTACT ||--o{ OUTREACH_MESSAGE : "target of"
+  SALES_OPPORTUNITY }o--o| SUPPORT_CUSTOMER : "closed_won creates"
 ```
 
 - **Account / Contact** — an organization's own CRM data (tenant-scoped,
@@ -184,7 +185,10 @@ erDiagram
 - **Lead** — loosely linked to an Account/Contact (both nullable — a lead
   may arrive before either exists).
 - **Opportunity** — belongs to exactly one Account; moves through a
-  pipeline stage enum.
+  pipeline stage enum. `onboarding_customer_id` is the Phase 8 "New
+  Customer" cross-module hook: the first `closed_won` transition creates
+  a real Support **Customer** and an onboarding **Task** (spec §69,
+  ADR-0025) — see the Phase 8 section below.
 - **OutreachMessage** — a draft/sent/blocked record. `send_outreach_message`
   (`app/sales/service.py`) refuses to mark a message `sent` if the target
   Contact is suppressed, setting it `blocked` instead (spec §91, ADR-0019)
@@ -280,10 +284,10 @@ webhooks and other non-manual triggers, retries/failure policies beyond
 non-manual triggers (new email, CRM stage change, webhook) depend on the
 connector SDK (Phase 9).
 
-## Phase 8 (Cross-Module Intelligence — two slices: Support Upsell Signal, Security Incident chain)
+## Phase 8 (Cross-Module Intelligence — three slices: Support Upsell Signal, Security Incident chain, New Customer)
 
-Spec §69 names five cross-module scenarios; this build implements two as
-real, tested verticals rather than stubbing all five (spec §80/§82's
+Spec §69 names five cross-module scenarios; this build implements three
+as real, tested verticals rather than stubbing all five (spec §80/§82's
 "one real vertical, not everything" discipline, applied again).
 
 "Support Upsell Signal": a support agent flags a ticket, which
@@ -303,15 +307,28 @@ tasks" step) and, if the incident has an owner, a `core.Notification`
 describes, still gated on the same severity check, still one function
 (ADR-0023). Only `SecurityIncident.related_task_id` was added.
 
+"New Customer": `app/sales/service.py::close_opportunity_won` fires the
+first time a Sales `Opportunity` transitions to `closed_won`. It creates
+a real Support `Customer` (using the account's earliest Contact for the
+required email) and a `core.Task` due in 7 days — spec §69's "create
+customer / create support profile" and "provision internal tasks /
+schedule check-in" steps collapsed into two existing primitives rather
+than nine new ones (ADR-0025). `Opportunity.onboarding_customer_id` is
+both the link and the idempotency guard — a later closed_won transition
+on the same opportunity is a no-op. If the account has no Contact yet,
+the stage change still succeeds but onboarding is honestly skipped
+(`sales.opportunity.onboarding_skipped`) rather than fabricating a
+customer with no real email.
+
 Not modeled yet, and deliberately deferred rather than attempted
 speculatively: "Enterprise Sales Security Review" (needs customer
 questionnaires, which don't exist), "New AI Tool Adoption" (needs an AI
-system inventory, which doesn't exist), "New Customer" (CRM-deal-won
-automation — partially possible today via a manual Automation workflow,
-not a built-in trigger), an AI daily briefing, business process
-discovery, an AI recommendation engine, and organization memory — all
-large, open-ended features with no existing primitive to hang them off
-of, unlike the two scenarios chosen here.
+system inventory, which doesn't exist), an AI daily briefing, business
+process discovery, an AI recommendation engine, and organization memory —
+all large, open-ended features with no existing primitive to hang them
+off of, unlike the three scenarios chosen here. "New Customer" also
+doesn't yet send a real welcome email or update a billing/accounting
+system — no email provider or accounting connector exists (spec §48).
 
 ## Phase 9 entities (implemented — Integrations backbone: one connector)
 

@@ -75,7 +75,7 @@ Cause/Lessons Learned tab structure spec §19 describes.
 | Route | Status |
 |---|---|
 | `/sales` | [x] accounts + pipeline overview |
-| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities |
+| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won) |
 
 Not yet built (spec §67 lists these under Sales): ICP Builder, Lead
 Finder, Lead Detail, Contact Detail (standalone), Sequences/Sequence

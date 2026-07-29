@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first two Cross-Module Intelligence slices; Phase 9's first Integrations slice — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices; Phase 9's first Integrations slice — verified end-to-end)
 
 ## Platform
 
@@ -81,9 +81,10 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 - [x] Account, Contact, Lead, Opportunity, OutreachMessage models + migration
 - [x] Cross-module hook: `Contact.do_not_contact` blocks outreach send, else it "sends" (tested, ADR-0019)
-- [x] `/api/v1/sales` router — accounts (+ detail), contacts (+ suppression toggle), leads, opportunities, outreach (create + send); tenant-isolated, RBAC-gated
+- [x] Cross-module hook (Phase 8): the first `closed_won` transition on an Opportunity creates a real Support `Customer` + a 7-day onboarding `Task`, idempotent on reopen/re-win, honestly skipped if the account has no Contact (tested, ADR-0025)
+- [x] `/api/v1/sales` router — accounts (+ detail), contacts (+ suppression toggle), leads, opportunities (create/update, now with the closed_won hook), outreach (create + send); tenant-isolated, RBAC-gated
 - [x] RBAC: `sales_manager` / `sales_representative` system roles granted sales permissions
-- [x] Frontend: `/sales` overview (accounts, pipeline) + `/sales/accounts/[id]` detail (contacts with suppression toggle, compose/send outreach, opportunities)
+- [x] Frontend: `/sales` overview (accounts, pipeline) + `/sales/accounts/[id]` detail (contacts with suppression toggle, compose/send outreach, opportunities with an "Onboarded as a Support customer" link once closed_won)
 - [x] Seed script: 1 account, 2 contacts (1 suppressed), 1 opportunity, 2 outreach attempts (1 sent, 1 blocked) for the demo org
 - [ ] Sequences/campaigns (multi-step outreach automation) — not started
 - [ ] Meetings, sales conversations/inbox, pipeline events, playbooks — not started
@@ -127,10 +128,14 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
       creates a response `core.Task` and notifies the incident's owner,
       extending the existing hook rather than adding a new one (tested,
       ADR-0023)
+- [x] Slice 3: "New Customer" (spec §69) — the first `closed_won`
+      transition on a Sales Opportunity creates a real Support `Customer`
+      and a 7-day onboarding `core.Task`, idempotent on reopen/re-win, and
+      honestly skipped (not faked) if the account has no Contact yet
+      (tested, ADR-0025)
 - [ ] Remaining spec §69 scenarios (Enterprise Sales Security Review, New
-      AI Tool Adoption, New Customer) — not started, most need
-      modules/data that don't exist yet (customer questionnaires, AI
-      system inventory)
+      AI Tool Adoption) — not started, need modules/data that don't exist
+      yet (customer questionnaires, AI system inventory)
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory — not started
 - [ ] Cross-module intent router for the AI Copilot — not started
@@ -161,12 +166,12 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
 - [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
-- [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
+- [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
-- [x] Cross-module intelligence tests (3 tests: upsell signal creates lead + notifies account owner, falls back to actor when no linked account, cannot flag the same ticket twice — plus the 2 new Security Incident chain tests counted above)
+- [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (7 tests: RBAC grant/denial, link requires trigger_type=webhook, verified signature triggers the linked workflow run, invalid signature is recorded but does not trigger anything, disabled connection rejects a valid signature, unknown connection returns 404)
-- [x] 82/82 total, ruff+mypy strict clean
+- [x] 85/85 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -193,13 +198,14 @@ core backbones (see their sections above) but not their larger
 sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
 Center, identity/cloud provider integrations, incident playbooks,
 sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
-most non-manual triggers). Phase 8 (Cross-Module Intelligence) has two
+most non-manual triggers). Phase 8 (Cross-Module Intelligence) has three
 real scenarios implemented (Support Upsell Signal, Security Incident
-chain) out of spec §69's five named scenarios plus its open-ended AI
-features (daily briefing, recommendation engine, organization memory) —
-none of that larger scope has started. Phase 9 (Integrations) has exactly
-one connector category implemented (a generic inbound Webhook receiver)
-out of spec §48's dozen-plus categories — every other one needs real
+chain, New Customer) out of spec §69's five named scenarios plus its
+open-ended AI features (daily briefing, recommendation engine,
+organization memory) — none of that larger scope has started. Phase 9
+(Integrations) has exactly one connector category implemented (a generic
+inbound Webhook receiver) out of spec §48's dozen-plus categories — every
+other one needs real
 third-party OAuth credentials this environment doesn't have and won't
 fabricate. The cross-module intent router, Phase 10, and the AWS
 production deployment have not started.

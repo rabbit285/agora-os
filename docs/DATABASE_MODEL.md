@@ -411,6 +411,7 @@ sales_opportunities
   probability NUMERIC(5,2) NULL
   expected_close_at TIMESTAMPTZ NULL
   owner_id UUID FK users NULL
+  onboarding_customer_id UUID FK support_customers NULL   -- Phase 8 cross-module hook, see below
   created_at, updated_at
 
 sales_outreach_messages
@@ -500,6 +501,15 @@ An outreach message can only move from `draft` to `sent` if
 to `blocked` instead, via `app/sales/service.py::send_outreach_message`
 — Phase 5's cross-module hook (spec §91, ADR-0019). No real email/
 LinkedIn provider is wired up yet — sending only transitions this row.
+
+`sales_opportunities.onboarding_customer_id` is set by
+`app/sales/service.py::close_opportunity_won` the first time an
+opportunity transitions to `closed_won` (Phase 8, spec §69 "New
+Customer", ADR-0025) — it creates a real `support_customers` row (using
+the account's earliest Contact for the required email) and a `tasks` row
+due in 7 days, reusing Phase 6's and Phase 1's existing tables. Its
+presence is also the idempotency guard: a later closed_won transition is
+a no-op.
 
 ## Tables (Phase 7 — Business Automation)
 

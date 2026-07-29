@@ -132,7 +132,7 @@ email, webhook, CRM stage change, schedule — spec §38, need Phase 9
 connectors), a real visual drag-and-drop builder (React Flow), workflow
 templates, run history filtering/search, automation analytics (spec §43).
 
-## Phase 8 — Cross-Module Intelligence (two slices in progress)
+## Phase 8 — Cross-Module Intelligence (three slices in progress)
 
 Spec §69 names five cross-module scenarios. Rather than stub all five,
 this phase ships them as real, tested verticals one at a time — the same
@@ -148,14 +148,20 @@ discipline as every prior phase. Done:
   same `critical`-severity incident also creates a response `core.Task`
   and notifies the incident's owner via `core.Notification`, completing
   the chain spec §69 describes without adding a second hook (ADR-0023).
+- "New Customer" — the first `closed_won` transition on a Sales
+  Opportunity (`app/sales/service.py::close_opportunity_won`) creates a
+  real Support `Customer` and a 7-day onboarding `core.Task`, collapsing
+  spec §69's nine-step chain into two existing primitives; idempotent on
+  reopen/re-win, and honestly skipped (not faked) if the account has no
+  Contact yet to source an email from (ADR-0025).
 
-Remaining: the other three named scenarios (Enterprise Sales Security
-Review, New AI Tool Adoption, New Customer), plus the phase's more
-open-ended AI features — shared knowledge graph queries across modules,
-AI daily briefing, business process discovery, AI recommendation engine,
-organization memory. Most of the remaining named scenarios need modules
-or data that don't exist yet (customer questionnaires, an AI system
-inventory) — see `docs/RESUME_BUILD.md` for suggested ordering.
+Remaining: the other two named scenarios (Enterprise Sales Security
+Review, New AI Tool Adoption), plus the phase's more open-ended AI
+features — shared knowledge graph queries across modules, AI daily
+briefing, business process discovery, AI recommendation engine,
+organization memory. Both remaining named scenarios need modules or data
+that don't exist yet (customer questionnaires, an AI system inventory) —
+see `docs/RESUME_BUILD.md` for suggested ordering.
 
 ## Phase 9 — Integrations (first slice in progress)
 

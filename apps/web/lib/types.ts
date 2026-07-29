@@ -273,6 +273,7 @@ export type SalesOpportunity = {
   probability: number | null;
   expected_close_at: string | null;
   owner_id: string | null;
+  onboarding_customer_id: string | null;
   created_at: string;
 };
 

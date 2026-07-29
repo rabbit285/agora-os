@@ -432,3 +432,44 @@ docstring). Tested in `tests/test_integrations.py::test_verified_webhook_trigger
 (asserts the triggered run via `/api/v1/automation/runs`, not just the
 event's own view) and `test_invalid_signature_does_not_trigger_workflow`
 (a forged signature is recorded but never reaches the workflow engine).
+
+## ADR-0025 — "New Customer" reuses Customer + Task; the onboarding link doubles as the idempotency guard
+
+**Decision**: `app/sales/service.py::close_opportunity_won` fires the
+first time an `Opportunity.stage` transitions to `closed_won`
+(`app/routers/sales.py::update_opportunity` calls it only when
+`before_stage != "closed_won" and new_stage == "closed_won"`). It creates
+a real `support.Customer` (using the account's earliest-created `Contact`
+for the required email — spec's "create customer" and "create support
+profile" steps collapse into one entity, not two) and a `core.Task` due
+in 7 days ("provision internal tasks" / "schedule check-in"). It sets
+`Account.status = "customer"` (spec's "assign account owner" is already
+satisfied — `Account.owner_id` was set at account-creation time in this
+build). `Opportunity.onboarding_customer_id` is set once and is checked
+first: if already set, the function is a no-op, so reopening and
+re-winning the same opportunity never creates a second customer or task.
+If the account has no Contact at all, the stage transition still
+succeeds but onboarding is skipped and recorded as
+`sales.opportunity.onboarding_skipped` — a fabricated customer with no
+real contact email would violate spec §82 more than an honestly
+incomplete cross-module link would.
+
+**Why**: Spec §69's "New Customer" chain is "CRM deal won → create
+customer → create onboarding project → send welcome email → create
+support profile → provision internal tasks → update billing integration
+→ assign account owner → schedule check-in" — nine steps, but only two
+of them need a new primitive to hang off of; the rest either collapse
+into those two (create customer = create support profile) or need
+capabilities that don't exist in this build (a welcome-email provider, a
+billing/accounting connector — spec §48, not yet built) or are already
+satisfied by existing fields (account owner assignment). This continues
+every prior ADR's discipline of reusing shared primitives (Task,
+Notification, Approval, and now Customer) over inventing new
+module-specific types (spec §80). Tested in
+`tests/test_sales.py::test_closed_won_creates_support_customer_and_onboarding_task`
+(asserts the Customer via `/api/v1/support/customers` and the Task via
+`/api/v1/tasks`, not by reading the opportunity alone),
+`test_closed_won_is_idempotent_across_reopen_and_reclose` (reopen →
+re-win creates no second customer), and
+`test_closed_won_without_any_contact_skips_onboarding` (the honest
+partial-failure path).

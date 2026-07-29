@@ -180,3 +180,107 @@ async def test_opportunity_stage_lifecycle(client: AsyncClient) -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["stage"] == "closed_won"
+
+
+async def test_closed_won_creates_support_customer_and_onboarding_task(
+    client: AsyncClient,
+) -> None:
+    _, org_id = await _signup(client, "newcust1@example.com", "New Customer Org")
+
+    account = await client.post("/api/v1/sales/accounts", json={"name": "Helvetia Robotics AG"})
+    account_id = account.json()["id"]
+
+    contact = await client.post(
+        "/api/v1/sales/contacts",
+        json={
+            "full_name": "Mira Fischer",
+            "email": "mira.fischer@helvetia-robotics.example",
+            "account_id": account_id,
+        },
+    )
+    assert contact.status_code == 201
+
+    opportunity = await client.post(
+        "/api/v1/sales/opportunities",
+        json={"account_id": account_id, "title": "Helvetia platform deal"},
+    )
+    opportunity_id = opportunity.json()["id"]
+
+    won = await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_won"}
+    )
+    assert won.status_code == 200
+    customer_id = won.json()["onboarding_customer_id"]
+    assert customer_id is not None
+
+    customers = await client.get("/api/v1/support/customers")
+    matching_customer = next(c for c in customers.json() if c["id"] == customer_id)
+    assert matching_customer["sales_account_id"] == account_id
+    assert matching_customer["email"] == "mira.fischer@helvetia-robotics.example"
+    assert matching_customer["status"] == "active"
+
+    tasks = await client.get("/api/v1/tasks")
+    matching_task = next(
+        t for t in tasks.json() if "Helvetia Robotics AG" in t["title"] and t["module"] == "support"
+    )
+    assert matching_task["priority"] == "high"
+    assert matching_task["due_at"] is not None
+
+    account_detail = await client.get(f"/api/v1/sales/accounts/{account_id}")
+    assert account_detail.json()["status"] == "customer"
+
+
+async def test_closed_won_is_idempotent_across_reopen_and_reclose(client: AsyncClient) -> None:
+    await _signup(client, "newcust2@example.com", "New Customer Org 2")
+    account = await client.post("/api/v1/sales/accounts", json={"name": "Idempotent Co"})
+    account_id = account.json()["id"]
+    await client.post(
+        "/api/v1/sales/contacts",
+        json={
+            "full_name": "Idempotent Contact",
+            "email": "contact@idempotent.example",
+            "account_id": account_id,
+        },
+    )
+    opportunity = await client.post(
+        "/api/v1/sales/opportunities", json={"account_id": account_id, "title": "Idempotent deal"}
+    )
+    opportunity_id = opportunity.json()["id"]
+
+    first_win = await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_won"}
+    )
+    first_customer_id = first_win.json()["onboarding_customer_id"]
+    assert first_customer_id is not None
+
+    await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_lost"}
+    )
+    second_win = await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_won"}
+    )
+    assert second_win.json()["onboarding_customer_id"] == first_customer_id
+
+    customers = await client.get("/api/v1/support/customers")
+    matching = [c for c in customers.json() if c["sales_account_id"] == account_id]
+    assert len(matching) == 1
+
+
+async def test_closed_won_without_any_contact_skips_onboarding(client: AsyncClient) -> None:
+    await _signup(client, "newcust3@example.com", "New Customer Org 3")
+    account = await client.post("/api/v1/sales/accounts", json={"name": "No Contact Co"})
+    account_id = account.json()["id"]
+    opportunity = await client.post(
+        "/api/v1/sales/opportunities", json={"account_id": account_id, "title": "No contact deal"}
+    )
+    opportunity_id = opportunity.json()["id"]
+
+    won = await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_won"}
+    )
+    assert won.status_code == 200
+    assert won.json()["stage"] == "closed_won"
+    assert won.json()["onboarding_customer_id"] is None
+
+    customers = await client.get("/api/v1/support/customers")
+    assert all(c["sales_account_id"] != account_id for c in customers.json())

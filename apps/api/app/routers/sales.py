@@ -26,7 +26,7 @@ from app.sales.schemas import (
     OutreachMessageCreate,
     OutreachMessageOut,
 )
-from app.sales.service import send_outreach_message
+from app.sales.service import close_opportunity_won, send_outreach_message
 
 router = APIRouter(prefix="/api/v1/sales", tags=["sales"])
 
@@ -247,6 +247,17 @@ async def update_opportunity(
         before_state={"stage": before_stage},
         after_state={"stage": opportunity.stage},
     )
+
+    if before_stage != "closed_won" and opportunity.stage == "closed_won":
+        account = await _get_org_account(db, opportunity.account_id, context.organization_id)
+        opportunity = await close_opportunity_won(
+            db,
+            organization_id=context.organization_id,
+            opportunity=opportunity,
+            account=account,
+            actor_user_id=context.user.id,
+        )
+
     await db.commit()
     await db.refresh(opportunity)
     return opportunity

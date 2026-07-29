@@ -98,6 +98,7 @@ class OpportunityOut(BaseModel):
     probability: float | None
     expected_close_at: datetime | None
     owner_id: uuid.UUID | None
+    onboarding_customer_id: uuid.UUID | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

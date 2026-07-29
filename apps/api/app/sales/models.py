@@ -98,6 +98,13 @@ class Opportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # Cross-module hook (spec §69 "New Customer", ADR-0025): set once, the
+    # first time this opportunity transitions to closed_won, by
+    # app.sales.service.close_opportunity_won. Its presence is also the
+    # idempotency guard — a second closed_won transition is a no-op.
+    onboarding_customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("support_customers.id"), nullable=True
+    )
 
 
 class OutreachMessage(UUIDPrimaryKeyMixin, Base):
