@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first Cross-Module Intelligence slice — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first two Cross-Module Intelligence slices — verified end-to-end)
 
 ## Platform
 
@@ -67,9 +67,10 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 - [x] SecurityAsset, SecurityFinding (consolidated category discriminator — ADR-0017), SecurityAlert, SecurityIncident models + migration
 - [x] Cross-module hook: a `critical` incident auto-creates a linked Compliance `Risk` (tested, ADR-0018)
+- [x] Cross-module hook (Phase 8 extension): the same `critical` incident also creates a response `core.Task` and notifies its owner via `core.Notification`, completing spec §69's "Security Incident" chain (tested, ADR-0023)
 - [x] `/api/v1/security` router — assets, findings, alerts, incidents; tenant-isolated, RBAC-gated
 - [x] RBAC: `security_manager` system role granted security permissions
-- [x] Frontend: `/security` dashboard + `/security/incidents/[id]` detail with status workflow
+- [x] Frontend: `/security` dashboard + `/security/incidents/[id]` detail with status workflow, linked risk banner, linked response task banner
 - [x] Seed script: 2 assets, 2 findings, 1 alert, 1 critical incident (linked risk) for the demo org
 - [ ] Identity provider integrations (Okta/Entra/Google Workspace) — not started
 - [ ] Cloud provider connectors (AWS/Azure/GCP) — not started
@@ -116,14 +117,19 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 ## Cross-Module Intelligence
 
-- [x] First slice: "Support Upsell Signal" (spec §69) — flagging a support
+- [x] Slice 1: "Support Upsell Signal" (spec §69) — flagging a support
       ticket creates a real `sales.Lead` and a `core.Notification` to the
       linked account's owner, reusing existing primitives rather than a
       new signal entity (tested, ADR-0022)
+- [x] Slice 2: "Security Incident" chain (spec §69) — a `critical`
+      incident (already linking a Compliance Risk since Phase 4) now also
+      creates a response `core.Task` and notifies the incident's owner,
+      extending the existing hook rather than adding a new one (tested,
+      ADR-0023)
 - [ ] Remaining spec §69 scenarios (Enterprise Sales Security Review, New
-      AI Tool Adoption, the rest of the Security Incident chain, New
-      Customer) — not started, most need modules/data that don't exist yet
-      (customer questionnaires, AI system inventory)
+      AI Tool Adoption, New Customer) — not started, most need
+      modules/data that don't exist yet (customer questionnaires, AI
+      system inventory)
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory — not started
 - [ ] Cross-module intent router for the AI Copilot — not started
@@ -144,12 +150,12 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
 - [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
-- [x] Security tests (8 tests: RBAC grant/denial, cross-module risk creation, tenant isolation, status workflows)
+- [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
-- [x] Cross-module intelligence tests (3 tests: upsell signal creates lead + notifies account owner, falls back to actor when no linked account, cannot flag the same ticket twice)
-- [x] 73/73 total, ruff+mypy strict clean
+- [x] Cross-module intelligence tests (3 tests: upsell signal creates lead + notifies account owner, falls back to actor when no linked account, cannot flag the same ticket twice — plus the 2 new Security Incident chain tests counted above)
+- [x] 75/75 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -177,8 +183,9 @@ sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
 Center, identity/cloud provider integrations, incident playbooks,
 sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
 non-manual triggers, real external connectors). Phase 8 (Cross-Module
-Intelligence) has exactly one real scenario implemented (Support Upsell
-Signal) out of spec §69's five named scenarios plus its open-ended AI
-features (daily briefing, recommendation engine, organization memory) —
-none of that larger scope has started. The cross-module intent router,
-Phases 9–10, and the AWS production deployment have not started.
+Intelligence) has two real scenarios implemented (Support Upsell Signal,
+Security Incident chain) out of spec §69's five named scenarios plus its
+open-ended AI features (daily briefing, recommendation engine,
+organization memory) — none of that larger scope has started. The
+cross-module intent router, Phases 9–10, and the AWS production
+deployment have not started.

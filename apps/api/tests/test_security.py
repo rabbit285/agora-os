@@ -108,7 +108,43 @@ async def test_critical_incident_creates_linked_compliance_risk(client: AsyncCli
     assert any("Ransomware detected on file server" in t for t in risk_titles)
 
 
-async def test_high_severity_incident_does_not_create_risk(client: AsyncClient) -> None:
+async def test_critical_incident_creates_response_task(client: AsyncClient) -> None:
+    await _signup(client, "incident-task1@example.com", "Incident Task Org")
+
+    response = await client.post(
+        "/api/v1/security/incidents",
+        json={"title": "Data exfiltration suspected", "severity": "critical"},
+    )
+    assert response.status_code == 201
+    incident = response.json()
+    assert incident["related_task_id"] is not None
+
+    tasks = await client.get("/api/v1/tasks")
+    matching = next(t for t in tasks.json() if t["id"] == incident["related_task_id"])
+    assert "Data exfiltration suspected" in matching["title"]
+    assert matching["module"] == "security"
+    assert matching["priority"] == "urgent"
+
+
+async def test_critical_incident_with_owner_notifies_owner(client: AsyncClient) -> None:
+    user_id, _ = await _signup(client, "incident-owner1@example.com", "Incident Owner Org")
+
+    response = await client.post(
+        "/api/v1/security/incidents",
+        json={
+            "title": "Credential stuffing attack",
+            "severity": "critical",
+            "owner_id": str(user_id),
+        },
+    )
+    assert response.status_code == 201
+
+    notifications = await client.get("/api/v1/notifications")
+    assert notifications.status_code == 200
+    assert any("Credential stuffing attack" in n["body"] for n in notifications.json())
+
+
+async def test_high_severity_incident_does_not_create_risk_or_task(client: AsyncClient) -> None:
     await _signup(client, "incident2@example.com", "Incident Org 2")
 
     response = await client.post(
@@ -117,6 +153,7 @@ async def test_high_severity_incident_does_not_create_risk(client: AsyncClient) 
     )
     assert response.status_code == 201
     assert response.json()["related_risk_id"] is None
+    assert response.json()["related_task_id"] is None
 
     risks = await client.get("/api/v1/compliance/risks")
     assert risks.json() == []

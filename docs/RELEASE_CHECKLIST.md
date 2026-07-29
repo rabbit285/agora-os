@@ -104,19 +104,21 @@ items below are correctly unchecked.
 All five primary product modules (Compliance, Security, Sales, Support,
 Automation) now have a real, tested backbone.
 
-## Phase 8 (Cross-Module Intelligence) — first scenario complete, four remain
+## Phase 8 (Cross-Module Intelligence) — two scenarios complete, three remain
 
 - [x] "Support Upsell Signal" (spec §69): flagging a ticket creates a real
       sales.Lead + notifies the linked account's owner (tested, ADR-0022)
-- [x] Backend tests: 73 passing total; ruff/mypy clean
-- [ ] Enterprise Sales Security Review, New AI Tool Adoption, the rest of
-      the Security Incident chain, New Customer — not started, most need
-      modules/data that don't exist yet (questionnaires, AI system inventory)
+- [x] "Security Incident" chain (spec §69): a critical incident (already
+      linking a Compliance Risk since Phase 4) now also creates a response
+      Task and notifies the incident owner (tested, ADR-0023)
+- [x] Backend tests: 75 passing total; ruff/mypy clean
+- [ ] Enterprise Sales Security Review, New AI Tool Adoption, New Customer —
+      not started, most need modules/data that don't exist yet
+      (questionnaires, AI system inventory)
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory, cross-module intent router — not started
 
-See `docs/RESUME_BUILD.md` for the next phase (Phase 9 — Integrations, or
-another Phase 8 scenario).
+See `docs/RESUME_BUILD.md` for the next phase (Phase 9 — Integrations).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 

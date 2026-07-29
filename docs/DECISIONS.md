@@ -363,3 +363,33 @@ support ticket actually establishes. Tested in
 `/api/v1/notifications`, not by reading the ticket alone) and
 `test_flag_upsell_without_sales_account_falls_back_to_actor` (covers a
 customer with no linked Sales Account).
+
+## ADR-0023 — The Security Incident chain's remaining steps extend the existing hook, not a new one
+
+**Decision**: `app/secops/service.py::create_incident` now does three
+things when `severity == "critical"` (previously just one): creates the
+linked Compliance `Risk` (ADR-0018, unchanged), creates a `core.Task`
+("Investigate and contain: {title}", `module="security"`,
+`priority="urgent"`, `assignee_id=owner_id`) recorded on the incident via
+a new `SecurityIncident.related_task_id` column, and — if the incident
+has an `owner_id` — sends that owner a `core.Notification`. All three
+fire from the same `create_incident` call and the same severity gate;
+this is not a second hook bolted on beside the first.
+
+**Why**: Spec §69's "Security Incident" scenario is a single chain —
+"Creates incident → ... → Compliance module assesses GDPR breach
+obligations → Creates incident response tasks → Notifies responsible
+team → ..." — not five independent triggers. The Risk half of that chain
+already existed (Phase 4); extending the same function to cover "creates
+incident response tasks" and "notifies responsible team" keeps the whole
+chain in one place rather than scattering related consequences of "a
+critical incident just got created" across multiple service functions or
+modules. It also continues the established pattern of reusing Phase 1
+primitives (Task, Notification) instead of inventing
+incident-response-specific types — the same reasoning as ADR-0015, -0018,
+-0021, and -0022. Tested in
+`tests/test_security.py::test_critical_incident_creates_response_task`
+(asserts the task via `/api/v1/tasks`, not by reading the incident alone)
+and `test_critical_incident_with_owner_notifies_owner` (asserts the
+notification via `/api/v1/notifications`); `test_high_severity_incident_does_not_create_risk_or_task`
+confirms the severity gate still applies to both consequences together.

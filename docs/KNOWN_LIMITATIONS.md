@@ -42,13 +42,16 @@ implied to work.
   notifies the linked account's owner (or the flagging agent if there's no
   linked Sales Account or no account owner), but does not auto-create an
   Opportunity — that conversion is left to a human sales rep (ADR-0022).
-- **Cross-Module Intelligence (Phase 8)**: only one of spec §69's five
-  named cross-module scenarios is implemented ("Support Upsell Signal").
-  The other four (Enterprise Sales Security Review, New AI Tool Adoption,
-  the rest of the Security Incident chain, New Customer) are not started —
-  most need modules/data that don't exist yet (customer questionnaires, an
+- **Cross-Module Intelligence (Phase 8)**: only two of spec §69's five
+  named cross-module scenarios are implemented ("Support Upsell Signal"
+  and the "Security Incident" chain). The other three (Enterprise Sales
+  Security Review, New AI Tool Adoption, New Customer) are not started —
+  they need modules/data that don't exist yet (customer questionnaires, an
   AI system inventory). No AI daily briefing, business process discovery,
-  AI recommendation engine, or organization memory exist either.
+  AI recommendation engine, or organization memory exist either. The
+  Security Incident chain's Task/Notification are only created for
+  `critical`-severity incidents, same gate as the pre-existing Risk link —
+  there's no separate configurable threshold.
 - **Automation**: only three step types actually execute
   (`create_task`, `send_notification`, `human_approval`) out of spec §37's
   much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,

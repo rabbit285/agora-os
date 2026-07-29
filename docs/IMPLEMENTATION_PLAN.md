@@ -132,24 +132,30 @@ email, webhook, CRM stage change, schedule — spec §38, need Phase 9
 connectors), a real visual drag-and-drop builder (React Flow), workflow
 templates, run history filtering/search, automation analytics (spec §43).
 
-## Phase 8 — Cross-Module Intelligence (first slice in progress)
+## Phase 8 — Cross-Module Intelligence (two slices in progress)
 
 Spec §69 names five cross-module scenarios. Rather than stub all five,
-this phase ships one as a real, tested vertical at a time — the same
-discipline as every prior phase. Done: "Support Upsell Signal" — flagging
-a support ticket (`app/support/service.py::flag_upsell_signal`) creates a
-real `sales.Lead` and a `core.Notification` to the linked account's owner,
-reusing three primitives that already existed (Ticket, Lead, Notification)
-rather than inventing a new signal entity (ADR-0022).
+this phase ships them as real, tested verticals one at a time — the same
+discipline as every prior phase. Done:
 
-Remaining: the other four named scenarios (Enterprise Sales Security
-Review, New AI Tool Adoption, the rest of the Security Incident chain
-beyond the existing Incident→Risk link, New Customer), plus the phase's
-more open-ended AI features — shared knowledge graph queries across
-modules, AI daily briefing, business process discovery, AI recommendation
-engine, organization memory. Most of the remaining named scenarios need
-modules or data that don't exist yet (customer questionnaires, an AI
-system inventory) — see `docs/RESUME_BUILD.md` for suggested ordering.
+- "Support Upsell Signal" — flagging a support ticket
+  (`app/support/service.py::flag_upsell_signal`) creates a real
+  `sales.Lead` and a `core.Notification` to the linked account's owner,
+  reusing three primitives that already existed (Ticket, Lead,
+  Notification) rather than inventing a new signal entity (ADR-0022).
+- "Security Incident" chain — extends the existing Phase 4
+  Incident→Risk hook (`app/secops/service.py::create_incident`) so the
+  same `critical`-severity incident also creates a response `core.Task`
+  and notifies the incident's owner via `core.Notification`, completing
+  the chain spec §69 describes without adding a second hook (ADR-0023).
+
+Remaining: the other three named scenarios (Enterprise Sales Security
+Review, New AI Tool Adoption, New Customer), plus the phase's more
+open-ended AI features — shared knowledge graph queries across modules,
+AI daily briefing, business process discovery, AI recommendation engine,
+organization memory. Most of the remaining named scenarios need modules
+or data that don't exist yet (customer questionnaires, an AI system
+inventory) — see `docs/RESUME_BUILD.md` for suggested ordering.
 
 ## Phase 9 — Integrations
 

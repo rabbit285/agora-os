@@ -351,6 +351,7 @@ security_incidents       -- escalated workspace (spec §19)
   severity TEXT NOT NULL
   status TEXT NOT NULL DEFAULT 'detected'  -- detected|triage|investigation|containment|eradication|recovery|postmortem|closed
   related_risk_id UUID FK risks NULL   -- cross-module link, see below
+  related_task_id UUID FK tasks NULL   -- Phase 8 cross-module link, see below
   owner_id UUID FK users NULL
   closed_at TIMESTAMPTZ NULL
   created_at, updated_at
@@ -359,7 +360,11 @@ security_incidents       -- escalated workspace (spec §19)
 A `critical`-severity `security_incidents` row automatically creates a
 `compliance.risks` row (`category='security'`) and sets
 `related_risk_id`, via `app/secops/service.py::create_incident` — Phase
-4's one cross-module hook (spec §19, ADR-0018).
+4's cross-module hook (spec §19, ADR-0018). The same call also creates a
+`tasks` row (`module='security'`, `priority='urgent'`) and sets
+`related_task_id`, and sends a `notifications` row to `owner_id` if one
+is set — Phase 8's extension of the same hook, completing spec §69's
+"Security Incident" chain (ADR-0023).
 
 ## Tables (Phase 5 — Sales)
 

@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
-import type { Risk, SecurityIncident, SecurityIncidentStatus } from "@/lib/types";
+import type { Risk, SecurityIncident, SecurityIncidentStatus, Task } from "@/lib/types";
 
 const WORKFLOW: SecurityIncidentStatus[] = [
   "detected",
@@ -38,6 +38,12 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     enabled: !!incident?.related_risk_id,
   });
 
+  const { data: tasks } = useQuery<Task[]>({
+    queryKey: ["tasks"],
+    queryFn: () => apiFetch<Task[]>("/api/v1/tasks"),
+    enabled: !!incident?.related_task_id,
+  });
+
   const advanceStatus = useMutation({
     mutationFn: (status: SecurityIncidentStatus) =>
       apiFetch(`/api/v1/security/incidents/${id}`, { method: "PATCH", body: { status } }),
@@ -47,6 +53,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   if (!incident) return null;
 
   const linkedRisk = risks?.find((r) => r.id === incident.related_risk_id);
+  const linkedTask = tasks?.find((t) => t.id === incident.related_task_id);
   const currentIndex = WORKFLOW.indexOf(incident.status);
   const nextStatus = WORKFLOW[currentIndex + 1];
 
@@ -74,7 +81,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {incident.related_risk_id && (
-        <Card>
+        <Card className="mb-6">
           <CardContent className="pt-6">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
               Linked Compliance Risk
@@ -89,6 +96,27 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                 className="text-sm text-neutral-700 hover:underline"
               >
                 {linkedRisk.title}
+              </Link>
+            ) : (
+              <span className="text-sm text-neutral-400">Loading…</span>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {incident.related_task_id && (
+        <Card>
+          <CardContent className="pt-6">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+              Response Task
+            </h2>
+            <p className="text-xs text-neutral-400 mb-2">
+              Critical incidents automatically create a response task, and notify the incident
+              owner directly if one is assigned (spec section 69 — Security Incident chain).
+            </p>
+            {linkedTask ? (
+              <Link href="/tasks" className="text-sm text-neutral-700 hover:underline">
+                {linkedTask.title}
               </Link>
             ) : (
               <span className="text-sm text-neutral-400">Loading…</span>

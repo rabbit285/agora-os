@@ -136,6 +136,7 @@ erDiagram
   SECURITY_FINDING ||--o{ SECURITY_ALERT : "raises"
   ORGANIZATION ||--o{ SECURITY_INCIDENT : has
   SECURITY_INCIDENT }o--o| RISK : "critical severity links to"
+  SECURITY_INCIDENT }o--o| TASK : "critical severity creates"
 ```
 
 - **SecurityAsset** — cloud accounts, servers, endpoints, repositories,
@@ -153,7 +154,10 @@ erDiagram
   Compliance **Risk** (ADR-0018) — the explicit security↔compliance
   connection spec §19 calls "critical," implemented the same way Phase
   3's failed-assessment→Task hook was (shared primitives, not a new
-  module-specific type).
+  module-specific type). The same call also creates a response **Task**
+  and notifies the incident's owner if one is set (Phase 8, ADR-0023) —
+  the rest of spec §69's "Security Incident" chain, extending this one
+  hook rather than adding a second.
 
 Not modeled yet: identity-provider integrations (Okta/Entra/Google
 Workspace — spec §16), cloud-provider connectors (spec §15), incident
@@ -276,30 +280,38 @@ webhooks and other non-manual triggers, retries/failure policies beyond
 non-manual triggers (new email, CRM stage change, webhook) depend on the
 connector SDK (Phase 9).
 
-## Phase 8 (Cross-Module Intelligence — first slice: Support Upsell Signal)
+## Phase 8 (Cross-Module Intelligence — two slices: Support Upsell Signal, Security Incident chain)
 
-Spec §69 names five cross-module scenarios; this build implements one as
-a real, tested vertical rather than stubbing all five (spec §80/§82's
+Spec §69 names five cross-module scenarios; this build implements two as
+real, tested verticals rather than stubbing all five (spec §80/§82's
 "one real vertical, not everything" discipline, applied again).
+
 "Support Upsell Signal": a support agent flags a ticket, which
 (`app/support/service.py::flag_upsell_signal`) creates a `sales.Lead`
 (`source = "support_upsell_signal"`, linked to the ticket's Customer's
 Sales Account if one exists) and a `core.Notification` to that account's
 owner — three primitives that already existed (Ticket, Lead,
-Notification), not a new `sales_signal` entity (ADR-0022). No new tables
-were needed; only `Ticket.upsell_lead_id` was added.
+Notification), not a new `sales_signal` entity (ADR-0022). Only
+`Ticket.upsell_lead_id` was added.
+
+"Security Incident" chain: the Incident→Risk link already existed from
+Phase 4 (ADR-0018); this slice extends the same
+`app/secops/service.py::create_incident` call so a `critical`-severity
+incident also creates a `core.Task` (the "creates incident response
+tasks" step) and, if the incident has an owner, a `core.Notification`
+(the "notifies responsible team" step) — completing the chain spec §69
+describes, still gated on the same severity check, still one function
+(ADR-0023). Only `SecurityIncident.related_task_id` was added.
 
 Not modeled yet, and deliberately deferred rather than attempted
 speculatively: "Enterprise Sales Security Review" (needs customer
 questionnaires, which don't exist), "New AI Tool Adoption" (needs an AI
-system inventory, which doesn't exist), the "Security Incident" chain's
-remaining steps beyond the existing Incident→Risk link (incident response
-Tasks, team notification), "New Customer" (CRM-deal-won automation —
-partially possible today via a manual Automation workflow, not a built-in
-trigger), an AI daily briefing, business process discovery, an AI
-recommendation engine, and organization memory — all large, open-ended
-features with no existing primitive to hang them off of, unlike the
-scenario chosen here.
+system inventory, which doesn't exist), "New Customer" (CRM-deal-won
+automation — partially possible today via a manual Automation workflow,
+not a built-in trigger), an AI daily briefing, business process
+discovery, an AI recommendation engine, and organization memory — all
+large, open-ended features with no existing primitive to hang them off
+of, unlike the two scenarios chosen here.
 
 ## Cross-module entity linking (spec §81)
 

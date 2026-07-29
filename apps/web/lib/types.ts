@@ -218,6 +218,7 @@ export type SecurityIncident = {
   severity: Severity;
   status: SecurityIncidentStatus;
   related_risk_id: string | null;
+  related_task_id: string | null;
   owner_id: string | null;
   closed_at: string | null;
   created_at: string;

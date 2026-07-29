@@ -112,6 +112,7 @@ class IncidentOut(BaseModel):
     severity: str
     status: str
     related_risk_id: uuid.UUID | None
+    related_task_id: uuid.UUID | None
     owner_id: uuid.UUID | None
     closed_at: datetime | None
     created_at: datetime

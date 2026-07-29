@@ -62,7 +62,7 @@ Center, Regulatory Intelligence.
 | Route | Status |
 |---|---|
 | `/security` | [x] assets + findings + alerts + incidents overview |
-| `/security/incidents/[id]` | [x] detail: status workflow, linked compliance risk |
+| `/security/incidents/[id]` | [x] detail: status workflow, linked compliance risk, linked response task |
 
 Not yet built (spec §67 lists these under Security): standalone Asset
 Detail page, Cloud Security / Identity Security dedicated views, Alert

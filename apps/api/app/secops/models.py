@@ -12,7 +12,10 @@ status, owner). `SecurityAlert` is the inbox/triage concept (spec §18);
 `SecurityIncident` is the escalated workspace (spec §19), which is where
 the explicit compliance link lives — spec §19: "Integrate incidents with
 the GDPR breach process... This connection between security and
-compliance is critical."
+compliance is critical." It also carries the Phase 8 cross-module hook
+(spec §69 "Security Incident" chain, ADR-0023): a critical incident
+creates a response `core.Task` and notifies its owner — see
+app.secops.service.create_incident.
 """
 
 from __future__ import annotations
@@ -108,6 +111,12 @@ class SecurityIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # tracked somewhere real, not just implied. See app.secops.service.
     related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
+    )
+    # Phase 8 cross-module hook (spec §69 "Security Incident" chain,
+    # ADR-0023): a critical incident also creates a core.Task for the
+    # response work, and (if owner_id is set) notifies the owner.
+    related_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
     )
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
