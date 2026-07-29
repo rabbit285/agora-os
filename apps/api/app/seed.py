@@ -17,8 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.gateway import ModelGateway
 from app.automation.models import Workflow
 from app.automation.service import start_run
-from app.compliance.models import Control, ControlMapping, Evidence, Framework, Requirement, Risk
-from app.compliance.service import record_assessment
+from app.compliance.models import (
+    AIAssessment,
+    AISystem,
+    Control,
+    ControlMapping,
+    Evidence,
+    Framework,
+    Requirement,
+    Risk,
+)
+from app.compliance.service import record_assessment, register_ai_system
 from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
 from app.core.rbac import ensure_system_roles, get_system_role
 from app.core.storage import ensure_bucket, upload_object
@@ -151,6 +160,14 @@ async def seed() -> None:
                 gdpr_requirements=gdpr_requirements,
                 evidence_file_id=evidence_file_id,
             )
+
+        existing_ai_systems = (
+            (await db.execute(select(AISystem).where(AISystem.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_ai_systems:
+            await _seed_demo_ai_systems_data(db, organization_id=organization.id, admin_id=admin.id)
 
         existing_assets = (
             (
@@ -443,6 +460,54 @@ async def _seed_demo_compliance_data(
 
     await db.commit()
     logger.info("Seeded demo compliance data (2 controls, 2 assessments, 1 risk)")
+
+
+async def _seed_demo_ai_systems_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one high-risk AI system whose registration auto-creates a real
+    pending core.Approval (spec section 69 "New AI Tool Adoption", ADR-0027)
+    - it stays "in_review" until that Approval is decided - and one
+    low-risk system that's already approved with a passing assessment, so
+    both the gated and ungated paths are visible immediately after
+    `python -m app.seed`."""
+    await register_ai_system(
+        db,
+        organization_id=organization_id,
+        name="Applicant Resume Screening Assistant",
+        vendor="Acme AI Vendor GmbH",
+        purpose="Screens inbound job applications and ranks candidates for recruiters.",
+        risk_classification="high",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    low_risk_system = await register_ai_system(
+        db,
+        organization_id=organization_id,
+        name="Internal Meeting Notes Summarizer",
+        vendor=None,
+        purpose="Summarizes internal meeting transcripts for employees who missed the call.",
+        risk_classification="minimal",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+    low_risk_system.status = "approved"
+    db.add(
+        AIAssessment(
+            organization_id=organization_id,
+            ai_system_id=low_risk_system.id,
+            status="pass",
+            notes="No personal or sensitive data processed; internal use only.",
+            assessed_by=admin_id,
+        )
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo AI system inventory (1 high-risk system awaiting approval, "
+        "1 low-risk system approved with a passing assessment)"
+    )
 
 
 async def _seed_demo_security_data(

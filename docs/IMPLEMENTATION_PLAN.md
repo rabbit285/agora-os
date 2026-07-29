@@ -55,11 +55,18 @@ the same pattern, add rows when a concrete need arises rather than ahead
 of it). A failed assessment auto-creates a remediation `Task` — the
 cross-module hook required by spec §80.
 
-Remaining: AI governance (AI system inventory, DPIA), privacy (RoPA, DSAR,
-retention, transfers), vendor risk, questionnaires, audits (auditor
-portal), Trust Center, regulatory intelligence feed. Each is a
-substantial feature attaching to the backbone above, not a blocker to it
-— see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
+Also done, added alongside Phase 8's cross-module work: the AI System
+Inventory (`AISystem`/`AIAssessment`, EU AI Act risk tiers). Registering a
+high/unacceptable-risk system auto-creates a real Approval and gates the
+`approved` status transition on it (ADR-0027) — this build's third use of
+the Approval primitive outside its own UI, and the first real primitive
+behind spec §69's "New AI Tool Adoption" cross-module scenario.
+
+Remaining: AI governance beyond the inventory (AI incidents, DPIA),
+privacy (RoPA, DSAR, retention, transfers), vendor risk, questionnaires,
+audits (auditor portal), Trust Center, regulatory intelligence feed. Each
+is a substantial feature attaching to the backbone above, not a blocker
+to it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
 ## Phase 4 — Security (backbone in progress)
 

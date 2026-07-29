@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices; Phase 9's Webhook connector and provider-neutral OAuth2 framework with HubSpot — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus the AI System Inventory (Phase 3 extension) that partially unblocks a fourth; Phase 9's Webhook connector and provider-neutral OAuth2 framework with HubSpot — verified end-to-end)
 
 ## Platform
 
@@ -57,9 +57,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] RBAC: `compliance_manager` / `dpo` system roles granted compliance permissions
 - [x] Frontend: `/compliance` overview + `/compliance/controls/[id]` detail
 - [x] Seed script: 2 controls, 2 assessments (one pass, one fail), 1 risk, 1 evidence link for the demo org
+- [x] AI System Inventory: `AISystem`/`AIAssessment` models + migration — EU AI Act risk tiers (minimal/limited/high/unacceptable)
+- [x] Cross-module hook: registering a `high`/`unacceptable`-risk AI system auto-creates a real `core.Approval`; the system cannot be marked `approved` until that Approval is granted (tested, ADR-0027)
+- [x] `/api/v1/compliance/ai-systems` router — create/list/detail (with assessments), status transitions (422 if approval pending), assessment recording; tenant-isolated
+- [x] RBAC: `ai_governance_manager` system role (dormant since Phase 1, first activated here) and `dpo` granted `compliance.ai_systems.manage`
+- [x] Frontend: AI System Inventory section on `/compliance` (register form, list) + `/compliance/ai-systems/[id]` detail (status dropdown, linked-Approval banner, assessment list/form)
+- [x] Seed script: 1 high-risk system (pending Approval), 1 minimal-risk system (approved, 1 passing assessment)
 - [ ] Framework/evidence versioning — not modeled
 - [ ] Audits (auditor portal), regulatory intelligence feed — not started
-- [ ] AI Governance (ai_systems/ai_assessments/ai_incidents) — not started
+- [ ] AI incidents (ai_incidents) — not started
 - [ ] Privacy workflows (RoPA, DPIA, DSAR, retention, transfers) — not started
 - [ ] Vendor risk, questionnaires, Trust Center — not started
 
@@ -133,9 +139,14 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
       and a 7-day onboarding `core.Task`, idempotent on reopen/re-win, and
       honestly skipped (not faked) if the account has no Contact yet
       (tested, ADR-0025)
-- [ ] Remaining spec §69 scenarios (Enterprise Sales Security Review, New
-      AI Tool Adoption) — not started, need modules/data that don't exist
-      yet (customer questionnaires, AI system inventory)
+- [x] "New AI Tool Adoption" (spec §69) partial: registering a
+      high/unacceptable-risk AI system creates a real `core.Approval` and
+      gates the `approved` status transition on it (tested, ADR-0027,
+      counted in Compliance above) — the rest of the chain (vendor
+      security questionnaire, Privacy/DPA review, approved-use policy
+      publication) is not implemented
+- [ ] Remaining spec §69 scenario ("Enterprise Sales Security Review") —
+      not started, needs customer questionnaires, which don't exist yet
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory — not started
 - [ ] Cross-module intent router for the AI Copilot — not started
@@ -168,14 +179,14 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Auth flow tests (8 tests, passing)
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
-- [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
+- [x] Compliance tests (18 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, plus 9 AI System Inventory tests — RBAC grant/denial, high/unacceptable-risk auto-approval creation, minimal-risk no-approval path, approval-gated status transition, assessments, tenant isolation)
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (14 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1, plus OAuth provider-catalog honesty, RBAC denial, full start→callback→connected round trip against the mock adapter, expired/unknown-state rejection, refresh/health/sync/disconnect lifecycle, tenant isolation)
-- [x] 92/92 total, ruff+mypy strict clean
+- [x] 101/101 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -199,14 +210,16 @@ explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
 Phases 3–7 (Compliance, Security, Sales, Support, Automation) have their
 core backbones (see their sections above) but not their larger
-sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
-Center, identity/cloud provider integrations, incident playbooks,
-sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
-most non-manual triggers). Phase 8 (Cross-Module Intelligence) has three
-real scenarios implemented (Support Upsell Signal, Security Incident
-chain, New Customer) out of spec §69's five named scenarios plus its
-open-ended AI features (daily briefing, recommendation engine,
-organization memory) — none of that larger scope has started. Phase 9
+sub-features (audits, full AI governance beyond the system inventory,
+privacy workflows, vendor risk, Trust Center, identity/cloud provider
+integrations, incident playbooks, sequences/campaigns, SLA/QA scoring,
+the full workflow step vocabulary and most non-manual triggers). Phase 8
+(Cross-Module Intelligence) has three full scenarios implemented (Support
+Upsell Signal, Security Incident chain, New Customer) plus a partial
+fourth (New AI Tool Adoption, gated on the new AI System Inventory) out of
+spec §69's five named scenarios, plus its open-ended AI features (daily
+briefing, recommendation engine, organization memory) — none of that
+larger scope has started. Phase 9
 (Integrations) has two connector shapes implemented — a generic inbound
 Webhook receiver and a provider-neutral OAuth2 framework with HubSpot as
 the first real provider — out of spec §48's dozen-plus categories; every

@@ -16,9 +16,12 @@ implied to work.
   Identity/Engineering/Communication/Documents/Accounting connectors
   exist (spec §48); all need real third-party OAuth apps or API keys this
   environment doesn't have.
-- **Compliance**: no audits (auditor portal), AI governance, privacy
-  workflows (RoPA/DPIA/DSAR), vendor risk, questionnaires, or Trust
-  Center.
+- **Compliance**: an AI System Inventory (`AISystem`/`AIAssessment`, EU AI
+  Act risk tiers) now exists — registering a high/unacceptable-risk system
+  auto-creates a real Approval and gates its `approved` status on that
+  Approval being granted (ADR-0027) — but no AI incidents (ai_incidents),
+  no audits (auditor portal), no privacy workflows (RoPA/DPIA/DSAR), no
+  vendor risk, questionnaires, or Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —
@@ -53,16 +56,18 @@ implied to work.
   linked Sales Account or no account owner), but does not auto-create an
   Opportunity — that conversion is left to a human sales rep (ADR-0022).
 - **Cross-Module Intelligence (Phase 8)**: three of spec §69's five
-  named cross-module scenarios are implemented ("Support Upsell Signal",
-  the "Security Incident" chain, and "New Customer"). The other two
-  (Enterprise Sales Security Review, New AI Tool Adoption) are not
-  started — they need modules/data that don't exist yet (customer
-  questionnaires, an
-  AI system inventory). No AI daily briefing, business process discovery,
-  AI recommendation engine, or organization memory exist either. The
-  Security Incident chain's Task/Notification are only created for
-  `critical`-severity incidents, same gate as the pre-existing Risk link —
-  there's no separate configurable threshold.
+  named cross-module scenarios are fully implemented ("Support Upsell
+  Signal", the "Security Incident" chain, and "New Customer"), plus a
+  partial fourth: "New AI Tool Adoption" now has its register→Approval
+  gate hook (ADR-0027, counted under Compliance above), but not the rest
+  of that scenario's chain — vendor security questionnaire, Privacy/DPA
+  review, approved-use policy publication. The remaining scenario
+  (Enterprise Sales Security Review) is not started — it needs customer
+  questionnaires, which don't exist yet. No AI daily briefing, business
+  process discovery, AI recommendation engine, or organization memory
+  exist either. The Security Incident chain's Task/Notification are only
+  created for `critical`-severity incidents, same gate as the
+  pre-existing Risk link — there's no separate configurable threshold.
 - **Automation**: only three step types actually execute
   (`create_task`, `send_notification`, `human_approval`) out of spec §37's
   much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,

@@ -291,12 +291,41 @@ policies
   status TEXT NOT NULL DEFAULT 'draft'  -- draft|published
   owner_id UUID FK users NULL
   created_at, updated_at
+
+ai_systems                 -- AI System Inventory (spec §12/§55, EU AI Act governance)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  vendor TEXT NULL
+  purpose TEXT NOT NULL
+  risk_classification TEXT NOT NULL DEFAULT 'minimal'  -- minimal|limited|high|unacceptable
+  status TEXT NOT NULL DEFAULT 'in_review'  -- in_review|approved|rejected|retired
+  owner_id UUID FK users NULL
+  approval_id UUID FK approvals NULL   -- cross-module hook, see below
+  created_at, updated_at
+
+ai_assessments
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  ai_system_id UUID FK ai_systems NOT NULL
+  status TEXT NOT NULL               -- pass|fail|partial|not_assessed
+  notes TEXT
+  assessed_by UUID FK users NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 A failed `control_assessments` row (`status = 'fail'`) automatically
 creates a `core.tasks` row (`module = 'compliance'`) via
-`app/compliance/service.py::record_assessment` — the one cross-module
-hook this slice ships (spec §80).
+`app/compliance/service.py::record_assessment` — Phase 3's cross-module
+hook (spec §80).
+
+An `ai_systems` row with `risk_classification` of `high` or
+`unacceptable` automatically creates a real `approvals` row and sets
+`approval_id`, via `app/compliance/service.py::register_ai_system` —
+Phase 8's third-and-a-half cross-module hook (spec §69 "New AI Tool
+Adoption", ADR-0027). `decide_ai_system_status` refuses to set
+`status = 'approved'` while that linked Approval hasn't itself been
+granted.
 
 ## Tables (Phase 4 — Security)
 

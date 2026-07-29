@@ -48,8 +48,9 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + frameworks overview |
+| `/compliance` | [x] controls + risks + AI system inventory + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
+| `/compliance/ai-systems/[id]` | [x] detail: status workflow, linked approval banner, assessments |
 
 Not yet built (spec §67 lists these under Compliance): Framework-specific
 dashboards (GDPR/EU AI Act individual views), Evidence Library standalone

@@ -160,6 +160,34 @@ export type Risk = {
   created_at: string;
 };
 
+export type AIRiskClassification = "minimal" | "limited" | "high" | "unacceptable";
+export type AISystemStatus = "in_review" | "approved" | "rejected" | "retired";
+
+export type AISystem = {
+  id: string;
+  name: string;
+  vendor: string | null;
+  purpose: string;
+  risk_classification: AIRiskClassification;
+  status: AISystemStatus;
+  owner_id: string | null;
+  approval_id: string | null;
+  created_at: string;
+};
+
+export type AIAssessment = {
+  id: string;
+  ai_system_id: string;
+  status: "pass" | "fail" | "partial" | "not_assessed";
+  notes: string | null;
+  assessed_by: string | null;
+  created_at: string;
+};
+
+export type AISystemDetail = AISystem & {
+  assessments: AIAssessment[];
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

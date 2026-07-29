@@ -51,9 +51,11 @@ items below are correctly unchecked.
 - [x] RBAC: `compliance_manager`/`dpo` roles granted compliance permissions, tested
 - [x] Seed script: demo org controls, assessments, risk, evidence link
 - [x] Backend tests: 35 passing total; ruff/mypy clean
-- [ ] Audits, AI governance, privacy workflows (RoPA/DPIA/DSAR), vendor
+- [ ] Audits, privacy workflows (RoPA/DPIA/DSAR), vendor
       risk, questionnaires, Trust Center, regulatory intelligence — not
       started, each a substantial feature in its own right
+      (AI governance's AI System Inventory was added later — see the
+      "Phase 3 extension" section below)
 
 ## Phase 4 (Security) — backbone complete, sub-features remain
 
@@ -104,7 +106,7 @@ items below are correctly unchecked.
 All five primary product modules (Compliance, Security, Sales, Support,
 Automation) now have a real, tested backbone.
 
-## Phase 8 (Cross-Module Intelligence) — three scenarios complete, two remain
+## Phase 8 (Cross-Module Intelligence) — three scenarios complete, one partial, one remains
 
 - [x] "Support Upsell Signal" (spec §69): flagging a ticket creates a real
       sales.Lead + notifies the linked account's owner (tested, ADR-0022)
@@ -115,9 +117,12 @@ Automation) now have a real, tested backbone.
       Support Customer + a 7-day onboarding Task, idempotent, honestly
       skipped when there's no Contact to source an email from (tested, ADR-0025)
 - [x] Backend tests: 85 passing total; ruff/mypy clean
-- [ ] Enterprise Sales Security Review, New AI Tool Adoption —
-      not started, need modules/data that don't exist yet
-      (questionnaires, AI system inventory)
+- [x] "New AI Tool Adoption" (spec §69) partial: registering a high/
+      unacceptable-risk AI system creates a real core.Approval and gates
+      the `approved` status transition on it (tested, ADR-0027) — vendor
+      questionnaire/Privacy review/policy-publication steps not built
+- [ ] Enterprise Sales Security Review — not started, needs customer
+      questionnaires, which don't exist yet
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory, cross-module intent router — not started
 
@@ -136,6 +141,17 @@ Automation) now have a real, tested backbone.
       Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
 - [ ] `subscribe()`, `execute_action()`, `collect_evidence()` from spec §49's full Connector Contract,
       sync safety (spec §G2) — not applicable yet, no polling/scheduled sync exists
+
+## Phase 3 extension (AI System Inventory) — added alongside Phase 8/9
+
+- [x] AISystem, AIAssessment models + migration — EU AI Act risk tiers (minimal/limited/high/unacceptable)
+- [x] Cross-module hook: registering a high/unacceptable-risk system creates a real core.Approval; `approved` status is gated on it (tested, ADR-0027)
+- [x] Tenant-isolated `/api/v1/compliance/ai-systems` API + frontend (inventory section on `/compliance`, `/compliance/ai-systems/[id]` detail)
+- [x] RBAC: `ai_governance_manager` role (dormant since Phase 1) activated; `dpo` also granted
+- [x] Seed script: 1 high-risk system (pending approval), 1 minimal-risk system (approved, 1 assessment)
+- [x] Backend tests: 101 passing total; ruff/mypy clean
+- [ ] AI incidents, DPIA, and the rest of the "New AI Tool Adoption" chain
+      (vendor questionnaire, Privacy/DPA review, approved-use policy) — not started
 
 See `docs/RESUME_BUILD.md` for the next phase.
 

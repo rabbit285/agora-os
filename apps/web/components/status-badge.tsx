@@ -79,6 +79,11 @@ const STATUS_VARIANTS: Record<
   disconnected: "outline",
   error: "destructive",
   ok: "success",
+  in_review: "warning",
+  retired: "outline",
+  minimal: "outline",
+  limited: "secondary",
+  unacceptable: "destructive",
 };
 
 export function StatusBadge({ status }: { status: string }) {

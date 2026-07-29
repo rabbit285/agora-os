@@ -13,6 +13,15 @@ updates (external intelligence feed), RoPA/DPIA/DSAR (privacy-specific
 workflows), vendor risk, questionnaires, Trust Center. Each is a
 substantial feature in its own right; this slice ships the backbone they
 would all attach to.
+
+`AISystem` / `AIAssessment` add the spec §12 "AI System Inventory" / "AI
+Risk Assessment" screens (EU AI Act governance). `AISystem.approval_id`
+is the cross-module hook (spec §69 "New AI Tool Adoption": "... -> AI
+risk assessment -> Approval -> Add to AI inventory -> ..."): registering
+a `high` or `unacceptable`-risk system creates a real `core.Approval`,
+and it cannot be moved to `approved` status until that Approval is
+granted — see app.compliance.service.register_ai_system /
+decide_ai_system_status and docs/DECISIONS.md ADR-0027.
 """
 
 from __future__ import annotations
@@ -165,3 +174,52 @@ class Policy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+class AISystem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One entry in the AI System Inventory (spec §12/§55, EU AI Act
+    governance). `risk_classification` follows the EU AI Act's own risk
+    tiers rather than inventing a parallel scale."""
+
+    __tablename__ = "ai_systems"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    vendor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    purpose: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # minimal | limited | high | unacceptable (EU AI Act risk tiers)
+    risk_classification: Mapped[str] = mapped_column(String(20), default="minimal")
+    # in_review | approved | rejected | retired
+    status: Mapped[str] = mapped_column(String(20), default="in_review")
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # Cross-module hook (spec §69 "New AI Tool Adoption") — set when
+    # risk_classification is high/unacceptable. See
+    # app.compliance.service.register_ai_system / decide_ai_system_status.
+    approval_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("approvals.id"), nullable=True
+    )
+
+
+class AIAssessment(UUIDPrimaryKeyMixin, Base):
+    """Point-in-time risk/impact assessment of an AISystem — mirrors
+    ControlAssessment's shape deliberately (same judgement vocabulary)."""
+
+    __tablename__ = "ai_assessments"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    ai_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=False, index=True
+    )
+    # pass | fail | partial | not_assessed
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    assessed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

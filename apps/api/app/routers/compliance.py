@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.compliance.models import (
+    AIAssessment,
+    AISystem,
     Control,
     ControlAssessment,
     ControlMapping,
@@ -18,6 +20,12 @@ from app.compliance.models import (
     Risk,
 )
 from app.compliance.schemas import (
+    AIAssessmentCreate,
+    AIAssessmentOut,
+    AISystemCreate,
+    AISystemDetailOut,
+    AISystemOut,
+    AISystemStatusUpdate,
     ControlAssessmentCreate,
     ControlAssessmentOut,
     ControlCreate,
@@ -33,7 +41,7 @@ from app.compliance.schemas import (
     RiskOut,
     RiskUpdate,
 )
-from app.compliance.service import record_assessment
+from app.compliance.service import decide_ai_system_status, record_assessment, register_ai_system
 from app.core.models import File
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -328,3 +336,109 @@ async def create_policy(
     await db.commit()
     await db.refresh(policy)
     return policy
+
+
+@router.get("/ai-systems", response_model=list[AISystemOut])
+async def list_ai_systems(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[AISystem]:
+    result = await db.execute(
+        select(AISystem)
+        .where(AISystem.organization_id == context.organization_id)
+        .order_by(AISystem.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/ai-systems", response_model=AISystemOut, status_code=status.HTTP_201_CREATED)
+async def create_ai_system(
+    payload: AISystemCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AISystem:
+    system = await register_ai_system(
+        db,
+        organization_id=context.organization_id,
+        name=payload.name,
+        vendor=payload.vendor,
+        purpose=payload.purpose,
+        risk_classification=payload.risk_classification,
+        owner_id=payload.owner_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(system)
+    return system
+
+
+async def _get_org_ai_system(
+    db: AsyncSession, ai_system_id: uuid.UUID, organization_id: uuid.UUID
+) -> AISystem:
+    system = await db.get(AISystem, ai_system_id)
+    if system is None or system.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
+    return system
+
+
+@router.get("/ai-systems/{ai_system_id}", response_model=AISystemDetailOut)
+async def get_ai_system(
+    ai_system_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> AISystemDetailOut:
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    assessments_result = await db.execute(
+        select(AIAssessment)
+        .where(AIAssessment.ai_system_id == system.id)
+        .order_by(AIAssessment.created_at.desc())
+    )
+    return AISystemDetailOut(
+        **AISystemOut.model_validate(system).model_dump(),
+        assessments=[AIAssessmentOut.model_validate(a) for a in assessments_result.scalars().all()],
+    )
+
+
+@router.patch("/ai-systems/{ai_system_id}/status", response_model=AISystemOut)
+async def update_ai_system_status(
+    ai_system_id: uuid.UUID,
+    payload: AISystemStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AISystem:
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    try:
+        system = await decide_ai_system_status(
+            db, system=system, new_status=payload.status, actor_user_id=context.user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(system)
+    return system
+
+
+@router.post(
+    "/ai-systems/{ai_system_id}/assessments",
+    response_model=AIAssessmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_ai_assessment(
+    ai_system_id: uuid.UUID,
+    payload: AIAssessmentCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AIAssessment:
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    assessment = AIAssessment(
+        organization_id=context.organization_id,
+        ai_system_id=system.id,
+        status=payload.status,
+        notes=payload.notes,
+        assessed_by=context.user.id,
+    )
+    db.add(assessment)
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment

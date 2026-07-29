@@ -124,3 +124,51 @@ class PolicyOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AISystemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    vendor: str | None = None
+    purpose: str = Field(min_length=1, max_length=2000)
+    risk_classification: str = Field(
+        default="minimal", pattern="^(minimal|limited|high|unacceptable)$"
+    )
+    owner_id: uuid.UUID | None = None
+
+
+class AISystemStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(in_review|approved|rejected|retired)$")
+
+
+class AISystemOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    vendor: str | None
+    purpose: str
+    risk_classification: str
+    status: str
+    owner_id: uuid.UUID | None
+    approval_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AIAssessmentCreate(BaseModel):
+    status: str = Field(pattern="^(pass|fail|partial|not_assessed)$")
+    notes: str | None = None
+
+
+class AIAssessmentOut(BaseModel):
+    id: uuid.UUID
+    ai_system_id: uuid.UUID
+    status: str
+    notes: str | None
+    assessed_by: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AISystemDetailOut(AISystemOut):
+    assessments: list[AIAssessmentOut]

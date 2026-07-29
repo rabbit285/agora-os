@@ -527,3 +527,40 @@ credentials), `test_oauth_callback_connects_and_checks_health` (the full
 start → callback → connected → health-check round trip against the mock
 adapter), and `test_refresh_health_sync_and_disconnect_lifecycle` (token
 refresh, a real `SyncRun` row, and disconnect clearing stored tokens).
+
+## ADR-0027 — AI System Inventory: high/unacceptable-risk registration requires an Approval, reusing the Phase 1 primitive again
+
+**Decision**: `app/compliance/service.py::register_ai_system` creates an
+`AISystem` row (spec §12's "AI System Inventory" / "AI Risk Assessment"
+screens) and, when `risk_classification` is `high` or `unacceptable`
+(the EU AI Act's own risk tiers, not a parallel scale), also creates a
+real `core.Approval` (`risk_class="high"` or `"critical"` respectively)
+and links it via `AISystem.approval_id`. `decide_ai_system_status`
+refuses to move a system to `approved` while a linked Approval exists and
+hasn't itself been granted (422 otherwise). Minimal/limited-risk systems
+have no linked Approval and can move straight to `approved`. This is the
+first use of the previously-seeded-but-empty `ai_governance_manager`
+system role (`AI_GOVERNANCE_PERMISSIONS` — see `app/core/rbac.py`),
+which existed since Phase 1 with zero granted permissions.
+
+**Why**: Spec §69's "New AI Tool Adoption" scenario is "Request → Vendor
+created → Security assessment → Privacy assessment → EU AI Act
+applicability → DPA review → AI risk assessment → Approval → Add to AI
+inventory → Add approved-use policy" — nine steps, but the one this
+build can implement honestly right now (no vendor-management or DPA
+workflow exists yet) is the "AI risk assessment → Approval → Add to AI
+inventory" core: classify the system's risk, gate its approval on a real
+sign-off, record it in the inventory. This continues every prior ADR's
+discipline of reusing `core.Approval` rather than inventing a
+compliance-specific gate — the same primitive Automation's
+`human_approval` step (ADR-0021) already exercises, now exercised by a
+second, independent domain module, which is exactly what spec §80's
+"shared primitives, not disconnected modules" principle asks for. It
+also directly unblocks a future "New AI Tool Adoption" Phase 8 slice,
+which previously had nothing to link to. Tested in
+`tests/test_compliance.py::test_registering_high_risk_ai_system_creates_pending_approval`
+(asserts the Approval via `/api/v1/approvals`, not by reading the AI
+system alone), `test_cannot_approve_high_risk_system_before_approval_granted`
+(422), and `test_can_approve_high_risk_system_after_approval_granted`
+(decides the Approval through the real, unmodified
+`/api/v1/approvals/{id}/decide` endpoint).

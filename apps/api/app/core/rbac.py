@@ -43,6 +43,7 @@ PERMISSIONS: dict[str, str] = {
     "compliance.evidence.manage": "Attach and manage evidence",
     "compliance.risks.manage": "Create and update risks",
     "compliance.policies.manage": "Create and publish policies",
+    "compliance.ai_systems.manage": "Register AI systems and record AI risk assessments",
     "security.assets.manage": "Create and update the security asset inventory",
     "security.findings.manage": "Create and update security findings",
     "security.alerts.manage": "Triage and update security alerts",
@@ -63,6 +64,10 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.evidence.manage",
     "compliance.risks.manage",
     "compliance.policies.manage",
+]
+
+AI_GOVERNANCE_PERMISSIONS = [
+    "compliance.ai_systems.manage",
 ]
 
 SECURITY_PERMISSIONS = [
@@ -100,7 +105,8 @@ INTEGRATIONS_PERMISSIONS = [
 ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "org_admin": list(PERMISSIONS.keys()),
     "compliance_manager": COMPLIANCE_PERMISSIONS,
-    "dpo": COMPLIANCE_PERMISSIONS,
+    "dpo": COMPLIANCE_PERMISSIONS + AI_GOVERNANCE_PERMISSIONS,
+    "ai_governance_manager": AI_GOVERNANCE_PERMISSIONS,
     "security_manager": SECURITY_PERMISSIONS,
     "sales_manager": SALES_PERMISSIONS,
     "sales_representative": SALES_PERMISSIONS,

@@ -197,3 +197,187 @@ async def test_risk_lifecycle(client: AsyncClient) -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "mitigated"
+
+
+async def test_employee_role_cannot_register_ai_system(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "ai-emp1@example.com", "AI System Employee Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-ai@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Should fail", "purpose": "irrelevant"},
+    )
+    assert response.status_code == 403
+
+
+async def test_ai_governance_manager_role_can_register_ai_system(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "ai-gov1@example.com", "AI Governance Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="ai-governance-manager@example.com",
+        role_key="ai_governance_manager",
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Manager-registered system", "purpose": "Testing RBAC"},
+    )
+    assert response.status_code == 201
+
+
+async def test_registering_high_risk_ai_system_creates_pending_approval(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai1@example.com", "AI System Org")
+    response = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Resume Screening AI",
+            "vendor": "Some Vendor Inc",
+            "purpose": "Ranks job applicants",
+            "risk_classification": "high",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "in_review"
+    approval_id = body["approval_id"]
+    assert approval_id is not None
+
+    approvals = await client.get("/api/v1/approvals")
+    matching = next(a for a in approvals.json() if a["id"] == approval_id)
+    assert matching["status"] == "pending"
+    assert matching["risk_class"] == "high"
+
+
+async def test_unacceptable_risk_ai_system_requests_critical_approval(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai2@example.com", "AI System Org 2")
+    response = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Social Scoring Tool",
+            "purpose": "Scores citizens",
+            "risk_classification": "unacceptable",
+        },
+    )
+    assert response.status_code == 201
+    approval_id = response.json()["approval_id"]
+
+    approvals = await client.get("/api/v1/approvals")
+    matching = next(a for a in approvals.json() if a["id"] == approval_id)
+    assert matching["risk_class"] == "critical"
+
+
+async def test_minimal_risk_ai_system_has_no_approval_and_can_be_approved_directly(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai3@example.com", "AI System Org 3")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Notes Summarizer", "purpose": "Summarizes meeting notes"},
+    )
+    assert created.json()["risk_classification"] == "minimal"
+    assert created.json()["approval_id"] is None
+    system_id = created.json()["id"]
+
+    approved = await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
+async def test_cannot_approve_high_risk_system_before_approval_granted(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai4@example.com", "AI System Org 4")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Fraud Detection AI",
+            "purpose": "Flags suspicious transactions",
+            "risk_classification": "high",
+        },
+    )
+    system_id = created.json()["id"]
+
+    blocked = await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "approved"}
+    )
+    assert blocked.status_code == 422
+
+
+async def test_can_approve_high_risk_system_after_approval_granted(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai5@example.com", "AI System Org 5")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Hiring Ranking AI",
+            "purpose": "Ranks candidates",
+            "risk_classification": "high",
+        },
+    )
+    system_id = created.json()["id"]
+    approval_id = created.json()["approval_id"]
+
+    decision = await client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": True})
+    assert decision.status_code == 200
+
+    approved = await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
+async def test_ai_system_detail_includes_assessments(client: AsyncClient) -> None:
+    await _signup(client, "ai6@example.com", "AI System Org 6")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Support Chatbot", "purpose": "Answers customer questions"},
+    )
+    system_id = created.json()["id"]
+
+    await client.post(
+        f"/api/v1/compliance/ai-systems/{system_id}/assessments",
+        json={"status": "pass", "notes": "No PII processed."},
+    )
+
+    detail = await client.get(f"/api/v1/compliance/ai-systems/{system_id}")
+    assert detail.status_code == 200
+    assessments = detail.json()["assessments"]
+    assert len(assessments) == 1
+    assert assessments[0]["status"] == "pass"
+
+
+async def test_ai_system_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-ai1@example.com", "Cross AI Org 1")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Org 1 AI system", "purpose": "internal"},
+    )
+    system_id = created.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-ai2@example.com", "Cross AI Org 2")
+
+    response = await other_client.get(
+        f"/api/v1/compliance/ai-systems/{system_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

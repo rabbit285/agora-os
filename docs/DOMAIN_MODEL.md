@@ -63,7 +63,7 @@ erDiagram
 |---|---|---|
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
 | Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
-| AI Governance | ai_systems, ai_assessments, ai_incidents | 3 |
+| AI Governance | ~~ai_systems, ai_assessments~~ (implemented — see below), ai_incidents (not yet) | 3 |
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
@@ -104,6 +104,9 @@ erDiagram
   ORGANIZATION ||--o{ RISK : has
   ORGANIZATION ||--o{ POLICY : has
   FILE ||--o{ EVIDENCE : "referenced by"
+  ORGANIZATION ||--o{ AI_SYSTEM : has
+  AI_SYSTEM ||--o{ AI_ASSESSMENT : "assessed by"
+  AI_SYSTEM }o--o| APPROVAL : "high/unacceptable risk requires"
 ```
 
 - **Framework / Requirement** — global catalog data (GDPR, EU AI Act, ISO
@@ -120,12 +123,26 @@ erDiagram
   parallel storage path; optionally attached to a Control.
 - **Risk / Policy** — organization-scoped; a Risk may reference the
   Control that mitigates it.
+- **AISystem / AIAssessment** — the AI System Inventory (spec §12/§55, EU
+  AI Act governance), added alongside Phase 8's cross-module work rather
+  than as a standalone Phase 3 follow-up. `risk_classification` uses the
+  EU AI Act's own four tiers (minimal/limited/high/unacceptable) rather
+  than a parallel scale. Registering a `high` or `unacceptable` system
+  automatically creates a real Phase 1 **Approval** and links it via
+  `AISystem.approval_id` (`app/compliance/service.py::register_ai_system`,
+  ADR-0027) — the same "shared primitives" hook pattern as the
+  `ControlAssessment`→Task hook below, and this build's third use of
+  Approval outside its own generic UI (after Automation's
+  `human_approval` step and this same feature's gate). AIAssessment is a
+  lightweight point-in-time record (pass/fail/partial/not_assessed),
+  deliberately not reusing ControlAssessment — an AI system isn't a
+  Control, and forcing the reuse would mean adding AI-specific columns to
+  a Compliance-control-shaped table.
 
 Not modeled yet: framework/evidence versioning, audits (auditor portal),
-AI governance (ai_systems/ai_assessments), privacy workflows (RoPA, DPIA,
-DSAR), vendor risk, questionnaires, Trust Center — each a substantial
-feature attaching to this backbone, not blocking it. See
-`docs/KNOWN_LIMITATIONS.md`.
+ai_incidents, privacy workflows (RoPA, DPIA, DSAR), vendor risk,
+questionnaires, Trust Center — each a substantial feature attaching to
+this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 4 entities (implemented — Security backbone)
 
@@ -322,13 +339,17 @@ customer with no real email.
 
 Not modeled yet, and deliberately deferred rather than attempted
 speculatively: "Enterprise Sales Security Review" (needs customer
-questionnaires, which don't exist), "New AI Tool Adoption" (needs an AI
-system inventory, which doesn't exist), an AI daily briefing, business
+questionnaires, which don't exist), an AI daily briefing, business
 process discovery, an AI recommendation engine, and organization memory —
 all large, open-ended features with no existing primitive to hang them
-off of, unlike the three scenarios chosen here. "New Customer" also
+off of, unlike the scenarios chosen here. "New Customer" also
 doesn't yet send a real welcome email or update a billing/accounting
 system — no email provider or accounting connector exists (spec §48).
+"New AI Tool Adoption" now has its first real primitive — the AI System
+Inventory's register→gate→approve hook (see the Phase 3 section above,
+ADR-0027) — but the rest of spec §69's chain (vendor security
+questionnaire, Privacy/DPA review, approved-use policy publication) is
+still not implemented; see `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 9 entities (implemented — Integrations backbone: Webhook + HubSpot OAuth2)
 
