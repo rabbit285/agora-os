@@ -77,21 +77,36 @@ implied to work.
   while `status = draft`; there's no parallel draft/published dual-version
   editing of an already-active workflow (spec §41's fuller versioning
   model).
-- **Integrations**: `IntegrationConnection.connector_key` supports exactly
-  one value, `"webhook"` — every other spec §48 category (CRM, Email,
-  Marketing, Customer Support, Cloud, Identity, Engineering,
-  Communication, Documents, Accounting) needs a real third-party OAuth app
-  or API key this environment doesn't have, and none are stubbed as
-  "connected" (spec §82). No secrets vault exists yet — a connection's
-  `webhook_secret` is returned in plain text by the API to whoever can
-  read the connection (session-authenticated, tenant-isolated, but not
-  masked/rotatable). The full Connector SDK contract (spec §49:
-  `connect()`, `disconnect()`, `refresh_credentials()`, `subscribe()`,
-  `execute_action()`, `collect_evidence()`) isn't implemented — this slice
-  only needed a receiver and a signature check. No sync safety features
-  (spec §G2: incremental cursors, checkpointing, replay safety,
-  rate-limit handling) since there's no polling/sync connector yet, only
-  a push receiver. No API keys for outbound platform access.
+- **Integrations**: `IntegrationConnection.connector_key` supports
+  `"webhook"` and `"hubspot"` — every other spec §48 category (CRM
+  beyond HubSpot, Email, Marketing, Customer Support, Cloud, Identity,
+  Engineering, Communication, Documents, Accounting) needs a real
+  third-party OAuth app or API key this environment doesn't have, and
+  none are stubbed as "connected" (spec §82) — the provider catalog
+  endpoint reports `configured: bool` honestly, and HubSpot itself shows
+  "Not configured" without real `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET`.
+  A mock OAuth adapter (mirroring the AI gateway's `DemoAdapter`) lets the
+  full authorize→callback→connected→sync→disconnect flow be exercised for
+  testing/demo purposes even without real credentials — this is what the
+  automated test suite runs against, and the demo seed data deliberately
+  does *not* create a "connected" HubSpot row, to avoid any appearance of
+  a fabricated live connection. Stored OAuth tokens are encrypted at rest
+  (Fernet, `app/core/crypto.py`), but the encryption key falls back to one
+  derived from `SECRET_KEY` when `TOKEN_ENCRYPTION_KEY` is unset — fine
+  for dev/test, but a real deployment must set its own key (rotating
+  `SECRET_KEY` would otherwise silently break every stored token). A
+  webhook connection's `webhook_secret` is still returned in plain text by
+  the API to whoever can read the connection (session-authenticated,
+  tenant-isolated, but not masked/rotatable) — no secrets vault exists
+  yet. `subscribe()`, `execute_action()`, and `collect_evidence()` from
+  spec §49's full Connector Contract aren't implemented — this slice only
+  needed authorize/token-exchange/refresh/health/sync/revoke. "Sync now"
+  (`run_sync`) executes synchronously inline, not as a durable Temporal
+  job, and fetches a small page of HubSpot contacts purely to prove
+  connectivity — it doesn't import them into Sales yet. No sync safety
+  features (spec §G2: incremental cursors, checkpointing, replay safety,
+  rate-limit handling) since there's no polling/scheduled sync, only
+  on-demand. No API keys for outbound platform access.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,

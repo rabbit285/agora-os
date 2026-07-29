@@ -406,9 +406,14 @@ export type IntegrationConnection = {
   id: string;
   connector_key: string;
   name: string;
-  status: "active" | "disabled";
-  webhook_secret: string;
+  // webhook: active|disabled — oauth2: not_connected|connected|error|disconnected
+  status: string;
+  webhook_secret: string | null;
   linked_workflow_id: string | null;
+  scopes: string[] | null;
+  external_account_id: string | null;
+  health_status: "ok" | "error" | null;
+  last_health_check_at: string | null;
   last_synced_at: string | null;
   last_error: string | null;
   created_at: string;
@@ -421,4 +426,26 @@ export type WebhookEvent = {
   payload: Record<string, unknown> | null;
   triggered_run_id: string | null;
   received_at: string;
+};
+
+export type ProviderCatalogEntry = {
+  connector_key: string;
+  name: string;
+  auth_type: "hmac" | "oauth2";
+  configured: boolean;
+};
+
+export type OAuthStartResponse = {
+  connection_id: string;
+  authorization_url: string;
+};
+
+export type SyncRun = {
+  id: string;
+  connection_id: string;
+  status: "running" | "succeeded" | "failed";
+  items_synced: number | null;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
 };

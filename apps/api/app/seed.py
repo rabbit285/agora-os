@@ -857,10 +857,11 @@ async def _seed_demo_integrations_data(
     db.add(webhook_workflow)
     await db.flush()
 
+    webhook_secret = generate_webhook_secret()
     connection = IntegrationConnection(
         organization_id=organization_id,
         name="Inbound Lead Webhook",
-        webhook_secret=generate_webhook_secret(),
+        webhook_secret=webhook_secret,
         linked_workflow_id=webhook_workflow.id,
         created_by=admin_id,
     )
@@ -872,7 +873,7 @@ async def _seed_demo_integrations_data(
         db,
         connection=connection,
         raw_body=verified_body,
-        signature=sign_payload(connection.webhook_secret, verified_body),
+        signature=sign_payload(webhook_secret, verified_body),
     )
 
     unverified_body = b'{"lead_name": "Suspicious Sender"}'

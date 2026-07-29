@@ -564,11 +564,21 @@ edited via `PATCH /workflows/{id}/steps` while `status = 'draft'`.
 integration_connections
   id UUID PK
   organization_id UUID FK organizations NOT NULL
-  connector_key TEXT NOT NULL DEFAULT 'webhook'   -- "webhook" only in this build
+  connector_key TEXT NOT NULL DEFAULT 'webhook'   -- "webhook" | "hubspot"
   name TEXT NOT NULL
-  status TEXT NOT NULL DEFAULT 'active'   -- active|disabled
-  webhook_secret TEXT NOT NULL   -- HMAC-SHA256 key, generated per connection
-  linked_workflow_id UUID FK automation_workflows NULL   -- cross-module hook, see below
+  status TEXT NOT NULL DEFAULT 'active'
+    -- webhook: active|disabled — oauth2: not_connected|connected|error|disconnected
+  webhook_secret TEXT NULL   -- HMAC-SHA256 key, webhook connections only
+  linked_workflow_id UUID FK automation_workflows NULL   -- webhook cross-module hook, see below
+  encrypted_access_token TEXT NULL    -- Fernet-encrypted, oauth2 connections only
+  encrypted_refresh_token TEXT NULL   -- Fernet-encrypted, oauth2 connections only
+  token_expires_at TIMESTAMPTZ NULL
+  scopes JSON NULL                    -- list[str]
+  external_account_id TEXT NULL       -- e.g. HubSpot portal ("hub") id
+  oauth_state TEXT NULL               -- single-use CSRF token, cleared after callback
+  oauth_state_created_at TIMESTAMPTZ NULL
+  health_status TEXT NULL             -- ok|error, set by the health-check endpoint
+  last_health_check_at TIMESTAMPTZ NULL
   last_synced_at TIMESTAMPTZ NULL
   last_error TEXT NULL
   created_by UUID FK users NULL
@@ -582,6 +592,16 @@ integration_webhook_events
   payload JSON NULL
   triggered_run_id UUID FK automation_workflow_runs NULL
   received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+integration_sync_runs
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  connection_id UUID FK integration_connections NOT NULL
+  status TEXT NOT NULL DEFAULT 'running'   -- running|succeeded|failed
+  items_synced INTEGER NULL
+  error TEXT NULL
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  completed_at TIMESTAMPTZ NULL
 ```
 
 Every inbound call to `POST /api/v1/integrations/webhooks/{connection_id}/receive`
@@ -592,6 +612,16 @@ workflow with `trigger_type='webhook'` triggers that workflow via
 `app.automation.service.start_run`, giving Automation its first
 non-manual trigger without a second execution engine —
 `app/integrations/service.py::receive_webhook_event`, ADR-0024.
+
+The OAuth2 connector shape (`connector_key='hubspot'` today) stores
+encrypted access/refresh tokens rather than plaintext (`app/core/crypto.py`,
+Fernet). `oauth_state` is the authorize→callback round trip's own
+single-use CSRF token — the callback route has no session, so this
+column (checked for a 10-minute TTL) is what proves a callback belongs to
+a pending connection, not a cookie. `integration_sync_runs` records each
+"sync now" execution (spec §49's `sync()`), run synchronously inline
+rather than as a durable Temporal job — see ADR-0026 and
+`docs/KNOWN_LIMITATIONS.md`.
 
 ## Migration policy
 

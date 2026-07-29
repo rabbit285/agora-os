@@ -473,3 +473,57 @@ module-specific types (spec §80). Tested in
 re-win creates no second customer), and
 `test_closed_won_without_any_contact_skips_onboarding` (the honest
 partial-failure path).
+
+## ADR-0026 — Provider-neutral OAuth2 connector framework; HubSpot real, Mock everywhere it isn't configured
+
+**Decision**: `IntegrationConnection` gains a second connector shape
+alongside the existing HMAC-secured Webhook connector (ADR-0024): a real
+OAuth2 authorization-code flow, generalized through an
+`OAuthConnectorAdapter` Protocol
+(`app/integrations/adapters/base.py`) — `authorization_url()`,
+`exchange_code_for_tokens()`, `refresh_access_token()`,
+`test_connection()`, `sync()`, `revoke()` — mirroring
+`app.ai.gateway`'s `ModelAdapter`/`DemoAdapter` pattern exactly.
+`app/integrations/adapters/hubspot.py::HubSpotAdapter` is a real
+implementation (genuine HTTP calls to HubSpot's documented OAuth/CRM
+endpoints), selected only when `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET`
+are configured
+(`app/integrations/adapters/__init__.py::get_oauth_adapter`); otherwise
+`MockOAuthAdapter` is used — the same role `DemoAdapter` plays for the AI
+gateway, and what the test suite exercises (this environment has no real
+HubSpot developer app). The provider catalog endpoint
+(`GET /api/v1/integrations/providers`) reports `configured: bool`
+per provider so the frontend can honestly show "Not configured" rather
+than ever faking a connected state (spec §82, §C2).
+
+Stored tokens are encrypted at rest (`app/core/crypto.py`, Fernet) —
+`TOKEN_ENCRYPTION_KEY` if set, otherwise a key derived from `SECRET_KEY`
+so the app still boots without a second required secret in dev/test
+(documented as a dev-only fallback, not a production security boundary,
+in `docs/KNOWN_LIMITATIONS.md`). The OAuth callback route has no session
+dependency — like the Webhook receiver (ADR-0024), the caller is an
+external redirect, not necessarily the browser tab that started the
+flow — so a single-use `oauth_state` token (checked for both existence
+and a 10-minute TTL) is the callback's own "capability token," the same
+role the HMAC signature plays for the webhook connector. `run_sync`
+executes synchronously inline rather than as a durable Temporal job,
+recording a `SyncRun` row after the fact — a real but deliberately
+simplified version of spec §49's `sync()` capability.
+
+**Why**: Spec §48 lists a dozen-plus connector categories; building them
+all, or faking any of them as "connected" without real credentials, would
+violate both "No Fake Features" (§82) and the secrets contract (§C2: app
+must boot without paid API keys, never ask for secrets in chat). HubSpot
+is the first real provider because it's explicit in spec §48's CRM
+category and needs only a free developer app to register — but the
+adapter abstraction is what matters, not HubSpot specifically: adding a
+second real provider means one new adapter class, not a new connection
+model or a new set of routes. This continues the exact discipline
+`app.ai.gateway` already established for LLM providers, applied to OAuth
+connectors instead of model calls. Tested in
+`tests/test_integrations.py::test_provider_catalog_reports_hubspot_not_configured`
+(the catalog never claims HubSpot is configured without real
+credentials), `test_oauth_callback_connects_and_checks_health` (the full
+start → callback → connected → health-check round trip against the mock
+adapter), and `test_refresh_health_sync_and_disconnect_lifecycle` (token
+refresh, a real `SyncRun` row, and disconnect clearing stored tokens).

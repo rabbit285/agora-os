@@ -74,6 +74,11 @@ const STATUS_VARIANTS: Record<
   succeeded: "success",
   awaiting_approval: "warning",
   disabled: "outline",
+  connected: "success",
+  not_connected: "outline",
+  disconnected: "outline",
+  error: "destructive",
+  ok: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {

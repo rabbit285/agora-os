@@ -1,16 +1,27 @@
 """Integrations domain services.
 
-`receive_webhook_event` is the cross-module hook this slice ships (spec
-§38's "Webhook" trigger type): a verified event on a connection linked to
-an active, webhook-triggered Automation workflow starts that workflow via
-the existing `app.automation.service.start_run` — Automation's execution
-engine is reused, not duplicated (ADR-0024).
+`receive_webhook_event` is the Webhook connector's cross-module hook
+(spec §38's "Webhook" trigger type): a verified event on a connection
+linked to an active, webhook-triggered Automation workflow starts that
+workflow via the existing `app.automation.service.start_run` —
+Automation's execution engine is reused, not duplicated (ADR-0024).
 
 Signature verification is HMAC-SHA256 over the raw request body, keyed by
 the connection's own secret (`hmac.compare_digest`, constant-time — spec
 §H "webhook signature verification"). An unverified or malformed request
 is still recorded as a `WebhookEvent` (verified=False) so a misconfigured
 sender is diagnosable, but it never reaches the workflow engine.
+
+`start_oauth_flow` / `handle_oauth_callback` / `refresh_connection_token`
+/ `check_connection_health` / `disconnect_connection` / `run_sync`
+implement the second connector shape — a real OAuth2 authorization-code
+flow (spec §49's Connector Contract), with HubSpot as the first real
+provider (ADR-0026). `oauth_state` is this flow's own "capability token":
+the callback route has no session (the redirect comes from HubSpot, not
+necessarily the tab that started the flow), so the state parameter alone
+— not a cookie — proves which pending connection a callback belongs to,
+the same pattern `receive_webhook_event`'s HMAC signature plays for the
+webhook connector.
 """
 
 from __future__ import annotations
@@ -19,15 +30,22 @@ import hashlib
 import hmac
 import json
 import secrets
+import uuid
+from datetime import timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.automation.models import Workflow
 from app.automation.service import start_run
-from app.db.base import utcnow
-from app.integrations.models import IntegrationConnection, WebhookEvent
+from app.core.crypto import decrypt_token, encrypt_token
+from app.db.base import as_aware_utc, utcnow
+from app.integrations.adapters import get_oauth_adapter
+from app.integrations.models import IntegrationConnection, SyncRun, WebhookEvent
+
+OAUTH_STATE_TTL_SECONDS = 600
 
 
 def generate_webhook_secret() -> str:
@@ -51,8 +69,10 @@ async def receive_webhook_event(
     raw_body: bytes,
     signature: str | None,
 ) -> WebhookEvent:
-    verified = connection.status == "active" and verify_signature(
-        connection.webhook_secret, raw_body, signature
+    verified = (
+        connection.status == "active"
+        and connection.webhook_secret is not None
+        and verify_signature(connection.webhook_secret, raw_body, signature)
     )
 
     payload: dict[str, Any] | None
@@ -125,3 +145,219 @@ async def link_workflow(
     if workflow.trigger_type != "webhook":
         raise ValueError("Workflow must have trigger_type='webhook' to be linked to a connection")
     connection.linked_workflow_id = workflow.id
+
+
+def oauth_redirect_uri(connector_key: str) -> str:
+    from app.config import settings
+
+    if connector_key == "hubspot" and settings.hubspot_redirect_uri:
+        return settings.hubspot_redirect_uri
+    return f"{settings.api_url}/api/v1/integrations/connections/oauth/{connector_key}/callback"
+
+
+async def start_oauth_flow(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    connector_key: str,
+    actor_user_id: uuid.UUID,
+) -> tuple[IntegrationConnection, str]:
+    adapter = get_oauth_adapter(connector_key)
+    state = secrets.token_urlsafe(32)
+
+    connection = IntegrationConnection(
+        organization_id=organization_id,
+        connector_key=connector_key,
+        name=connector_key.capitalize(),
+        status="not_connected",
+        oauth_state=state,
+        oauth_state_created_at=utcnow(),
+        created_by=actor_user_id,
+    )
+    db.add(connection)
+    await db.flush()
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="integrations.oauth.started",
+        object_type="integration_connection",
+        object_id=str(connection.id),
+        after_state={"connector_key": connector_key},
+    )
+
+    authorization_url = adapter.authorization_url(
+        state=state, redirect_uri=oauth_redirect_uri(connector_key)
+    )
+    return connection, authorization_url
+
+
+async def handle_oauth_callback(
+    db: AsyncSession, *, state: str, code: str
+) -> IntegrationConnection:
+    connection = (
+        await db.execute(
+            select(IntegrationConnection).where(IntegrationConnection.oauth_state == state)
+        )
+    ).scalar_one_or_none()
+    if connection is None:
+        raise ValueError("Unknown or already-used OAuth state")
+    if (
+        connection.oauth_state_created_at is None
+        or (utcnow() - as_aware_utc(connection.oauth_state_created_at)).total_seconds()
+        > OAUTH_STATE_TTL_SECONDS
+    ):
+        raise ValueError("OAuth state has expired — start the connection again")
+
+    adapter = get_oauth_adapter(connection.connector_key)
+    redirect_uri = oauth_redirect_uri(connection.connector_key)
+    tokens = await adapter.exchange_code_for_tokens(code=code, redirect_uri=redirect_uri)
+
+    connection.encrypted_access_token = encrypt_token(tokens.access_token)
+    connection.encrypted_refresh_token = (
+        encrypt_token(tokens.refresh_token) if tokens.refresh_token else None
+    )
+    connection.token_expires_at = (
+        utcnow() + timedelta(seconds=tokens.expires_in_seconds)
+        if tokens.expires_in_seconds
+        else None
+    )
+    connection.scopes = tokens.scopes
+    connection.oauth_state = None
+    connection.oauth_state_created_at = None
+    connection.status = "connected"
+
+    health = await adapter.test_connection(access_token=tokens.access_token)
+    connection.health_status = "ok" if health.ok else "error"
+    connection.last_health_check_at = utcnow()
+    connection.external_account_id = health.external_account_id
+
+    await record_event(
+        db,
+        organization_id=connection.organization_id,
+        actor_user_id=connection.created_by,
+        action="integrations.oauth.connected",
+        object_type="integration_connection",
+        object_id=str(connection.id),
+        after_state={
+            "connector_key": connection.connector_key,
+            "external_account_id": connection.external_account_id,
+        },
+    )
+    return connection
+
+
+async def ensure_fresh_access_token(db: AsyncSession, *, connection: IntegrationConnection) -> str:
+    """Returns a usable access token, refreshing first if it's expired or
+    about to expire. Used internally by health checks and sync so callers
+    never have to think about token lifetime themselves."""
+    if connection.encrypted_access_token is None:
+        raise ValueError("Connection has no stored access token")
+
+    needs_refresh = connection.token_expires_at is not None and as_aware_utc(
+        connection.token_expires_at
+    ) <= utcnow() + timedelta(minutes=5)
+
+    if needs_refresh and connection.encrypted_refresh_token is not None:
+        await refresh_connection_token(db, connection=connection)
+
+    assert connection.encrypted_access_token is not None
+    return decrypt_token(connection.encrypted_access_token)
+
+
+async def refresh_connection_token(
+    db: AsyncSession, *, connection: IntegrationConnection
+) -> IntegrationConnection:
+    if connection.encrypted_refresh_token is None:
+        raise ValueError("Connection has no refresh token to use")
+
+    adapter = get_oauth_adapter(connection.connector_key)
+    refresh_token = decrypt_token(connection.encrypted_refresh_token)
+    tokens = await adapter.refresh_access_token(refresh_token=refresh_token)
+
+    connection.encrypted_access_token = encrypt_token(tokens.access_token)
+    if tokens.refresh_token:
+        connection.encrypted_refresh_token = encrypt_token(tokens.refresh_token)
+    connection.token_expires_at = (
+        utcnow() + timedelta(seconds=tokens.expires_in_seconds)
+        if tokens.expires_in_seconds
+        else None
+    )
+    return connection
+
+
+async def check_connection_health(
+    db: AsyncSession, *, connection: IntegrationConnection
+) -> IntegrationConnection:
+    if connection.encrypted_access_token is None:
+        connection.health_status = "error"
+        connection.last_error = "Not connected"
+        connection.last_health_check_at = utcnow()
+        return connection
+
+    adapter = get_oauth_adapter(connection.connector_key)
+    try:
+        access_token = await ensure_fresh_access_token(db, connection=connection)
+        health = await adapter.test_connection(access_token=access_token)
+    except Exception as exc:  # noqa: BLE001 - recorded on the connection, not re-raised
+        connection.health_status = "error"
+        connection.last_error = str(exc)
+        connection.last_health_check_at = utcnow()
+        return connection
+
+    connection.health_status = "ok" if health.ok else "error"
+    connection.last_error = None if health.ok else health.detail
+    connection.last_health_check_at = utcnow()
+    if health.external_account_id:
+        connection.external_account_id = health.external_account_id
+    return connection
+
+
+async def disconnect_connection(
+    db: AsyncSession, *, connection: IntegrationConnection
+) -> IntegrationConnection:
+    if connection.encrypted_access_token is not None:
+        adapter = get_oauth_adapter(connection.connector_key)
+        try:
+            access_token = decrypt_token(connection.encrypted_access_token)
+            await adapter.revoke(access_token=access_token)
+        except Exception as exc:  # noqa: BLE001 - best-effort revoke; tokens are cleared regardless
+            connection.last_error = f"Revoke request failed (tokens cleared locally): {exc}"
+
+    connection.encrypted_access_token = None
+    connection.encrypted_refresh_token = None
+    connection.token_expires_at = None
+    connection.scopes = None
+    connection.status = "disconnected"
+    connection.health_status = None
+    return connection
+
+
+async def run_sync(db: AsyncSession, *, connection: IntegrationConnection) -> SyncRun:
+    """Runs synchronously inline rather than as a durable Temporal job —
+    a real but simplified version of spec §49's `sync()` capability; see
+    docs/KNOWN_LIMITATIONS.md."""
+    sync_run = SyncRun(
+        organization_id=connection.organization_id,
+        connection_id=connection.id,
+        status="running",
+    )
+    db.add(sync_run)
+    await db.flush()
+
+    try:
+        access_token = await ensure_fresh_access_token(db, connection=connection)
+        adapter = get_oauth_adapter(connection.connector_key)
+        result = await adapter.sync(access_token=access_token)
+        sync_run.status = "succeeded"
+        sync_run.items_synced = result.items_synced
+        connection.last_synced_at = utcnow()
+        connection.last_error = None
+    except Exception as exc:  # noqa: BLE001 - recorded on the SyncRun, not re-raised to the caller
+        sync_run.status = "failed"
+        sync_run.error = str(exc)
+        connection.last_error = str(exc)
+
+    sync_run.completed_at = utcnow()
+    return sync_run

@@ -69,6 +69,17 @@ class Settings(BaseSettings):
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
     stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
 
+    # Integrations — optional; absence means the connector's catalog entry
+    # reports configured=false and no real OAuth flow can start (never a
+    # fake "connected" state, spec §82)
+    hubspot_client_id: str | None = Field(default=None, alias="HUBSPOT_CLIENT_ID")
+    hubspot_client_secret: str | None = Field(default=None, alias="HUBSPOT_CLIENT_SECRET")
+    hubspot_redirect_uri: str | None = Field(default=None, alias="HUBSPOT_REDIRECT_URI")
+    # Encrypts stored OAuth tokens at rest (app/core/crypto.py). Falls back
+    # to a key derived from SECRET_KEY when unset — fine for dev/test,
+    # a real deployment should set its own (see docs/KNOWN_LIMITATIONS.md).
+    token_encryption_key: str | None = Field(default=None, alias="TOKEN_ENCRYPTION_KEY")
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
@@ -85,6 +96,7 @@ def _diagnose(settings: Settings) -> None:
         "OPENAI_API_KEY": settings.openai_api_key,
         "SMTP_HOST": settings.smtp_host,
         "STRIPE_SECRET_KEY": settings.stripe_secret_key,
+        "HUBSPOT_CLIENT_ID": settings.hubspot_client_id,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:

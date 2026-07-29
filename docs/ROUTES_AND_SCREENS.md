@@ -115,7 +115,7 @@ builder.
 | `/settings/users` | [x] |
 | `/settings/roles` | [~] read-only view |
 | `/settings/ai-providers` | [~] shows configured/not-configured state |
-| `/settings/integrations` | [x] webhook connections: create, copy URL/secret, link/unlink a workflow, view received events |
+| `/settings/integrations` | [x] provider catalog (Connect/Not-configured), OAuth connections (health/scopes/sync history, refresh/disconnect/sync-now), webhook connections (create, copy URL/secret, link/unlink a workflow, received events) |
 | all other settings sub-pages (spec §67 SETTINGS group) | [ ] |
 
 ## App shell layout

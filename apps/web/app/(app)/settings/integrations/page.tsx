@@ -1,20 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { API_URL, apiFetch } from "@/lib/api";
-import type { IntegrationConnection, WebhookEvent, Workflow } from "@/lib/types";
+import type {
+  IntegrationConnection,
+  OAuthStartResponse,
+  ProviderCatalogEntry,
+  SyncRun,
+  WebhookEvent,
+  Workflow,
+} from "@/lib/types";
 
 const selectClassName =
   "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
 
-function ConnectionCard({ connection, workflows }: { connection: IntegrationConnection; workflows: Workflow[] | undefined }) {
+function WebhookConnectionCard({
+  connection,
+  workflows,
+}: {
+  connection: IntegrationConnection;
+  workflows: Workflow[] | undefined;
+}) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
 
@@ -70,7 +84,7 @@ function ConnectionCard({ connection, workflows }: { connection: IntegrationConn
           <span className="text-xs uppercase tracking-wide text-neutral-400">
             Secret (HMAC-SHA256 the raw request body, send as X-Webhook-Signature)
           </span>
-          <Input readOnly value={connection.webhook_secret} className="font-mono text-xs" />
+          <Input readOnly value={connection.webhook_secret ?? ""} className="font-mono text-xs" />
         </div>
 
         <div className="flex items-center gap-2">
@@ -116,7 +130,9 @@ function ConnectionCard({ connection, workflows }: { connection: IntegrationConn
               >
                 <span>{new Date(event.received_at).toLocaleString()}</span>
                 <div className="flex items-center gap-2">
-                  {event.triggered_run_id && <span className="text-neutral-400">triggered a run</span>}
+                  {event.triggered_run_id && (
+                    <span className="text-neutral-400">triggered a run</span>
+                  )}
                   <StatusBadge status={event.verified ? "succeeded" : "failed"} />
                 </div>
               </div>
@@ -128,9 +144,211 @@ function ConnectionCard({ connection, workflows }: { connection: IntegrationConn
   );
 }
 
+function OAuthConnectionCard({ connection }: { connection: IntegrationConnection }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+
+  const { data: syncRuns } = useQuery<SyncRun[]>({
+    queryKey: ["integrations", "connections", connection.id, "sync-runs"],
+    queryFn: () =>
+      apiFetch<SyncRun[]>(`/api/v1/integrations/connections/${connection.id}/sync-runs`),
+    enabled: expanded,
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["integrations", "connections"] });
+
+  const checkHealth = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/v1/integrations/connections/${connection.id}/health`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+
+  const refreshToken = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/v1/integrations/connections/${connection.id}/refresh`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/v1/integrations/connections/${connection.id}/disconnect`, {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+
+  const sync = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/v1/integrations/connections/${connection.id}/sync`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({
+        queryKey: ["integrations", "connections", connection.id, "sync-runs"],
+      });
+    },
+  });
+
+  const isConnected = connection.status === "connected";
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium text-neutral-900">{connection.name}</div>
+            <div className="text-xs text-neutral-400">
+              {connection.connector_key}
+              {connection.external_account_id && ` · account ${connection.external_account_id}`}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {connection.health_status && <StatusBadge status={connection.health_status} />}
+            <StatusBadge status={connection.status} />
+          </div>
+        </div>
+
+        {connection.scopes && connection.scopes.length > 0 && (
+          <div className="text-xs text-neutral-500">Scopes: {connection.scopes.join(", ")}</div>
+        )}
+
+        {connection.last_error && (
+          <p className="text-xs text-red-600">Last error: {connection.last_error}</p>
+        )}
+
+        {isConnected && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={checkHealth.isPending} onClick={() => checkHealth.mutate()}>
+              Check health
+            </Button>
+            <Button size="sm" variant="outline" disabled={refreshToken.isPending} onClick={() => refreshToken.mutate()}>
+              Refresh token
+            </Button>
+            <Button size="sm" variant="outline" disabled={sync.isPending} onClick={() => sync.mutate()}>
+              Sync now
+            </Button>
+            <Button size="sm" variant="destructive" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
+              Disconnect
+            </Button>
+          </div>
+        )}
+
+        <button
+          className="self-start text-xs text-neutral-500 hover:underline"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Hide" : "Show"} sync history
+        </button>
+        {expanded && (
+          <div className="flex flex-col gap-1">
+            {syncRuns?.length === 0 && (
+              <p className="text-xs text-neutral-400">No syncs run yet.</p>
+            )}
+            {syncRuns?.map((run) => (
+              <div
+                key={run.id}
+                className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs"
+              >
+                <span>{new Date(run.started_at).toLocaleString()}</span>
+                <div className="flex items-center gap-2">
+                  {run.items_synced !== null && (
+                    <span className="text-neutral-400">{run.items_synced} items</span>
+                  )}
+                  <StatusBadge status={run.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProviderCatalogSection() {
+  const queryClient = useQueryClient();
+
+  const { data: providers } = useQuery<ProviderCatalogEntry[]>({
+    queryKey: ["integrations", "providers"],
+    queryFn: () => apiFetch<ProviderCatalogEntry[]>("/api/v1/integrations/providers"),
+  });
+
+  const connect = useMutation({
+    mutationFn: (connectorKey: string) =>
+      apiFetch<OAuthStartResponse>(`/api/v1/integrations/connections/oauth/${connectorKey}/start`, {
+        method: "POST",
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["integrations", "connections"] });
+      window.location.href = data.authorization_url;
+    },
+  });
+
+  const oauthProviders = providers?.filter((p) => p.auth_type === "oauth2") ?? [];
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        OAuth Connectors
+      </h2>
+      <div className="flex flex-col gap-2">
+        {oauthProviders.map((provider) => (
+          <Card key={provider.connector_key}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <div className="font-medium text-neutral-900">{provider.name}</div>
+                <div className="text-xs text-neutral-400">
+                  Read-only CRM scopes (spec §B1 — Stage 1)
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {provider.configured ? (
+                  <Button
+                    size="sm"
+                    disabled={connect.isPending}
+                    onClick={() => connect.mutate(provider.connector_key)}
+                  >
+                    Connect
+                  </Button>
+                ) : (
+                  <Badge variant="outline">Not configured</Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {oauthProviders.some((p) => !p.configured) && (
+        <p className="mt-2 text-xs text-neutral-400">
+          Set the provider&apos;s client ID/secret in the environment to enable a real connection —
+          see .env.example. Without them, &ldquo;Connect&rdquo; is disabled rather than faking a
+          connected state.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function IntegrationsSettingsPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
+  const [banner] = useState<{ kind: "success" | "error"; text: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (connected) return { kind: "success", text: `Connected to ${connected}.` };
+    if (error) return { kind: "error", text: error };
+    return null;
+  });
+
+  useEffect(() => {
+    if (banner) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    // Runs once on mount only — banner is derived from the URL at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: connections } = useQuery<IntegrationConnection[]>({
     queryKey: ["integrations", "connections"],
@@ -154,33 +372,69 @@ export default function IntegrationsSettingsPage() {
     },
   });
 
+  const webhookConnections = connections?.filter((c) => c.connector_key === "webhook") ?? [];
+  const oauthConnections = connections?.filter((c) => c.connector_key !== "webhook") ?? [];
+
   return (
     <div>
       <PageHeader
         title="Integrations"
-        description="Generic inbound webhook connector — spec sections 48-49. Every other provider category (CRM, email, cloud, identity, ...) needs real third-party credentials this environment doesn't have."
+        description="Connector SDK backbone — spec sections 48-49. Every provider category needing real third-party credentials this environment doesn't have reports honestly as Not configured, never a fake connected state."
       />
 
-      <Card className="mb-4">
-        <CardContent className="flex gap-2 pt-6">
-          <Input
-            placeholder="Connection name (e.g. Lead intake)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button disabled={!name.trim() || createConnection.isPending} onClick={() => createConnection.mutate()}>
-            Add webhook connection
-          </Button>
-        </CardContent>
-      </Card>
-
-      {connections?.length === 0 && (
-        <p className="text-sm text-neutral-500">No connections yet.</p>
+      {banner && (
+        <Card className="mb-4">
+          <CardContent className="pt-6">
+            <p className={banner.kind === "error" ? "text-sm text-red-600" : "text-sm text-green-700"}>
+              {banner.text}
+            </p>
+          </CardContent>
+        </Card>
       )}
-      <div className="flex flex-col gap-3">
-        {connections?.map((connection) => (
-          <ConnectionCard key={connection.id} connection={connection} workflows={workflows} />
-        ))}
+
+      <ProviderCatalogSection />
+
+      {oauthConnections.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            OAuth Connections
+          </h2>
+          <div className="flex flex-col gap-3">
+            {oauthConnections.map((connection) => (
+              <OAuthConnectionCard key={connection.id} connection={connection} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Webhook Connections
+        </h2>
+        <Card className="mb-4">
+          <CardContent className="flex gap-2 pt-6">
+            <Input
+              placeholder="Connection name (e.g. Lead intake)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button
+              disabled={!name.trim() || createConnection.isPending}
+              onClick={() => createConnection.mutate()}
+            >
+              Add webhook connection
+            </Button>
+          </CardContent>
+        </Card>
+
+        {webhookConnections.length === 0 && (
+          <p className="text-sm text-neutral-500">No webhook connections yet.</p>
+        )}
+        <div className="flex flex-col gap-3">
+          {webhookConnections.map((connection) => (
+            <WebhookConnectionCard key={connection.id} connection={connection} workflows={workflows} />
+          ))}
+        </div>
       </div>
     </div>
   );

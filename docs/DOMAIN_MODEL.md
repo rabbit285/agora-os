@@ -330,34 +330,47 @@ off of, unlike the three scenarios chosen here. "New Customer" also
 doesn't yet send a real welcome email or update a billing/accounting
 system — no email provider or accounting connector exists (spec §48).
 
-## Phase 9 entities (implemented — Integrations backbone: one connector)
+## Phase 9 entities (implemented — Integrations backbone: Webhook + HubSpot OAuth2)
 
 ```mermaid
 erDiagram
   ORGANIZATION ||--o{ INTEGRATION_CONNECTION : has
   INTEGRATION_CONNECTION ||--o{ WEBHOOK_EVENT : receives
+  INTEGRATION_CONNECTION ||--o{ SYNC_RUN : produces
   INTEGRATION_CONNECTION }o--o| WORKFLOW : "verified event triggers"
   WEBHOOK_EVENT }o--o| WORKFLOW_RUN : "may trigger"
 ```
 
-- **IntegrationConnection** — `connector_key` supports exactly one value,
-  `"webhook"` (spec §48 lists a dozen-plus provider categories; every
-  other one needs real third-party OAuth credentials this environment
-  doesn't have — ADR-0024). Its `webhook_secret` is the connection's own
-  auth mechanism (HMAC-SHA256), not a platform session. `linked_workflow_id`
-  is the cross-module hook: pointing it at an `active` Automation workflow
-  with `trigger_type="webhook"` means a verified inbound event triggers
-  that workflow via the existing `app.automation.service.start_run`.
+- **IntegrationConnection** — two connector shapes. `connector_key="webhook"`
+  (ADR-0024): `webhook_secret` is the connection's own auth mechanism
+  (HMAC-SHA256), not a platform session; `linked_workflow_id` is the
+  cross-module hook — pointing it at an `active` Automation workflow with
+  `trigger_type="webhook"` means a verified inbound event triggers that
+  workflow via `app.automation.service.start_run`.
+  `connector_key="hubspot"` (ADR-0026): a real OAuth2 authorization-code
+  flow via `app.integrations.adapters.hubspot.HubSpotAdapter`, selected
+  only when `HUBSPOT_CLIENT_ID`/`HUBSPOT_CLIENT_SECRET` are configured —
+  otherwise `MockOAuthAdapter` (same role as the AI gateway's
+  `DemoAdapter`). `encrypted_access_token`/`encrypted_refresh_token` are
+  Fernet-encrypted at rest; `oauth_state` is the flow's own single-use
+  CSRF token, since the callback route has no session to rely on.
+  `scopes`, `external_account_id`, and `health_status` make the
+  connection's real state (not a fabricated "connected" badge) visible.
 - **WebhookEvent** — an audit trail of every inbound call, `verified`
   true or false, whether or not it triggered anything — spec §49's
   "Connections must store... Last sync, Last error" at per-event
   granularity, not just a rolled-up connection-level status.
+- **SyncRun** — one "sync now" execution against an OAuth connection
+  (spec §49's `sync()`). Runs synchronously inline, not as a durable
+  Temporal job — a real but deliberately simplified version, see
+  `docs/KNOWN_LIMITATIONS.md`.
 
-Not modeled yet: any real OAuth connector (CRM, Email, Cloud, Identity,
-Engineering, Communication, Documents, Accounting — spec §48), the full
-Connector SDK contract (`connect()`, `disconnect()`, `refresh_credentials()`,
-`subscribe()`, `execute_action()`, `collect_evidence()` — spec §49; this
-slice only needed a receiver and a signature check), sync safety features
+Not modeled yet: any OAuth connector beyond HubSpot (Email, Marketing,
+Customer Support, Cloud, Identity, Engineering, Communication, Documents,
+Accounting — spec §48; each needs its own real provider credentials),
+`subscribe()`/`execute_action()`/`collect_evidence()` from spec §49's
+full Connector Contract (this slice only needed authorize, token
+exchange/refresh, health, sync, and revoke), sync safety features
 (incremental cursors, checkpointing, replay safety — spec §G2), API keys
 for outbound platform access.
 

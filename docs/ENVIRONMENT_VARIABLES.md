@@ -68,6 +68,14 @@ responses are just clearly labeled demo output until a key is added.
 |---|---|
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` | billing module not yet implemented (Phase 10); reserved now so the shape doesn't change later |
 
+## Integrations — optional
+
+| Variable | Behavior when unset |
+|---|---|
+| `HUBSPOT_CLIENT_ID` / `HUBSPOT_CLIENT_SECRET` | the HubSpot connector's provider-catalog entry (`GET /api/v1/integrations/providers`) reports `configured: false` and the frontend disables "Connect"; a mock adapter still lets the OAuth flow be exercised for tests/demo, but it's never presented as a live connection — see `docs/DECISIONS.md` ADR-0026 |
+| `HUBSPOT_REDIRECT_URI` | derived from `API_URL` (`{API_URL}/api/v1/integrations/connections/oauth/hubspot/callback`) when unset — must exactly match the redirect URI registered on the HubSpot developer app |
+| `TOKEN_ENCRYPTION_KEY` | falls back to a key derived from `SECRET_KEY` (fine for dev/test only — see `docs/KNOWN_LIMITATIONS.md`); a real deployment must set its own so rotating `SECRET_KEY` doesn't also break every stored OAuth token |
+
 ## Frontend
 
 Only variables prefixed `NEXT_PUBLIC_` are ever bundled into browser

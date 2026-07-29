@@ -1,25 +1,47 @@
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.automation.models import Workflow
+from app.config import settings
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
-from app.integrations.models import IntegrationConnection, WebhookEvent
+from app.integrations.adapters import OAUTH_PROVIDER_KEYS, is_provider_configured
+from app.integrations.models import IntegrationConnection, SyncRun, WebhookEvent
 from app.integrations.schemas import (
     ConnectionCreate,
     ConnectionOut,
     ConnectionUpdate,
+    OAuthStartResponse,
+    ProviderCatalogEntry,
+    SyncRunOut,
     WebhookEventOut,
 )
-from app.integrations.service import generate_webhook_secret, link_workflow, receive_webhook_event
+from app.integrations.service import (
+    check_connection_health,
+    disconnect_connection,
+    generate_webhook_secret,
+    handle_oauth_callback,
+    link_workflow,
+    receive_webhook_event,
+    refresh_connection_token,
+    run_sync,
+    start_oauth_flow,
+)
 
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
+
+PROVIDER_CATALOG: list[dict[str, str]] = [
+    {"connector_key": "webhook", "name": "Webhook", "auth_type": "hmac"},
+    {"connector_key": "hubspot", "name": "HubSpot", "auth_type": "oauth2"},
+]
 
 
 async def _get_org_connection(
@@ -29,6 +51,25 @@ async def _get_org_connection(
     if connection is None or connection.organization_id != organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
     return connection
+
+
+@router.get("/providers", response_model=list[ProviderCatalogEntry])
+async def list_providers(
+    context: OrgContext = Depends(get_org_context),
+) -> list[ProviderCatalogEntry]:
+    return [
+        ProviderCatalogEntry(
+            connector_key=entry["connector_key"],
+            name=entry["name"],
+            auth_type=entry["auth_type"],
+            configured=(
+                True
+                if entry["connector_key"] == "webhook"
+                else is_provider_configured(entry["connector_key"])
+            ),
+        )
+        for entry in PROVIDER_CATALOG
+    ]
 
 
 @router.get("/connections", response_model=list[ConnectionOut])
@@ -112,6 +153,129 @@ async def list_events(
         select(WebhookEvent)
         .where(WebhookEvent.connection_id == connection.id)
         .order_by(WebhookEvent.received_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/connections/oauth/{provider}/start", response_model=OAuthStartResponse)
+async def start_oauth(
+    provider: str,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+) -> OAuthStartResponse:
+    if provider not in OAUTH_PROVIDER_KEYS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
+    connection, authorization_url = await start_oauth_flow(
+        db,
+        organization_id=context.organization_id,
+        connector_key=provider,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    return OAuthStartResponse(connection_id=connection.id, authorization_url=authorization_url)
+
+
+@router.get("/connections/oauth/{provider}/callback")
+async def oauth_callback(
+    provider: str,
+    code: str,
+    state: str,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    """No session dependency — this is a top-level browser redirect from the
+    provider, not necessarily the tab that started the flow. The `state`
+    parameter (not a cookie) is what proves this callback belongs to a
+    pending connection, the same "capability token" pattern the webhook
+    receiver uses HMAC for."""
+    try:
+        connection = await handle_oauth_callback(db, state=state, code=code)
+    except ValueError as exc:
+        await db.rollback()
+        return RedirectResponse(
+            url=f"{settings.app_url}/settings/integrations?error={quote(str(exc))}"
+        )
+    await db.commit()
+    return RedirectResponse(
+        url=f"{settings.app_url}/settings/integrations?connected={connection.connector_key}"
+    )
+
+
+@router.post("/connections/{connection_id}/refresh", response_model=ConnectionOut)
+async def refresh_connection(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+) -> IntegrationConnection:
+    connection = await _get_org_connection(db, connection_id, context.organization_id)
+    try:
+        connection = await refresh_connection_token(db, connection=connection)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(connection)
+    return connection
+
+
+@router.post("/connections/{connection_id}/health", response_model=ConnectionOut)
+async def check_health(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+) -> IntegrationConnection:
+    connection = await _get_org_connection(db, connection_id, context.organization_id)
+    connection = await check_connection_health(db, connection=connection)
+    await db.commit()
+    await db.refresh(connection)
+    return connection
+
+
+@router.post("/connections/{connection_id}/disconnect", response_model=ConnectionOut)
+async def disconnect(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+) -> IntegrationConnection:
+    connection = await _get_org_connection(db, connection_id, context.organization_id)
+    connection = await disconnect_connection(db, connection=connection)
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="integrations.oauth.disconnected",
+        object_type="integration_connection",
+        object_id=str(connection.id),
+    )
+    await db.commit()
+    await db.refresh(connection)
+    return connection
+
+
+@router.post("/connections/{connection_id}/sync", response_model=SyncRunOut)
+async def sync_connection(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+) -> SyncRun:
+    connection = await _get_org_connection(db, connection_id, context.organization_id)
+    sync_run = await run_sync(db, connection=connection)
+    await db.commit()
+    await db.refresh(sync_run)
+    return sync_run
+
+
+@router.get("/connections/{connection_id}/sync-runs", response_model=list[SyncRunOut])
+async def list_sync_runs(
+    connection_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[SyncRun]:
+    connection = await _get_org_connection(db, connection_id, context.organization_id)
+    result = await db.execute(
+        select(SyncRun)
+        .where(SyncRun.connection_id == connection.id)
+        .order_by(SyncRun.started_at.desc())
     )
     return list(result.scalars().all())
 

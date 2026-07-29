@@ -3,14 +3,16 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
+from urllib.parse import parse_qs, urlparse
 
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import Membership, MembershipRole
 from app.core.rbac import get_system_role
 from app.identity.models import User
 from app.identity.service import create_session
+from app.main import app
 from app.security import hash_password
 
 
@@ -222,3 +224,128 @@ async def test_receive_webhook_for_unknown_connection_returns_not_found(
         headers={"X-Webhook-Signature": "irrelevant"},
     )
     assert response.status_code == 404
+
+
+async def test_provider_catalog_reports_hubspot_not_configured(client: AsyncClient) -> None:
+    await _signup(client, "provcat1@example.com", "Provider Catalog Org")
+    response = await client.get("/api/v1/integrations/providers")
+    assert response.status_code == 200
+    catalog = {p["connector_key"]: p for p in response.json()}
+    assert catalog["webhook"]["configured"] is True
+    # No real HUBSPOT_CLIENT_ID/SECRET exist in this test environment —
+    # the catalog must report this honestly rather than claim a fake connection.
+    assert catalog["hubspot"]["configured"] is False
+    assert catalog["hubspot"]["auth_type"] == "oauth2"
+
+
+async def test_employee_role_cannot_start_oauth(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "oauth-emp1@example.com", "OAuth Employee Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-oauth@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post("/api/v1/integrations/connections/oauth/hubspot/start")
+    assert response.status_code == 403
+
+
+async def _start_hubspot_oauth(client: AsyncClient) -> tuple[str, str]:
+    """Starts the flow and returns (connection_id, state) — the mock
+    adapter (no real HUBSPOT_CLIENT_ID/SECRET in this test env) embeds
+    state as a query parameter in its fake authorization_url."""
+    started = await client.post("/api/v1/integrations/connections/oauth/hubspot/start")
+    assert started.status_code == 200, started.text
+    body = started.json()
+    parsed = urlparse(body["authorization_url"])
+    state = parse_qs(parsed.query)["state"][0]
+    return body["connection_id"], state
+
+
+async def test_start_oauth_flow_returns_authorization_url(client: AsyncClient) -> None:
+    await _signup(client, "oauth1@example.com", "OAuth Org 1")
+    connection_id, state = await _start_hubspot_oauth(client)
+    assert connection_id
+    assert state
+
+    connections = await client.get("/api/v1/integrations/connections")
+    matching = next(c for c in connections.json() if c["id"] == connection_id)
+    assert matching["connector_key"] == "hubspot"
+    assert matching["status"] == "not_connected"
+
+
+async def test_oauth_callback_connects_and_checks_health(client: AsyncClient) -> None:
+    await _signup(client, "oauth2@example.com", "OAuth Org 2")
+    connection_id, state = await _start_hubspot_oauth(client)
+
+    callback = await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+    assert callback.status_code in (302, 307)
+    assert "connected=hubspot" in callback.headers["location"]
+
+    connections = await client.get("/api/v1/integrations/connections")
+    matching = next(c for c in connections.json() if c["id"] == connection_id)
+    assert matching["status"] == "connected"
+    assert matching["health_status"] == "ok"
+    assert matching["external_account_id"] == "mock-account-0001"
+    assert matching["scopes"] == ["mock.read"]
+
+
+async def test_oauth_callback_with_unknown_state_redirects_with_error(client: AsyncClient) -> None:
+    await _signup(client, "oauth3@example.com", "OAuth Org 3")
+    callback = await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": "not-a-real-state"},
+    )
+    assert callback.status_code in (302, 307)
+    assert "error=" in callback.headers["location"]
+
+
+async def test_refresh_health_sync_and_disconnect_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "oauth4@example.com", "OAuth Org 4")
+    connection_id, state = await _start_hubspot_oauth(client)
+    await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+
+    refreshed = await client.post(f"/api/v1/integrations/connections/{connection_id}/refresh")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["status"] == "connected"
+
+    health = await client.post(f"/api/v1/integrations/connections/{connection_id}/health")
+    assert health.status_code == 200
+    assert health.json()["health_status"] == "ok"
+
+    synced = await client.post(f"/api/v1/integrations/connections/{connection_id}/sync")
+    assert synced.status_code == 200
+    assert synced.json()["status"] == "succeeded"
+    assert synced.json()["items_synced"] == 3
+
+    sync_runs = await client.get(f"/api/v1/integrations/connections/{connection_id}/sync-runs")
+    assert sync_runs.status_code == 200
+    assert len(sync_runs.json()) == 1
+
+    disconnected = await client.post(f"/api/v1/integrations/connections/{connection_id}/disconnect")
+    assert disconnected.status_code == 200
+    assert disconnected.json()["status"] == "disconnected"
+    assert disconnected.json()["health_status"] is None
+
+
+async def test_oauth_connection_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-oauth1@example.com", "Cross OAuth Org 1")
+    connection_id, _ = await _start_hubspot_oauth(client)
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-oauth2@example.com", "Cross OAuth Org 2")
+
+    response = await other_client.post(
+        f"/api/v1/integrations/connections/{connection_id}/health",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

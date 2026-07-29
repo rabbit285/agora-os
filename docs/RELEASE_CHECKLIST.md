@@ -121,18 +121,21 @@ Automation) now have a real, tested backbone.
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory, cross-module intent router — not started
 
-## Phase 9 (Integrations) — one connector complete, all others remain
+## Phase 9 (Integrations) — two connector shapes complete, all real providers beyond HubSpot remain
 
-- [x] IntegrationConnection, WebhookEvent models + migration — webhook connector only (ADR-0024)
+- [x] IntegrationConnection, WebhookEvent, SyncRun models + migration — webhook connector (ADR-0024) + OAuth2 connector framework with HubSpot (ADR-0026)
 - [x] Cross-module hook: a verified webhook event triggers a linked, active, webhook-triggered Automation workflow (tested, ADR-0024)
-- [x] Tenant-isolated `/api/v1/integrations` API (+ one deliberately unauthenticated HMAC-verified receiver route) + frontend (`/settings/integrations`)
+- [x] Provider-neutral `OAuthConnectorAdapter` (mirrors the AI gateway's Demo/real-provider pattern); real `HubSpotAdapter` + `MockOAuthAdapter` fallback when unconfigured (tested, ADR-0026)
+- [x] Encrypted token storage (Fernet), OAuth authorize/callback (no-session, state-verified)/refresh/health/disconnect/sync endpoints
+- [x] Provider catalog reports `configured: bool` honestly — HubSpot shows "Not configured" without real credentials, never a fake connected state
+- [x] Tenant-isolated `/api/v1/integrations` API (+ two deliberately unauthenticated routes: HMAC-verified webhook receiver, state-verified OAuth callback) + frontend (`/settings/integrations`)
 - [x] RBAC: `integrations.connections.manage` granted to `org_admin`/`automation_manager`, tested
-- [x] Seed script: 1 webhook-triggered workflow, 1 connection, 1 verified event (triggered a real run), 1 rejected event
-- [x] Backend tests: 82 passing total; ruff/mypy clean
-- [ ] Every other spec §48 connector category (CRM, Email, Cloud, Identity, Engineering,
+- [x] Seed script: 1 webhook-triggered workflow, 1 connection, 1 verified event (triggered a real run), 1 rejected event — no seeded HubSpot connection, so the demo org shows the honest "Not configured" state
+- [x] Backend tests: 92 passing total; ruff/mypy clean
+- [ ] Every other spec §48 connector category (CRM beyond HubSpot, Email, Cloud, Identity, Engineering,
       Communication, Documents, Accounting) — not started, all need real OAuth apps/API keys
-- [ ] Full Connector SDK contract (spec §49), sync safety (spec §G2) — not applicable yet,
-      no polling/sync connector exists
+- [ ] `subscribe()`, `execute_action()`, `collect_evidence()` from spec §49's full Connector Contract,
+      sync safety (spec §G2) — not applicable yet, no polling/scheduled sync exists
 
 See `docs/RESUME_BUILD.md` for the next phase.
 
