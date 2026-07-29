@@ -317,6 +317,7 @@ export type SupportTicket = {
   status: TicketStatus;
   owner_id: string | null;
   related_alert_id: string | null;
+  upsell_lead_id: string | null;
   resolved_at: string | null;
   created_at: string;
 };

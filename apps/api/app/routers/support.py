@@ -26,7 +26,7 @@ from app.support.schemas import (
     TicketOut,
     TicketUpdate,
 )
-from app.support.service import create_ticket
+from app.support.service import create_ticket, flag_upsell_signal
 
 router = APIRouter(prefix="/api/v1/support", tags=["support"])
 
@@ -157,6 +157,31 @@ async def update_ticket(
         object_id=str(ticket.id),
         before_state={"status": before_status},
         after_state={"status": ticket.status},
+    )
+    await db.commit()
+    await db.refresh(ticket)
+    return ticket
+
+
+@router.post("/tickets/{ticket_id}/flag-upsell", response_model=TicketOut)
+async def flag_upsell(
+    ticket_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("support.tickets.manage")),
+) -> Ticket:
+    ticket = await _get_org_ticket(db, ticket_id, context.organization_id)
+    if ticket.upsell_lead_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket is already flagged as an upsell signal",
+        )
+    customer = await _get_org_customer(db, ticket.customer_id, context.organization_id)
+    ticket = await flag_upsell_signal(
+        db,
+        organization_id=context.organization_id,
+        ticket=ticket,
+        customer=customer,
+        actor_user_id=context.user.id,
     )
     await db.commit()
     await db.refresh(ticket)

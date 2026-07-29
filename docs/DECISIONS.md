@@ -334,3 +334,32 @@ far back as the Phase 5 resume notes. Tested in
 and `test_rejected_approval_fails_the_run`, both of which decide the
 approval through the real `/api/v1/approvals/{id}/decide` endpoint rather
 than mutating the database directly.
+
+## ADR-0022 — "Support Upsell Signal" reuses Lead + Notification instead of a new signal entity
+
+**Decision**: `app/support/service.py::flag_upsell_signal` creates a real
+`sales.Lead` (`source="support_upsell_signal"`, `account_id` copied from
+the ticket's `Customer.sales_account_id` if set) and a `core.Notification`
+to that Sales Account's `owner_id` (falling back to the user who flagged
+the ticket if the account has no owner, or the customer has no linked
+account at all). It does not create a new `sales_signal`- or
+`upsell_signal`-shaped table.
+
+**Why**: This is Phase 8's first Cross-Module Intelligence slice (spec
+§69's five named scenarios), and the discipline used for every hook so
+far (Compliance's Task, Security's Risk, Support's SecurityAlert,
+Automation's Approval) is to reuse an existing shared primitive rather
+than invent a module-specific one (spec §80). A Lead is exactly what spec
+§69 means by "create sales signal" — Sales already has a `Lead.status`
+lifecycle (`new → qualified → contacted → disqualified → converted`) a
+rep can act on, and a Notification is exactly "notify account manager."
+The spec's next step, "create opportunity suggestion," is deliberately
+left to a human — converting a Lead into an Opportunity is already a
+distinct Sales-side decision in this build, and auto-creating an
+Opportunity from an unqualified signal would overstate what one flagged
+support ticket actually establishes. Tested in
+`tests/test_support.py::test_flag_upsell_creates_lead_and_notifies_account_owner`
+(asserts the lead via `/api/v1/sales/leads` and the notification via
+`/api/v1/notifications`, not by reading the ticket alone) and
+`test_flag_upsell_without_sales_account_falls_back_to_actor` (covers a
+customer with no linked Sales Account).

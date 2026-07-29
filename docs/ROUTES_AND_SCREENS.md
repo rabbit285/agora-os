@@ -87,7 +87,7 @@ Sales Intelligence.
 | Route | Status |
 |---|---|
 | `/support` | [x] customers + ticket creation/list overview |
-| `/support/tickets/[id]` | [x] detail: status workflow, linked security alert, message thread |
+| `/support/tickets/[id]` | [x] detail: status workflow, linked security alert, linked sales lead (upsell signal), message thread |
 
 Not yet built (spec §67 lists these under Support): Conversations
 (separate from Tickets), AI Agent configuration, Knowledge Base standalone

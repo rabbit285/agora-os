@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's first Cross-Module Intelligence slice — verified end-to-end)
 
 ## Platform
 
@@ -94,8 +94,9 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Cross-module hook: a `security`-category ticket auto-creates a linked `SecurityAlert` and escalates the ticket to `urgent` priority (tested, ADR-0020)
 - [x] `/api/v1/support` router — customers, tickets (+ detail with message thread, status transitions), knowledge articles, CSAT; tenant-isolated, RBAC-gated
 - [x] RBAC: `support_manager` / `support_agent` system roles granted support permissions
-- [x] Frontend: `/support` overview (customers, ticket creation/list) + `/support/tickets/[id]` detail (status workflow, linked security alert banner, message thread)
-- [x] Seed script: 1 customer (linked to the Nordwind Robotics sales account), 1 resolved billing ticket with CSAT, 1 security-flagged ticket (auto-created SecurityAlert), 1 published knowledge article
+- [x] Frontend: `/support` overview (customers, ticket creation/list) + `/support/tickets/[id]` detail (status workflow, linked security alert banner, linked sales lead banner, message thread)
+- [x] Cross-module hook: flagging a ticket as an upsell signal auto-creates a `sales.Lead` and notifies the linked account's owner (tested, ADR-0022, Phase 8's first slice)
+- [x] Seed script: 1 customer (linked to the Nordwind Robotics sales account), 1 resolved billing ticket with CSAT, 1 security-flagged ticket (auto-created SecurityAlert), 1 upsell-flagged ticket (auto-created a Lead + notification), 1 published knowledge article
 - [ ] SLA policies/timers, QA review scoring — not started
 - [ ] Multi-channel ingestion (email/chat connectors), AI-drafted replies, confidence-gated auto-resolution — not started, needs Phase 9 connectors and Copilot integration
 - [ ] Knowledge-gap detection, FAQ generation — not started
@@ -112,6 +113,20 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [ ] Only 3 of the spec's much larger step vocabulary implemented (create_task, send_notification, human_approval) — Condition/Delay/Loop/Data Transform/Webhook/Subworkflow/AI Step not started
 - [ ] Only `manual` trigger type implemented — email/webhook/CRM-event/schedule triggers need Phase 9 connectors
 - [ ] Visual drag-and-drop builder, templates, automation analytics — not started
+
+## Cross-Module Intelligence
+
+- [x] First slice: "Support Upsell Signal" (spec §69) — flagging a support
+      ticket creates a real `sales.Lead` and a `core.Notification` to the
+      linked account's owner, reusing existing primitives rather than a
+      new signal entity (tested, ADR-0022)
+- [ ] Remaining spec §69 scenarios (Enterprise Sales Security Review, New
+      AI Tool Adoption, the rest of the Security Incident chain, New
+      Customer) — not started, most need modules/data that don't exist yet
+      (customer questionnaires, AI system inventory)
+- [ ] AI daily briefing, business process discovery, AI recommendation
+      engine, organization memory — not started
+- [ ] Cross-module intent router for the AI Copilot — not started
 
 ## Integrations
 
@@ -133,7 +148,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
-- [x] 70/70 total, ruff+mypy strict clean
+- [x] Cross-module intelligence tests (3 tests: upsell signal creates lead + notifies account owner, falls back to actor when no linked account, cannot flag the same ticket twice)
+- [x] 73/73 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -160,5 +176,9 @@ core backbones (see their sections above) but not their larger
 sub-features (audits, AI governance, privacy workflows, vendor risk, Trust
 Center, identity/cloud provider integrations, incident playbooks,
 sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary and
-non-manual triggers, real external connectors). The cross-module intent
-router, Phases 8–10, and the AWS production deployment have not started.
+non-manual triggers, real external connectors). Phase 8 (Cross-Module
+Intelligence) has exactly one real scenario implemented (Support Upsell
+Signal) out of spec §69's five named scenarios plus its open-ended AI
+features (daily briefing, recommendation engine, organization memory) —
+none of that larger scope has started. The cross-module intent router,
+Phases 9–10, and the AWS production deployment have not started.

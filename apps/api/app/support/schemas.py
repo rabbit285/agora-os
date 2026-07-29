@@ -51,6 +51,7 @@ class TicketOut(BaseModel):
     status: str
     owner_id: uuid.UUID | None
     related_alert_id: uuid.UUID | None
+    upsell_lead_id: uuid.UUID | None
     resolved_at: datetime | None
     created_at: datetime
 

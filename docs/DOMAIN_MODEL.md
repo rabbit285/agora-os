@@ -203,6 +203,7 @@ erDiagram
   SUPPORT_TICKET ||--o{ SUPPORT_TICKET_MESSAGE : contains
   SUPPORT_TICKET ||--o{ CSAT_RESPONSE : "may receive"
   SUPPORT_TICKET }o--o| SECURITY_ALERT : "security category creates"
+  SUPPORT_TICKET }o--o| SALES_LEAD : "flagged upsell signal creates"
   ORGANIZATION ||--o{ SUPPORT_KNOWLEDGE_ARTICLE : has
 ```
 
@@ -214,11 +215,14 @@ erDiagram
   concept into one row (a conversation *is* a ticket here) and its
   `support_intents` into `Ticket.category`, mirroring the Security
   findings consolidation (ADR-0017). `Ticket.related_alert_id` is the
-  cross-module hook: a ticket categorized `security` auto-creates a
+  Phase 6 cross-module hook: a ticket categorized `security` auto-creates a
   **SecurityAlert** and escalates the ticket to `urgent` priority (spec
   §35, ADR-0020) — Security's own triage inbox, not a full Incident; a
   human security analyst decides whether to promote it further, the same
-  workflow Security already uses for its own findings.
+  workflow Security already uses for its own findings. `Ticket.upsell_lead_id`
+  is the Phase 8 cross-module hook: flagging a ticket creates a real Sales
+  **Lead** and notifies the linked account's owner (spec §69 "Support
+  Upsell Signal", ADR-0022) — see the Phase 8 section below.
 - **TicketMessage** — one message in the ticket thread, tagged
   `customer`/`agent`/`ai`.
 - **KnowledgeArticle** — organization-scoped support content;
@@ -271,6 +275,31 @@ webhooks and other non-manual triggers, retries/failure policies beyond
 "step failed → run failed," automation analytics (spec §43). Real
 non-manual triggers (new email, CRM stage change, webhook) depend on the
 connector SDK (Phase 9).
+
+## Phase 8 (Cross-Module Intelligence — first slice: Support Upsell Signal)
+
+Spec §69 names five cross-module scenarios; this build implements one as
+a real, tested vertical rather than stubbing all five (spec §80/§82's
+"one real vertical, not everything" discipline, applied again).
+"Support Upsell Signal": a support agent flags a ticket, which
+(`app/support/service.py::flag_upsell_signal`) creates a `sales.Lead`
+(`source = "support_upsell_signal"`, linked to the ticket's Customer's
+Sales Account if one exists) and a `core.Notification` to that account's
+owner — three primitives that already existed (Ticket, Lead,
+Notification), not a new `sales_signal` entity (ADR-0022). No new tables
+were needed; only `Ticket.upsell_lead_id` was added.
+
+Not modeled yet, and deliberately deferred rather than attempted
+speculatively: "Enterprise Sales Security Review" (needs customer
+questionnaires, which don't exist), "New AI Tool Adoption" (needs an AI
+system inventory, which doesn't exist), the "Security Incident" chain's
+remaining steps beyond the existing Incident→Risk link (incident response
+Tasks, team notification), "New Customer" (CRM-deal-won automation —
+partially possible today via a manual Automation workflow, not a built-in
+trigger), an AI daily briefing, business process discovery, an AI
+recommendation engine, and organization memory — all large, open-ended
+features with no existing primitive to hang them off of, unlike the
+scenario chosen here.
 
 ## Cross-module entity linking (spec §81)
 

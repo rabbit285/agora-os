@@ -20,6 +20,12 @@ app.secops.models.SecurityAlert / SecurityIncident and ADR-0020).
 Support Customer record (spec section 69, "New Customer" cross-module
 scenario) without forcing every Support Customer to have originated in
 Sales — the field is nullable.
+
+`Ticket.upsell_lead_id` is the Phase 8 cross-module hook (spec section 69
+"Support Upsell Signal"): flagging a ticket creates a real `sales.Lead`
+and notifies the linked account's owner, reusing Sales' and Phase 1's
+existing primitives instead of inventing a new "signal" type — see
+app.support.service.flag_upsell_signal and docs/DECISIONS.md ADR-0022.
 """
 
 from __future__ import annotations
@@ -76,6 +82,12 @@ class Ticket(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # is "security" — see app.support.service.create_ticket.
     related_alert_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("security_alerts.id"), nullable=True
+    )
+    # Cross-module hook (spec section 69 "Support Upsell Signal"): set when
+    # an agent flags this ticket as an expansion signal — see
+    # app.support.service.flag_upsell_signal.
+    upsell_lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_leads.id"), nullable=True
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

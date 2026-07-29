@@ -32,7 +32,7 @@ from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding
 from app.secops.service import create_incident
 from app.security import hash_password
 from app.support.models import CSATResponse, Customer, KnowledgeArticle, TicketMessage
-from app.support.service import create_ticket
+from app.support.service import create_ticket, flag_upsell_signal
 
 logger = logging.getLogger("agora.seed")
 logging.basicConfig(level=logging.INFO)
@@ -590,10 +590,13 @@ async def _seed_demo_support_data(
 ) -> None:
     """Seeds one customer (linked to the Nordwind Robotics sales account —
     spec section 69 "New Customer"), a resolved billing ticket with a CSAT
-    response, and a ticket categorized "security" so the Support -> Security
-    cross-module hook (spec section 35) has a real demonstration: creating
-    it auto-creates a linked SecurityAlert. Also seeds one published
-    knowledge article."""
+    response, a ticket categorized "security" so the Support -> Security
+    cross-module hook (spec section 35) has a real demonstration (creating
+    it auto-creates a linked SecurityAlert), and an "account" ticket that
+    gets flagged as an upsell signal so the Phase 8 Support -> Sales hook
+    (spec section 69 "Support Upsell Signal") has one too: flagging it
+    creates a real sales.Lead and notifies the linked account's owner.
+    Also seeds one published knowledge article."""
     customer = Customer(
         organization_id=organization_id,
         sales_account_id=sales_account_id,
@@ -667,6 +670,33 @@ async def _seed_demo_support_data(
         )
     )
 
+    upsell_ticket = await create_ticket(
+        db,
+        organization_id=organization_id,
+        customer_id=customer.id,
+        subject="Do you support more than 50 seats per workspace?",
+        description="We're growing fast and want to know about enterprise-tier limits.",
+        channel="email",
+        category="account",
+        priority="low",
+        actor_user_id=admin_id,
+    )
+    db.add(
+        TicketMessage(
+            organization_id=organization_id,
+            ticket_id=upsell_ticket.id,
+            sender_type="customer",
+            body="We're growing fast and want to know about enterprise-tier limits.",
+        )
+    )
+    await flag_upsell_signal(
+        db,
+        organization_id=organization_id,
+        ticket=upsell_ticket,
+        customer=customer,
+        actor_user_id=admin_id,
+    )
+
     db.add(
         KnowledgeArticle(
             organization_id=organization_id,
@@ -679,8 +709,10 @@ async def _seed_demo_support_data(
 
     await db.commit()
     logger.info(
-        "Seeded demo support data (1 customer, 2 tickets - 1 resolved with CSAT, "
-        "1 security-flagged ticket that auto-created a SecurityAlert, 1 knowledge article)"
+        "Seeded demo support data (1 customer, 3 tickets - 1 resolved with CSAT, "
+        "1 security-flagged ticket that auto-created a SecurityAlert, "
+        "1 upsell-flagged ticket that auto-created a sales Lead + notification, "
+        "1 knowledge article)"
     )
 
 

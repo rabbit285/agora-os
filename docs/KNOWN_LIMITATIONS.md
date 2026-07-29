@@ -38,6 +38,17 @@ implied to work.
   Support into it yet), no knowledge-gap detection or FAQ generation. The
   security-category cross-module hook creates a `SecurityAlert` (Security's
   triage inbox), not a full `SecurityIncident` — see ADR-0020 for why.
+  Flagging a ticket as an upsell signal creates a real Sales Lead and
+  notifies the linked account's owner (or the flagging agent if there's no
+  linked Sales Account or no account owner), but does not auto-create an
+  Opportunity — that conversion is left to a human sales rep (ADR-0022).
+- **Cross-Module Intelligence (Phase 8)**: only one of spec §69's five
+  named cross-module scenarios is implemented ("Support Upsell Signal").
+  The other four (Enterprise Sales Security Review, New AI Tool Adoption,
+  the rest of the Security Incident chain, New Customer) are not started —
+  most need modules/data that don't exist yet (customer questionnaires, an
+  AI system inventory). No AI daily briefing, business process discovery,
+  AI recommendation engine, or organization memory exist either.
 - **Automation**: only three step types actually execute
   (`create_task`, `send_notification`, `human_approval`) out of spec §37's
   much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { SecurityAlert, SupportTicketDetail, TicketStatus } from "@/lib/types";
+import type { SalesLead, SecurityAlert, SupportTicketDetail, TicketStatus } from "@/lib/types";
 
 const WORKFLOW: TicketStatus[] = ["open", "pending", "resolved", "closed"];
 
@@ -29,10 +30,24 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
     enabled: !!ticket?.related_alert_id,
   });
 
+  const { data: leads } = useQuery<SalesLead[]>({
+    queryKey: ["sales", "leads"],
+    queryFn: () => apiFetch<SalesLead[]>("/api/v1/sales/leads"),
+    enabled: !!ticket?.upsell_lead_id,
+  });
+
   const advanceStatus = useMutation({
     mutationFn: (status: TicketStatus) =>
       apiFetch(`/api/v1/support/tickets/${id}`, { method: "PATCH", body: { status } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["support", "tickets", id] }),
+  });
+
+  const flagUpsell = useMutation({
+    mutationFn: () => apiFetch(`/api/v1/support/tickets/${id}/flag-upsell`, { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["support", "tickets", id] });
+      queryClient.invalidateQueries({ queryKey: ["sales", "leads"] });
+    },
   });
 
   const sendMessage = useMutation({
@@ -50,6 +65,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
   if (!ticket) return null;
 
   const linkedAlert = alerts?.find((a) => a.id === ticket.related_alert_id);
+  const linkedLead = leads?.find((l) => l.id === ticket.upsell_lead_id);
   const currentIndex = WORKFLOW.indexOf(ticket.status);
   const nextStatus = WORKFLOW[currentIndex + 1];
 
@@ -75,6 +91,16 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
             Advance to {nextStatus.replace(/_/g, " ")}
           </Button>
         )}
+        {!ticket.upsell_lead_id && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={flagUpsell.isPending}
+            onClick={() => flagUpsell.mutate()}
+          >
+            Flag as upsell signal
+          </Button>
+        )}
       </div>
 
       {ticket.related_alert_id && (
@@ -91,6 +117,34 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
               <div className="flex items-center gap-2 text-sm text-neutral-700">
                 {linkedAlert.title}
                 <StatusBadge status={linkedAlert.status} />
+              </div>
+            ) : (
+              <span className="text-sm text-neutral-400">Loading…</span>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {ticket.upsell_lead_id && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+              Linked Sales Lead
+            </h2>
+            <p className="mb-2 text-xs text-neutral-400">
+              This ticket was flagged as an upsell signal, which automatically created a lead for
+              Sales and notified the account owner (spec section 69 — Support Upsell Signal).
+            </p>
+            {linkedLead ? (
+              <div className="flex items-center gap-2 text-sm text-neutral-700">
+                {linkedLead.account_id ? (
+                  <Link href={`/sales/accounts/${linkedLead.account_id}`} className="hover:underline">
+                    View linked account
+                  </Link>
+                ) : (
+                  <span>Lead created (no linked account)</span>
+                )}
+                <StatusBadge status={linkedLead.status} />
               </div>
             ) : (
               <span className="text-sm text-neutral-400">Loading…</span>

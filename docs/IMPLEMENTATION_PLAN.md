@@ -132,12 +132,24 @@ email, webhook, CRM stage change, schedule — spec §38, need Phase 9
 connectors), a real visual drag-and-drop builder (React Flow), workflow
 templates, run history filtering/search, automation analytics (spec §43).
 
-## Phase 8 — Cross-Module Intelligence
+## Phase 8 — Cross-Module Intelligence (first slice in progress)
 
-Shared knowledge graph queries across modules, the five cross-module use
-cases in spec §69 (Enterprise Sales Security Review, New AI Tool Adoption,
-Security Incident, New Customer, Support Upsell Signal), AI daily briefing,
-business process discovery, AI recommendation engine, organization memory.
+Spec §69 names five cross-module scenarios. Rather than stub all five,
+this phase ships one as a real, tested vertical at a time — the same
+discipline as every prior phase. Done: "Support Upsell Signal" — flagging
+a support ticket (`app/support/service.py::flag_upsell_signal`) creates a
+real `sales.Lead` and a `core.Notification` to the linked account's owner,
+reusing three primitives that already existed (Ticket, Lead, Notification)
+rather than inventing a new signal entity (ADR-0022).
+
+Remaining: the other four named scenarios (Enterprise Sales Security
+Review, New AI Tool Adoption, the rest of the Security Incident chain
+beyond the existing Incident→Risk link, New Customer), plus the phase's
+more open-ended AI features — shared knowledge graph queries across
+modules, AI daily briefing, business process discovery, AI recommendation
+engine, organization memory. Most of the remaining named scenarios need
+modules or data that don't exist yet (customer questionnaires, an AI
+system inventory) — see `docs/RESUME_BUILD.md` for suggested ordering.
 
 ## Phase 9 — Integrations
 

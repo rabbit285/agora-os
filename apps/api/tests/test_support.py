@@ -241,3 +241,80 @@ async def test_knowledge_article_publish_toggle(client: AsyncClient) -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["published"] is True
+
+
+async def test_flag_upsell_creates_lead_and_notifies_account_owner(client: AsyncClient) -> None:
+    user_id, _ = await _signup(client, "upsell1@example.com", "Upsell Org")
+
+    account = await client.post(
+        "/api/v1/sales/accounts", json={"name": "Growing Co", "owner_id": str(user_id)}
+    )
+    assert account.status_code == 201, account.text
+    account_id = account.json()["id"]
+
+    customer = await client.post(
+        "/api/v1/support/customers",
+        json={"name": "Growing Co", "email": "ops@growing.example", "sales_account_id": account_id},
+    )
+    assert customer.status_code == 201
+    customer_id = customer.json()["id"]
+
+    ticket = await client.post(
+        "/api/v1/support/tickets",
+        json={"customer_id": customer_id, "subject": "Do you support more seats?"},
+    )
+    ticket_id = ticket.json()["id"]
+    assert ticket.json()["upsell_lead_id"] is None
+
+    flagged = await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+    assert flagged.status_code == 200, flagged.text
+    lead_id = flagged.json()["upsell_lead_id"]
+    assert lead_id is not None
+
+    leads = await client.get("/api/v1/sales/leads")
+    assert leads.status_code == 200
+    matching = next(lead for lead in leads.json() if lead["id"] == lead_id)
+    assert matching["source"] == "support_upsell_signal"
+    assert matching["account_id"] == account_id
+
+    notifications = await client.get("/api/v1/notifications")
+    assert notifications.status_code == 200
+    assert any("Expansion signal" in n["title"] for n in notifications.json())
+
+
+async def test_flag_upsell_without_sales_account_falls_back_to_actor(client: AsyncClient) -> None:
+    await _signup(client, "upsell2@example.com", "Upsell Org 2")
+    customer_id = await _create_customer(client, email="noaccount@example.com")
+
+    ticket = await client.post(
+        "/api/v1/support/tickets",
+        json={"customer_id": customer_id, "subject": "Enterprise pricing question"},
+    )
+    ticket_id = ticket.json()["id"]
+
+    flagged = await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+    assert flagged.status_code == 200
+    lead_id = flagged.json()["upsell_lead_id"]
+
+    leads = await client.get("/api/v1/sales/leads")
+    matching = next(lead for lead in leads.json() if lead["id"] == lead_id)
+    assert matching["account_id"] is None
+
+    notifications = await client.get("/api/v1/notifications")
+    assert any("Expansion signal" in n["title"] for n in notifications.json())
+
+
+async def test_cannot_flag_upsell_twice(client: AsyncClient) -> None:
+    await _signup(client, "upsell3@example.com", "Upsell Org 3")
+    customer_id = await _create_customer(client, email="twice@example.com")
+    ticket = await client.post(
+        "/api/v1/support/tickets",
+        json={"customer_id": customer_id, "subject": "Question about limits"},
+    )
+    ticket_id = ticket.json()["id"]
+
+    first = await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+    assert first.status_code == 200
+
+    second = await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+    assert second.status_code == 409

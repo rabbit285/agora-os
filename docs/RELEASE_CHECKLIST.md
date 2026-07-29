@@ -2,7 +2,7 @@
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
-Phases 3-7 / local-only** checkpoint, not a production release — most
+Phases 3-8 / local-only** checkpoint, not a production release — most
 items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
@@ -102,12 +102,24 @@ items below are correctly unchecked.
       non-manual triggers, visual builder, templates, analytics — not started
 
 All five primary product modules (Compliance, Security, Sales, Support,
-Automation) now have a real, tested backbone. See `docs/RESUME_BUILD.md`
-for the next phase (Phase 8 — Cross-Module Intelligence).
+Automation) now have a real, tested backbone.
+
+## Phase 8 (Cross-Module Intelligence) — first scenario complete, four remain
+
+- [x] "Support Upsell Signal" (spec §69): flagging a ticket creates a real
+      sales.Lead + notifies the linked account's owner (tested, ADR-0022)
+- [x] Backend tests: 73 passing total; ruff/mypy clean
+- [ ] Enterprise Sales Security Review, New AI Tool Adoption, the rest of
+      the Security Incident chain, New Customer — not started, most need
+      modules/data that don't exist yet (questionnaires, AI system inventory)
+- [ ] AI daily briefing, business process discovery, AI recommendation
+      engine, organization memory, cross-module intent router — not started
+
+See `docs/RESUME_BUILD.md` for the next phase (Phase 9 — Integrations, or
+another Phase 8 scenario).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 8 — Cross-module intelligence
 - [ ] Phase 9 — Integrations / connectors
 - [ ] Phase 10 — Enterprise (SSO/SAML/SCIM)
 - [ ] AWS Terraform, ECS, RDS, CloudFront, WAF, GitHub Actions CI/CD (spec §L/§M/§N)

@@ -446,7 +446,8 @@ support_tickets
   priority TEXT NOT NULL DEFAULT 'medium'   -- low|medium|high|urgent
   status TEXT NOT NULL DEFAULT 'open'   -- open|pending|resolved|closed
   owner_id UUID FK users NULL
-  related_alert_id UUID FK security_alerts NULL   -- cross-module hook, see below
+  related_alert_id UUID FK security_alerts NULL   -- Phase 6 cross-module hook, see below
+  upsell_lead_id UUID FK sales_leads NULL   -- Phase 8 cross-module hook, see below
   resolved_at TIMESTAMPTZ NULL
   created_at, updated_at
 
@@ -482,6 +483,12 @@ support_csat_responses
 here, and intent is `Ticket.category`, the same consolidation already
 applied to Security's findings (ADR-0017). `support_slas` and
 `support_qa_reviews` are not modeled yet; see `docs/KNOWN_LIMITATIONS.md`.
+
+`Ticket.upsell_lead_id` is set by `app/support/service.py::flag_upsell_signal`
+(Phase 8, spec §69 "Support Upsell Signal", ADR-0022) — it creates a real
+`sales_leads` row (`source = 'support_upsell_signal'`) and a Notification
+to the linked account's owner, reusing Sales' and Phase 1's existing
+tables rather than a new signal-specific one.
 
 An outreach message can only move from `draft` to `sent` if
 `sales_contacts.do_not_contact` is false at send time; otherwise it moves
