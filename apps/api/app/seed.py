@@ -19,6 +19,7 @@ from app.automation.models import Workflow
 from app.automation.service import start_run
 from app.compliance.models import (
     AIAssessment,
+    AIIncident,
     AISystem,
     Control,
     ControlMapping,
@@ -29,6 +30,7 @@ from app.compliance.models import (
     Risk,
 )
 from app.compliance.service import (
+    create_ai_incident,
     create_dpia,
     create_dsar,
     record_assessment,
@@ -189,6 +191,32 @@ async def seed() -> None:
         )
         if not existing_processing_activities:
             await _seed_demo_privacy_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_ai_incidents = (
+            (
+                await db.execute(
+                    select(AIIncident).where(AIIncident.organization_id == organization.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_ai_incidents:
+            resume_screening_system = (
+                await db.execute(
+                    select(AISystem).where(
+                        AISystem.organization_id == organization.id,
+                        AISystem.name == "Applicant Resume Screening Assistant",
+                    )
+                )
+            ).scalar_one_or_none()
+            if resume_screening_system is not None:
+                await _seed_demo_ai_incident_data(
+                    db,
+                    organization_id=organization.id,
+                    admin_id=admin.id,
+                    ai_system=resume_screening_system,
+                )
 
         existing_assets = (
             (
@@ -595,6 +623,32 @@ async def _seed_demo_privacy_data(
         "Seeded demo privacy data (1 processing activity, 1 medium-risk DPIA, "
         "1 fulfilled DSAR, 1 open DSAR)"
     )
+
+
+async def _seed_demo_ai_incident_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID, ai_system: AISystem
+) -> None:
+    """Seeds one critical AI incident against the already-seeded high-risk
+    "Applicant Resume Screening Assistant" AI system — exercises the
+    cross-module hook that links a critical incident to a real Compliance
+    Risk + response Task + owner Notification (ADR-0030), reusing
+    SecurityIncident's exact chain shape for a third time."""
+    await create_ai_incident(
+        db,
+        organization_id=organization_id,
+        ai_system=ai_system,
+        title="Resume screener showed gender bias in candidate ranking",
+        description=(
+            "A recruiter noticed the model consistently ranked male candidates higher for "
+            "identical qualifications. Flagged for immediate investigation."
+        ),
+        severity="critical",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    await db.commit()
+    logger.info("Seeded demo AI incident (1 critical incident with linked risk + response task)")
 
 
 async def _seed_demo_security_data(

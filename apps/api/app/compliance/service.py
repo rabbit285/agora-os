@@ -24,6 +24,14 @@ directly-created DPIAs their own Approval gate when `risk_level="high"`
 — the AI-system-linked hook doesn't create a second Approval, since the
 AISystem's own Approval already covers that sign-off. See
 docs/DECISIONS.md ADR-0029.
+
+`create_ai_incident` reuses `app.secops.service.create_incident`'s exact
+`critical`-severity chain shape (Risk + Task + owner Notification) for a
+third time (ADR-0018, ADR-0023, now ADR-0030) — an AI incident that's
+`critical` gets the identical treatment a critical security incident
+does, since both represent the same underlying obligation (assess and
+respond to a serious incident affecting people), not two different
+concepts that happen to share a severity field.
 """
 
 from __future__ import annotations
@@ -34,8 +42,8 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.compliance.models import DPIA, DSAR, AISystem, Control, ControlAssessment
-from app.core.models import Approval, Task
+from app.compliance.models import DPIA, DSAR, AIIncident, AISystem, Control, ControlAssessment, Risk
+from app.core.models import Approval, Notification, Task
 from app.db.base import utcnow
 
 _HIGH_RISK_TIERS = {"high", "unacceptable"}
@@ -321,3 +329,104 @@ async def update_dsar_status(
         after_state={"status": new_status},
     )
     return dsar
+
+
+async def create_ai_incident(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    ai_system: AISystem,
+    title: str,
+    description: str | None,
+    severity: str,
+    owner_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID | None,
+) -> AIIncident:
+    incident = AIIncident(
+        organization_id=organization_id,
+        ai_system_id=ai_system.id,
+        title=title,
+        description=description,
+        severity=severity,
+        owner_id=owner_id,
+    )
+    db.add(incident)
+    await db.flush()
+
+    if severity == "critical":
+        risk = Risk(
+            organization_id=organization_id,
+            title=f"AI incident: {title}",
+            description=(
+                "Auto-created from a critical AI incident. Assess EU AI Act Article 73 "
+                f"serious-incident reporting obligations for {ai_system.name}."
+            ),
+            category="ai_governance",
+            likelihood="high",
+            impact="high",
+            owner_id=owner_id,
+        )
+        db.add(risk)
+        await db.flush()
+        incident.related_risk_id = risk.id
+
+        response_task = Task(
+            organization_id=organization_id,
+            title=f"Investigate: {title}",
+            description=description,
+            module="compliance",
+            priority="urgent",
+            assignee_id=owner_id,
+        )
+        db.add(response_task)
+        await db.flush()
+        incident.related_task_id = response_task.id
+
+        if owner_id is not None:
+            db.add(
+                Notification(
+                    organization_id=organization_id,
+                    user_id=owner_id,
+                    title="Critical AI incident assigned to you",
+                    body=f'"{title}" was just declared critical and needs immediate '
+                    "investigation.",
+                    link="/compliance",
+                )
+            )
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.ai_incident.created",
+        object_type="ai_incident",
+        object_id=str(incident.id),
+        after_state={
+            "ai_system_id": str(ai_system.id),
+            "severity": severity,
+            "related_risk_id": str(incident.related_risk_id) if incident.related_risk_id else None,
+        },
+    )
+    return incident
+
+
+async def update_ai_incident_status(
+    db: AsyncSession,
+    *,
+    incident: AIIncident,
+    new_status: str,
+    actor_user_id: uuid.UUID | None,
+) -> AIIncident:
+    before_status = incident.status
+    incident.status = new_status
+    await record_event(
+        db,
+        organization_id=incident.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.ai_incident.status_changed",
+        object_type="ai_incident",
+        object_id=str(incident.id),
+        before_state={"status": before_status},
+        after_state={"status": new_status},
+    )
+    return incident

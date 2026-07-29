@@ -26,9 +26,12 @@ implied to work.
   high-risk-gates-on-Approval pattern for directly-created ones, and
   auto-created linked to a high/unacceptable-risk `AISystem` — ADR-0029),
   and DSARs (`DSAR`, 30-day due date, received→in_progress→fulfilled/
-  rejected lifecycle) — but no data transfers (the remaining Privacy
-  sub-feature), no AI incidents (ai_incidents), no audits (auditor
-  portal), no vendor risk, questionnaires, or Trust Center.
+  rejected lifecycle). AI Incidents (`AIIncident`) also now exist — a
+  `critical`-severity incident reuses `SecurityIncident`'s exact
+  critical-severity chain (linked Risk + response Task + owner
+  Notification, ADR-0030) — but no data transfers (the remaining Privacy
+  sub-feature), no audits (auditor portal), no vendor risk,
+  questionnaires, or Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —

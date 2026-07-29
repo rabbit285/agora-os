@@ -676,3 +676,176 @@ async def test_minimal_risk_ai_system_does_not_create_a_dpia(client: AsyncClient
     dpias = await client.get("/api/v1/compliance/dpias")
     matching = [d for d in dpias.json() if d["ai_system_id"] == system_id]
     assert matching == []
+
+
+# --- AI Incidents ---
+
+
+async def _register_ai_system(client: AsyncClient, name: str) -> str:
+    response = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": name, "purpose": "Testing AI incidents"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]  # type: ignore[no-any-return]
+
+
+async def test_employee_role_cannot_create_ai_incident(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "ai-incident-emp1@example.com", "AI Incident Employee Org")
+    system_id = await _register_ai_system(client, "Employee-visible system")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="employee-ai-incident@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={"ai_system_id": system_id, "title": "Should fail", "severity": "low"},
+    )
+    assert response.status_code == 403
+
+
+async def test_critical_ai_incident_creates_linked_risk(client: AsyncClient) -> None:
+    await _signup(client, "ai-incident1@example.com", "AI Incident Org 1")
+    system_id = await _register_ai_system(client, "Recommendation Engine")
+
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={
+            "ai_system_id": system_id,
+            "title": "Model produced discriminatory recommendations",
+            "severity": "critical",
+        },
+    )
+    assert response.status_code == 201, response.text
+    incident = response.json()
+    assert incident["related_risk_id"] is not None
+
+    risks = await client.get("/api/v1/compliance/risks")
+    risk_titles = [r["title"] for r in risks.json()]
+    assert any("Model produced discriminatory recommendations" in t for t in risk_titles)
+
+
+async def test_critical_ai_incident_creates_response_task(client: AsyncClient) -> None:
+    await _signup(client, "ai-incident-task1@example.com", "AI Incident Task Org")
+    system_id = await _register_ai_system(client, "Fraud Model")
+
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={
+            "ai_system_id": system_id,
+            "title": "Model outage during peak hours",
+            "severity": "critical",
+        },
+    )
+    assert response.status_code == 201
+    incident = response.json()
+    assert incident["related_task_id"] is not None
+
+    tasks = await client.get("/api/v1/tasks")
+    matching = next(t for t in tasks.json() if t["id"] == incident["related_task_id"])
+    assert "Model outage during peak hours" in matching["title"]
+    assert matching["module"] == "compliance"
+    assert matching["priority"] == "urgent"
+
+
+async def test_critical_ai_incident_with_owner_notifies_owner(client: AsyncClient) -> None:
+    user_id, _ = await _signup(client, "ai-incident-owner1@example.com", "AI Incident Owner Org")
+    system_id = await _register_ai_system(client, "Chatbot")
+
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={
+            "ai_system_id": system_id,
+            "title": "Chatbot leaked another customer's data",
+            "severity": "critical",
+            "owner_id": str(user_id),
+        },
+    )
+    assert response.status_code == 201
+
+    notifications = await client.get("/api/v1/notifications")
+    assert notifications.status_code == 200
+    assert any("Chatbot leaked another customer's data" in n["body"] for n in notifications.json())
+
+
+async def test_high_severity_ai_incident_does_not_create_risk_or_task(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "ai-incident2@example.com", "AI Incident Org 2")
+    system_id = await _register_ai_system(client, "Support Assistant")
+
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={
+            "ai_system_id": system_id,
+            "title": "Occasional hallucinated citation",
+            "severity": "high",
+        },
+    )
+    assert response.status_code == 201
+    incident = response.json()
+    assert incident["related_risk_id"] is None
+    assert incident["related_task_id"] is None
+
+
+async def test_ai_incident_status_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "ai-incident3@example.com", "AI Incident Org 3")
+    system_id = await _register_ai_system(client, "Scoring Model")
+
+    created = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={"ai_system_id": system_id, "title": "Minor drift detected", "severity": "low"},
+    )
+    incident_id = created.json()["id"]
+    assert created.json()["status"] == "open"
+
+    updated = await client.patch(
+        f"/api/v1/compliance/ai-incidents/{incident_id}/status",
+        json={"status": "investigating"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "investigating"
+
+    resolved = await client.patch(
+        f"/api/v1/compliance/ai-incidents/{incident_id}/status", json={"status": "resolved"}
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["status"] == "resolved"
+
+
+async def test_ai_incident_rejects_ai_system_from_another_org(client: AsyncClient) -> None:
+    await _signup(client, "ai-incident4@example.com", "AI Incident Org 4")
+    response = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={"ai_system_id": str(uuid.uuid4()), "title": "Should fail", "severity": "low"},
+    )
+    assert response.status_code == 404
+
+
+async def test_ai_incident_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-ai-incident1@example.com", "Cross AI Incident Org 1")
+    system_id = await _register_ai_system(client, "Org 1 system")
+    created = await client.post(
+        "/api/v1/compliance/ai-incidents",
+        json={"ai_system_id": system_id, "title": "Org 1 incident", "severity": "low"},
+    )
+    incident_id = created.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(
+        other_client, "cross-ai-incident2@example.com", "Cross AI Incident Org 2"
+    )
+
+    response = await other_client.get(
+        f"/api/v1/compliance/ai-incidents/{incident_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

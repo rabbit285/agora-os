@@ -254,3 +254,30 @@ class DSAROut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AIIncidentCreate(BaseModel):
+    ai_system_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    severity: str = Field(pattern="^(low|medium|high|critical)$")
+    owner_id: uuid.UUID | None = None
+
+
+class AIIncidentStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(open|investigating|resolved|closed)$")
+
+
+class AIIncidentOut(BaseModel):
+    id: uuid.UUID
+    ai_system_id: uuid.UUID
+    title: str
+    description: str | None
+    severity: str
+    status: str
+    related_risk_id: uuid.UUID | None
+    related_task_id: uuid.UUID | None
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

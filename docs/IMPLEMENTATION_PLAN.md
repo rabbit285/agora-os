@@ -71,10 +71,16 @@ creates a linked draft DPIA — "New AI Tool Adoption"'s Privacy-assessment
 step (ADR-0029). DSAR gets a real 30-day due date (GDPR Article 12(3))
 and a received→in_progress→fulfilled/rejected lifecycle.
 
-Remaining: AI governance beyond the inventory (AI incidents), data
-transfers (Privacy's remaining sub-feature), vendor risk, questionnaires,
-audits (auditor portal), Trust Center, regulatory intelligence feed. Each
-is a substantial feature attaching to the backbone above, not a blocker
+Also done: AI Incidents (`AIIncident`, spec §50's "AI GOVERNANCE"
+`ai_incidents` table). A `critical`-severity incident reuses
+`SecurityIncident`'s exact critical-severity chain (linked Risk +
+response Task + owner Notification) for a third time (ADR-0018,
+ADR-0023, ADR-0030) rather than inventing a fourth mechanism.
+
+Remaining: data transfers (Privacy's remaining sub-feature), vendor risk,
+questionnaires, audits (auditor portal), Trust Center, regulatory
+intelligence feed. Each is a substantial feature attaching to the
+backbone above, not a blocker
 to it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
 ## Phase 4 — Security (backbone in progress)

@@ -48,9 +48,10 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + AI system inventory + RoPA/DPIA/DSAR + frameworks overview |
+| `/compliance` | [x] controls + risks + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/ai-systems/[id]` | [x] detail: status workflow, linked approval banner, assessments |
+| `/compliance/ai-incidents/[id]` | [x] detail: status workflow, linked risk banner, linked response task banner, link to the AI system |
 | `/compliance/dpias/[id]` | [x] detail: status workflow, linked approval banner (high-risk only), findings, link to a linked AI system |
 | `/compliance/dsars/[id]` | [x] detail: status workflow, due date (overdue indicator), fulfilled date, notes |
 

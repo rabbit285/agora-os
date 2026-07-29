@@ -719,3 +719,47 @@ tenant-checked `ProcessingActivity`, and — the hook itself —
 the DPIA via `GET /compliance/dpias`, not by reading the AI system alone)
 and `test_minimal_risk_ai_system_does_not_create_a_dpia` (the negative
 case, proving the hook doesn't fire for every registration).
+
+## ADR-0030 — AI Incidents reuse SecurityIncident's critical-severity chain shape for a third time
+
+**Decision**: `AIIncident` (`app/compliance/models.py`, spec §50's "AI
+GOVERNANCE" `ai_incidents` table) is always tied to a specific `AISystem`
+(`ai_system_id` non-nullable, unlike `DPIA`'s optional links). Its
+`app.compliance.service.create_ai_incident` gates on `severity ==
+"critical"` and, when true, does exactly what
+`app.secops.service.create_incident` already does for a critical
+`SecurityIncident` (ADR-0018, then ADR-0023): creates a linked Compliance
+`Risk` (`category="ai_governance"`), a response `core.Task`
+(`module="compliance"`, `priority="urgent"`), and — if the incident has
+an `owner_id` — a `core.Notification`. RBAC reuses the existing
+`compliance.ai_systems.manage` permission rather than minting a new one:
+AI incidents are managed by whoever already manages the AI System
+Inventory, not a distinct audience.
+
+**Why**: A `critical` AI incident and a `critical` security incident
+represent the same underlying obligation — assess and respond to a
+serious incident affecting people, with EU AI Act Article 73's "serious
+incident" reporting duty for high-risk AI systems playing the same role
+GDPR's breach-notification duty plays for `SecurityIncident` — so the
+same real chain (Risk for the regulatory-obligation tracking, Task for
+the response work, Notification for the owner) is the correct reuse, not
+a coincidence to copy blindly. This is the third time this exact chain
+shape has been used (Security's own incidents, then reused again as this
+build's established pattern for "a critical incident needs a tracked
+risk + assigned response + notified owner"), continuing spec §80's "do
+not build disconnected modules" discipline: a fourth incident type in a
+later phase should reach for this same shape before inventing a new one.
+`AIIncident` intentionally does *not* copy `SecurityIncident`'s full
+detected→triage→investigation→containment→eradication→recovery→postmortem→closed
+lifecycle — that vocabulary is security-incident-response-specific and
+wouldn't map naturally onto "a model gave biased loan decisions"; a
+simpler open→investigating→resolved→closed lifecycle is what's genuinely
+true for an AI incident, not a forced parallel. Tested in
+`tests/test_compliance.py`: RBAC denial,
+`test_critical_ai_incident_creates_linked_risk`,
+`test_critical_ai_incident_creates_response_task`,
+`test_critical_ai_incident_with_owner_notifies_owner` (mirroring
+`test_security.py`'s equivalent tests almost line for line, proving the
+reuse is real, not just described), the negative case
+(`test_high_severity_ai_incident_does_not_create_risk_or_task`), the
+status lifecycle, and tenant isolation.

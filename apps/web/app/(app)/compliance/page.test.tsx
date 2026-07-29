@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DPIA, DSAR, ProcessingActivity } from "@/lib/types";
+import type { AIIncident, AISystem, DPIA, DSAR, ProcessingActivity } from "@/lib/types";
 
 import CompliancePage from "./page";
 
@@ -55,6 +55,31 @@ const DSAR_FIXTURE: DSAR = {
   created_at: new Date().toISOString(),
 };
 
+const AI_SYSTEM_FIXTURE: AISystem = {
+  id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  name: "Resume Screening Assistant",
+  vendor: null,
+  purpose: "Ranks job applicants",
+  risk_classification: "high",
+  status: "in_review",
+  owner_id: null,
+  approval_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+  created_at: new Date().toISOString(),
+};
+
+const AI_INCIDENT_FIXTURE: AIIncident = {
+  id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+  ai_system_id: AI_SYSTEM_FIXTURE.id,
+  title: "Resume screener showed gender bias",
+  description: null,
+  severity: "critical",
+  status: "open",
+  related_risk_id: "11111111-2222-3333-4444-555555555555",
+  related_task_id: "66666666-7777-8888-9999-000000000000",
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -68,17 +93,23 @@ function mockRoutes(overrides: {
   processingActivities?: ProcessingActivity[];
   dpias?: DPIA[];
   dsars?: DSAR[];
+  aiSystems?: AISystem[];
+  aiIncidents?: AIIncident[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
     if (path === "/api/v1/compliance/risks") return [];
-    if (path === "/api/v1/compliance/ai-systems") return [];
+    if (path === "/api/v1/compliance/ai-systems") return overrides.aiSystems ?? [];
     if (path === "/api/v1/compliance/frameworks") return [];
     if (path === "/api/v1/compliance/processing-activities") {
       return overrides.processingActivities ?? [];
     }
     if (path === "/api/v1/compliance/dpias") return overrides.dpias ?? [];
     if (path === "/api/v1/compliance/dsars") return overrides.dsars ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/ai-incidents") {
+      return { ...AI_INCIDENT_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/ai-incidents") return overrides.aiIncidents ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -135,5 +166,53 @@ describe("CompliancePage — Privacy sections", () => {
     renderPage();
 
     expect(await screen.findByText("Linked to an AI system")).toBeInTheDocument();
+  });
+});
+
+describe("CompliancePage — AI Incidents section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders logged incidents with severity and the linked AI system's name", async () => {
+    mockRoutes({ aiSystems: [AI_SYSTEM_FIXTURE], aiIncidents: [AI_INCIDENT_FIXTURE] });
+    renderPage();
+
+    expect(await screen.findByText("Resume screener showed gender bias")).toBeInTheDocument();
+    // "Resume Screening Assistant" also appears in the AI System Inventory
+    // list and the incident-logging dropdown, so there's more than one match.
+    expect((await screen.findAllByText("Resume Screening Assistant")).length).toBeGreaterThan(0);
+    expect(screen.getByText("critical")).toBeInTheDocument();
+  });
+
+  it("logs a new AI incident against the selected system", async () => {
+    mockRoutes({ aiSystems: [AI_SYSTEM_FIXTURE] });
+    renderPage();
+    const user = userEvent.setup();
+
+    // Wait for the AI system list to load before the dropdown has the
+    // option to select.
+    await screen.findAllByText(AI_SYSTEM_FIXTURE.name);
+    await user.selectOptions(
+      screen.getByDisplayValue("Select AI system…"),
+      AI_SYSTEM_FIXTURE.id,
+    );
+    await user.type(
+      screen.getByPlaceholderText("Incident title"),
+      "Model drifted after retraining",
+    );
+    await user.selectOptions(screen.getByDisplayValue("Low"), "critical");
+    await user.click(screen.getByRole("button", { name: "Log incident" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/ai-incidents", {
+        method: "POST",
+        body: {
+          ai_system_id: AI_SYSTEM_FIXTURE.id,
+          title: "Model drifted after retraining",
+          severity: "critical",
+        },
+      }),
+    );
   });
 });

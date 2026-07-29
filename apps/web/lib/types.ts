@@ -241,6 +241,21 @@ export type DSAR = {
   created_at: string;
 };
 
+export type AIIncidentStatus = "open" | "investigating" | "resolved" | "closed";
+
+export type AIIncident = {
+  id: string;
+  ai_system_id: string;
+  title: string;
+  description: string | null;
+  severity: Severity;
+  status: AIIncidentStatus;
+  related_risk_id: string | null;
+  related_task_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

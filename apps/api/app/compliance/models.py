@@ -34,6 +34,16 @@ gets its own real `core.Approval`, gating `approved` the same way
 `AISystem` does (GDPR Article 35: a DPIA concluding high residual risk
 requires supervisory-authority consultation / formal sign-off before the
 processing can proceed).
+
+`AIIncident` adds spec §50's "AI GOVERNANCE" `ai_incidents` table — a
+post-deployment incident log for an `AISystem` (EU AI Act Article 73's
+"serious incident" reporting obligation for high-risk systems). A
+`critical`-severity incident auto-creates a linked Compliance `Risk` and
+a response `core.Task` (+ owner `core.Notification`), reusing the exact
+chain `app.secops.service.create_incident` already established for
+`SecurityIncident` (ADR-0018, ADR-0023) — this build's third use of that
+specific hook shape, not a new mechanism. See
+app.compliance.service.create_ai_incident and docs/DECISIONS.md ADR-0030.
 """
 
 from __future__ import annotations
@@ -321,5 +331,40 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class AIIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A post-deployment incident involving an AI system (spec §50's AI
+    Governance `ai_incidents` — EU AI Act Article 73's "serious incident"
+    reporting obligation for high-risk systems). Always tied to a specific
+    `AISystem`, unlike `DPIA` which may stand alone."""
+
+    __tablename__ = "ai_incidents"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    ai_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # low | medium | high | critical
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    # open | investigating | resolved | closed
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    # Cross-module hook (spec §69-style chain, reusing SecurityIncident's
+    # exact shape — ADR-0018/ADR-0023/ADR-0030): a `critical` incident
+    # auto-creates a linked Compliance Risk.
+    related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
+    )
+    # Same hook: a `critical` incident also creates a response core.Task.
+    related_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

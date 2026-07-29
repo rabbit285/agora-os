@@ -63,7 +63,7 @@ erDiagram
 |---|---|---|
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
 | Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
-| AI Governance | ~~ai_systems, ai_assessments~~ (implemented — see below), ai_incidents (not yet) | 3 |
+| AI Governance | ~~ai_systems, ai_assessments, ai_incidents~~ (implemented — see below) | 3 |
 | Privacy | ~~processing_activities, dpias, dsars~~ (implemented — see below), data_transfers (not yet) | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
@@ -112,6 +112,9 @@ erDiagram
   PROCESSING_ACTIVITY ||--o{ DPIA : "assessed by"
   AI_SYSTEM }o--o| DPIA : "high/unacceptable risk creates"
   DPIA }o--o| APPROVAL : "directly-created high risk requires"
+  AI_SYSTEM ||--o{ AI_INCIDENT : has
+  AI_INCIDENT }o--o| RISK : "critical severity links to"
+  AI_INCIDENT }o--o| TASK : "critical severity creates"
 ```
 
 - **Framework / Requirement** — global catalog data (GDPR, EU AI Act, ISO
@@ -158,11 +161,22 @@ erDiagram
   rather than creating a redundant second one. DSAR gets
   `due_at = created_at + 30 days` (GDPR Article 12(3)) and a
   received→in_progress→fulfilled/rejected lifecycle.
+- **AIIncident** — spec §50's "AI GOVERNANCE" `ai_incidents` table, always
+  tied to a specific AISystem (EU AI Act Article 73's "serious incident"
+  reporting obligation). A `critical`-severity incident automatically
+  creates a linked Compliance **Risk** and a response **Task** (+ owner
+  **Notification** if set) — reusing `SecurityIncident`'s exact
+  critical-severity chain shape (ADR-0018, ADR-0023) for a third time
+  (ADR-0030), rather than inventing a fourth mechanism. Its own
+  open→investigating→resolved→closed lifecycle is deliberately simpler
+  than `SecurityIncident`'s eight-stage IR vocabulary, which is
+  security-response-specific and doesn't map naturally onto "a model gave
+  biased decisions."
 
 Not modeled yet: framework/evidence versioning, audits (auditor portal),
-ai_incidents, data transfers (the remaining Privacy sub-feature), vendor
-risk, questionnaires, Trust Center — each a substantial feature attaching
-to this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
+data transfers (the remaining Privacy sub-feature), vendor risk,
+questionnaires, Trust Center — each a substantial feature attaching to
+this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 4 entities (implemented — Security backbone)
 

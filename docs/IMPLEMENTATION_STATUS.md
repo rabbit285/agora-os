@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory) and Privacy (RoPA/DPIA/DSAR) Compliance extensions that together give a fourth scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents) and Privacy (RoPA/DPIA/DSAR) Compliance extensions that together give a fourth scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end)
 
 ## Platform
 
@@ -71,9 +71,13 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] RBAC: new `compliance.privacy.manage` permission granted to `dpo` (extending its existing grant) and `legal` (dormant since Phase 1, first activated here)
 - [x] Frontend: RoPA/DPIA/DSAR sections on `/compliance` (create forms, lists) + `/compliance/dpias/[id]` detail (status dropdown, linked-Approval banner, findings) + `/compliance/dsars/[id]` detail (status dropdown, due date, notes)
 - [x] Seed script: 1 processing activity, 1 medium-risk standalone DPIA linked to it, 1 fulfilled DSAR, 1 open DSAR
+- [x] AI Incidents: `AIIncident` model + migration — always tied to a specific `AISystem` (EU AI Act Art. 73 "serious incident")
+- [x] Cross-module hook: a `critical`-severity AI incident reuses `SecurityIncident`'s exact chain — a linked Compliance `Risk`, a response `core.Task`, and an owner `core.Notification` if set (tested, ADR-0030)
+- [x] `/api/v1/compliance/ai-incidents` routes — create/list/detail/status; tenant-isolated, RBAC-gated via the existing `compliance.ai_systems.manage` permission (no new permission minted)
+- [x] Frontend: AI Incidents section on `/compliance` (log form with an AI-system picker, list) + `/compliance/ai-incidents/[id]` detail (status workflow, linked-Risk banner, linked-Task banner)
+- [x] Seed script: 1 critical AI incident against the demo org's high-risk AI system (linked Risk + response Task)
 - [ ] Framework/evidence versioning — not modeled
 - [ ] Audits (auditor portal), regulatory intelligence feed — not started
-- [ ] AI incidents (ai_incidents) — not started
 - [ ] Data transfers (the remaining Privacy sub-feature) — not started
 - [ ] Vendor risk, questionnaires, Trust Center — not started
 
@@ -194,15 +198,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Auth flow tests (8 tests, passing)
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
-- [x] Compliance tests (30 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests — RBAC grant/denial, high/unacceptable-risk auto-approval creation, minimal-risk no-approval path, approval-gated status transition, assessments, tenant isolation, plus 12 Privacy tests — RoPA/DPIA/DSAR RBAC (`dpo` grant, `legal`'s first activation scoped correctly), the 30-day DSAR due date and fulfilled_at lifecycle, the standalone high-risk DPIA's Approval gate, the low-risk DPIA's ungated approval, a DPIA linking to a tenant-checked processing activity, and the AI-system→DPIA hook firing only for high/unacceptable risk)
+- [x] Compliance tests (38 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests — RBAC grant/denial, high/unacceptable-risk auto-approval creation, minimal-risk no-approval path, approval-gated status transition, assessments, tenant isolation, 12 Privacy tests — RoPA/DPIA/DSAR RBAC (`dpo` grant, `legal`'s first activation scoped correctly), the 30-day DSAR due date and fulfilled_at lifecycle, the standalone high-risk DPIA's Approval gate, the low-risk DPIA's ungated approval, a DPIA linking to a tenant-checked processing activity, and the AI-system→DPIA hook firing only for high/unacceptable risk, plus 8 AI Incident tests — RBAC denial, the critical-severity chain's linked Risk/response Task/owner Notification (mirroring `test_security.py`'s equivalent tests almost line for line), the negative case for non-critical severity, the status lifecycle, and tenant isolation)
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (50 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1; OAuth provider-catalog honesty across all six providers with scope previews, RBAC denial, full start→callback→connected round trip against the mock adapter (proven generic via a second, non-HubSpot provider), expired/unknown-state/unknown-provider rejection, refresh/health/sync/disconnect lifecycle with the durable-sync split (`create_sync_run`/`execute_sync_run`) exercised directly including its failure path, an audit-trail assertion across the full OAuth lifecycle, tenant isolation; plus pure adapter unit tests for every provider's authorization-URL construction, scope preview, mock-fallback labeling, and the two no-refresh providers' explicit errors — no network, no live credentials needed)
-- [x] 149/149 total backend, ruff+mypy strict clean
-- [x] Frontend: 8 Vitest + React Testing Library tests — 5 for `/settings/integrations` (provider catalog Connect/Not-configured states, permission-preview scope disclosure gating the real OAuth-start call, connected-connection controls, in-flight sync disabling "Sync now", disconnect) and 3 for `/compliance`'s Privacy sections (RoPA/DPIA/DSAR rendering, logging a new DSAR, the AI-system-linked DPIA's hint)
+- [x] 157/157 total backend, ruff+mypy strict clean
+- [x] Frontend: 10 Vitest + React Testing Library tests — 5 for `/settings/integrations` (provider catalog Connect/Not-configured states, permission-preview scope disclosure gating the real OAuth-start call, connected-connection controls, in-flight sync disabling "Sync now", disconnect), 3 for `/compliance`'s Privacy sections (RoPA/DPIA/DSAR rendering, logging a new DSAR, the AI-system-linked DPIA's hint), and 2 for the AI Incidents section (rendering with severity/linked-system name, logging a new incident)
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -226,8 +230,8 @@ explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
 Phases 3–7 (Compliance, Security, Sales, Support, Automation) have their
 core backbones (see their sections above) but not their larger
-sub-features (audits, AI incidents, data transfers (Privacy's remaining
-sub-feature), vendor risk, Trust Center, identity/cloud provider
+sub-features (audits, data transfers (Privacy's remaining sub-feature),
+vendor risk, Trust Center, identity/cloud provider
 integrations, incident playbooks, sequences/campaigns, SLA/QA scoring,
 the full workflow step vocabulary and most non-manual triggers). Phase 8
 (Cross-Module Intelligence) has three full scenarios implemented (Support

@@ -152,9 +152,9 @@ Automation) now have a real, tested backbone.
 - [x] RBAC: `ai_governance_manager` role (dormant since Phase 1) activated; `dpo` also granted
 - [x] Seed script: 1 high-risk system (pending approval), 1 minimal-risk system (approved, 1 assessment)
 - [x] Backend tests: 101 passing total; ruff/mypy clean
-- [ ] AI incidents and the rest of the "New AI Tool Adoption" chain (vendor
-      questionnaire, EU AI Act applicability/DPA review as distinct steps,
-      approved-use policy) — not started
+- [ ] The rest of the "New AI Tool Adoption" chain (vendor questionnaire,
+      EU AI Act applicability/DPA review as distinct steps, approved-use
+      policy) — not started (AI incidents are done — see below)
 
 ## Phase 3 extension (Privacy: RoPA/DPIA/DSAR) — added after the OAuth framework completion
 
@@ -168,6 +168,15 @@ Automation) now have a real, tested backbone.
 - [x] Backend tests: 149 passing total; ruff/mypy clean
 - [x] Frontend tests: 3 new Vitest tests (8 total) covering the RoPA/DPIA/DSAR sections, DSAR creation, and the AI-system-linked DPIA hint
 - [ ] Data transfers (Privacy's remaining sub-feature) — not started
+
+## Phase 3 extension (AI Incidents) — added after the Privacy slice
+
+- [x] AIIncident model + migration — always tied to a specific AISystem (EU AI Act Art. 73 "serious incident")
+- [x] Cross-module hook: a `critical`-severity AI incident reuses SecurityIncident's exact chain — linked Compliance Risk + response core.Task + owner core.Notification if set (tested, ADR-0030) — the third use of this specific chain shape (ADR-0018, ADR-0023)
+- [x] Tenant-isolated `/api/v1/compliance/ai-incidents` API (reuses the existing `compliance.ai_systems.manage` permission, no new permission minted) + frontend (AI Incidents section on `/compliance`, `/compliance/ai-incidents/[id]` detail with linked-Risk and linked-Task banners)
+- [x] Seed script: 1 critical AI incident against the demo org's high-risk AI system
+- [x] Backend tests: 157 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (10 total) covering the AI Incidents section rendering and logging a new incident
 
 See `docs/RESUME_BUILD.md` for the next phase.
 

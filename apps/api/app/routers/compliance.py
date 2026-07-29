@@ -11,6 +11,7 @@ from app.compliance.models import (
     DPIA,
     DSAR,
     AIAssessment,
+    AIIncident,
     AISystem,
     Control,
     ControlAssessment,
@@ -25,6 +26,9 @@ from app.compliance.models import (
 from app.compliance.schemas import (
     AIAssessmentCreate,
     AIAssessmentOut,
+    AIIncidentCreate,
+    AIIncidentOut,
+    AIIncidentStatusUpdate,
     AISystemCreate,
     AISystemDetailOut,
     AISystemOut,
@@ -53,12 +57,14 @@ from app.compliance.schemas import (
     RiskUpdate,
 )
 from app.compliance.service import (
+    create_ai_incident,
     create_dpia,
     create_dsar,
     decide_ai_system_status,
     decide_dpia_status,
     record_assessment,
     register_ai_system,
+    update_ai_incident_status,
     update_dsar_status,
 )
 from app.core.models import File
@@ -654,3 +660,71 @@ async def update_dsar_status_endpoint(
     await db.commit()
     await db.refresh(dsar)
     return dsar
+
+
+@router.get("/ai-incidents", response_model=list[AIIncidentOut])
+async def list_ai_incidents(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[AIIncident]:
+    result = await db.execute(
+        select(AIIncident)
+        .where(AIIncident.organization_id == context.organization_id)
+        .order_by(AIIncident.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/ai-incidents", response_model=AIIncidentOut, status_code=status.HTTP_201_CREATED)
+async def create_ai_incident_endpoint(
+    payload: AIIncidentCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AIIncident:
+    ai_system = await _get_org_ai_system(db, payload.ai_system_id, context.organization_id)
+    incident = await create_ai_incident(
+        db,
+        organization_id=context.organization_id,
+        ai_system=ai_system,
+        title=payload.title,
+        description=payload.description,
+        severity=payload.severity,
+        owner_id=payload.owner_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(incident)
+    return incident
+
+
+async def _get_org_ai_incident(
+    db: AsyncSession, incident_id: uuid.UUID, organization_id: uuid.UUID
+) -> AIIncident:
+    incident = await db.get(AIIncident, incident_id)
+    if incident is None or incident.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI incident not found")
+    return incident
+
+
+@router.get("/ai-incidents/{incident_id}", response_model=AIIncidentOut)
+async def get_ai_incident(
+    incident_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> AIIncident:
+    return await _get_org_ai_incident(db, incident_id, context.organization_id)
+
+
+@router.patch("/ai-incidents/{incident_id}/status", response_model=AIIncidentOut)
+async def update_ai_incident_status_endpoint(
+    incident_id: uuid.UUID,
+    payload: AIIncidentStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AIIncident:
+    incident = await _get_org_ai_incident(db, incident_id, context.organization_id)
+    incident = await update_ai_incident_status(
+        db, incident=incident, new_status=payload.status, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(incident)
+    return incident

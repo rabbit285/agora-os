@@ -351,6 +351,19 @@ dsars                      -- Data Subject Access Requests (GDPR Art. 15-20)
   notes TEXT NULL
   assigned_to UUID FK users NULL
   created_at, updated_at
+
+ai_incidents               -- AI Governance incidents (EU AI Act Art. 73 "serious incident")
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  ai_system_id UUID FK ai_systems NOT NULL
+  title TEXT NOT NULL
+  description TEXT NULL
+  severity TEXT NOT NULL         -- low|medium|high|critical
+  status TEXT NOT NULL DEFAULT 'open'  -- open|investigating|resolved|closed
+  related_risk_id UUID FK risks NULL     -- cross-module hook, see below
+  related_task_id UUID FK tasks NULL     -- cross-module hook, see below
+  owner_id UUID FK users NULL
+  created_at, updated_at
 ```
 
 A failed `control_assessments` row (`status = 'fail'`) automatically
@@ -370,6 +383,14 @@ Approval already covers sign-off) — the same hook's second extension,
 completing the chain's "Privacy assessment" step (ADR-0029). A `dpias`
 row created directly with `risk_level = 'high'` gets its own real
 `approvals` row instead, gated the same way `ai_systems` is.
+
+An `ai_incidents` row with `severity = 'critical'` automatically creates
+a linked `risks` row and a `core.tasks` response row (plus a
+`core.notifications` row if `owner_id` is set), via
+`app/compliance/service.py::create_ai_incident` — reusing
+`app/secops/service.py::create_incident`'s exact critical-severity chain
+shape for a third time (ADR-0018, ADR-0023, ADR-0030), not a new
+mechanism.
 
 ## Tables (Phase 4 — Security)
 

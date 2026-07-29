@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
+import { SeverityBadge } from "@/components/severity-badge";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import type {
+  AIIncident,
   AIRiskClassification,
   AISystem,
   Control,
@@ -23,6 +25,7 @@ import type {
   LegalBasis,
   ProcessingActivity,
   Risk,
+  Severity,
 } from "@/lib/types";
 
 const selectClassName =
@@ -200,6 +203,113 @@ function AISystemsSection() {
                 <div className="flex items-center gap-2">
                   <StatusBadge status={system.risk_classification} />
                   <StatusBadge status={system.status} />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AIIncidentsSection() {
+  const queryClient = useQueryClient();
+  const [aiSystemId, setAiSystemId] = useState("");
+  const [title, setTitle] = useState("");
+  const [severity, setSeverity] = useState<Severity>("low");
+
+  const { data: aiSystems } = useQuery<AISystem[]>({
+    queryKey: ["compliance", "ai-systems"],
+    queryFn: () => apiFetch<AISystem[]>("/api/v1/compliance/ai-systems"),
+  });
+
+  const { data: incidents } = useQuery<AIIncident[]>({
+    queryKey: ["compliance", "ai-incidents"],
+    queryFn: () => apiFetch<AIIncident[]>("/api/v1/compliance/ai-incidents"),
+  });
+
+  const createIncident = useMutation({
+    mutationFn: () =>
+      apiFetch<AIIncident>("/api/v1/compliance/ai-incidents", {
+        method: "POST",
+        body: { ai_system_id: aiSystemId, title, severity },
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setSeverity("low");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "ai-incidents"] });
+    },
+  });
+
+  const aiSystemNames = new Map((aiSystems ?? []).map((s) => [s.id, s.name]));
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        AI Incidents
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <select
+            className={selectClassName}
+            value={aiSystemId}
+            onChange={(e) => setAiSystemId(e.target.value)}
+          >
+            <option value="">Select AI system…</option>
+            {aiSystems?.map((system) => (
+              <option key={system.id} value={system.id}>
+                {system.name}
+              </option>
+            ))}
+          </select>
+          <Input
+            placeholder="Incident title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <select
+            className={selectClassName}
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value as Severity)}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+          <Button
+            disabled={!aiSystemId || !title.trim() || createIncident.isPending}
+            onClick={() => createIncident.mutate()}
+          >
+            Log incident
+          </Button>
+        </CardContent>
+        <CardContent className="pt-0 pb-4">
+          <p className="text-xs text-neutral-400">
+            A critical incident automatically creates a linked Risk and response Task, and
+            notifies the incident owner (EU AI Act Article 73 serious-incident obligations).
+          </p>
+        </CardContent>
+      </Card>
+      {incidents?.length === 0 && (
+        <p className="text-sm text-neutral-500">No AI incidents logged yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {incidents?.map((incident) => (
+          <Link key={incident.id} href={`/compliance/ai-incidents/${incident.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{incident.title}</div>
+                  <div className="text-xs text-neutral-400">
+                    {aiSystemNames.get(incident.ai_system_id) ?? "Unknown system"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <SeverityBadge severity={incident.severity} />
+                  <StatusBadge status={incident.status} />
                 </div>
               </CardContent>
             </Card>
@@ -530,6 +640,7 @@ export default function CompliancePage() {
       <ControlsSection />
       <RisksSection />
       <AISystemsSection />
+      <AIIncidentsSection />
       <ProcessingActivitiesSection />
       <DPIASection />
       <DSARSection />
