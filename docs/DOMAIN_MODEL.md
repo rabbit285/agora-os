@@ -66,7 +66,7 @@ erDiagram
 | AI Governance | ai_systems, ai_assessments, ai_incidents | 3 |
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
-| Sales | accounts, contacts, leads, sequences, opportunities | 5 |
+| Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
 | Support | customers, tickets, support_conversations, knowledge_articles | 6 |
 | Automation | workflows, workflow_versions, workflow_runs | 7 |
 | Integrations | integration_connections, webhooks, api_keys | 9 |
@@ -161,6 +161,37 @@ playbooks/timeline/evidence sub-objects (spec §19 lists these as part of
 the incident workspace), vulnerability scanner ingestion. The
 `SecurityFinding.category` field anticipates these without modeling their
 ingestion pipelines yet.
+
+## Phase 5 entities (implemented — Sales backbone)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ SALES_ACCOUNT : has
+  SALES_ACCOUNT ||--o{ SALES_CONTACT : has
+  SALES_ACCOUNT ||--o{ SALES_OPPORTUNITY : has
+  SALES_ACCOUNT ||--o{ SALES_LEAD : "may relate to"
+  SALES_CONTACT ||--o{ SALES_LEAD : "may relate to"
+  SALES_CONTACT ||--o{ OUTREACH_MESSAGE : "target of"
+```
+
+- **Account / Contact** — an organization's own CRM data (tenant-scoped,
+  unlike Compliance's catalog). `Contact.do_not_contact` is the
+  suppression flag the cross-module hook checks.
+- **Lead** — loosely linked to an Account/Contact (both nullable — a lead
+  may arrive before either exists).
+- **Opportunity** — belongs to exactly one Account; moves through a
+  pipeline stage enum.
+- **OutreachMessage** — a draft/sent/blocked record. `send_outreach_message`
+  (`app/sales/service.py`) refuses to mark a message `sent` if the target
+  Contact is suppressed, setting it `blocked` instead (spec §91, ADR-0019)
+  — the explicit "Compliance governs Sales" connection, implemented as a
+  real, tested check rather than an aspiration.
+
+Not modeled yet: sequences/campaigns (multi-step outreach automation —
+spec §25), lead scoring beyond a raw numeric field, meetings, sales
+conversations/inbox, pipeline events, playbooks. Real lead-finding,
+enrichment, and message sending all depend on external connectors that
+don't exist yet (spec's progressive trust model, §B1).
 
 ## Cross-module entity linking (spec §81)
 

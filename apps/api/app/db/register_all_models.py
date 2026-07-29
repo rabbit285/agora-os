@@ -24,4 +24,5 @@ from app.compliance import models as _compliance_models  # noqa: F401
 from app.core import models as _core_models  # noqa: F401
 from app.identity import models as _identity_models  # noqa: F401
 from app.knowledge import models as _knowledge_models  # noqa: F401
+from app.sales import models as _sales_models  # noqa: F401
 from app.secops import models as _secops_models  # noqa: F401

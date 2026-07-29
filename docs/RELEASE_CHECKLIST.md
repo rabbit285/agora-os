@@ -1,9 +1,9 @@
 # Release Checklist
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
-"Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial Phase 3
-+ partial Phase 4 / local-only** checkpoint, not a production release —
-most items below are correctly unchecked.
+"Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
+Phases 3-5 / local-only** checkpoint, not a production release — most
+items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
 
@@ -67,11 +67,21 @@ most items below are correctly unchecked.
       incident timeline/evidence/playbooks — not started, need the
       connector SDK (Phase 9) to do properly
 
-See `docs/RESUME_BUILD.md` for the next phase (Sales).
+## Phase 5 (Sales) — backbone complete, sub-features remain
+
+- [x] Account, Contact, Lead, Opportunity, OutreachMessage models + migration
+- [x] Cross-module hook: suppressed contact blocks outreach send (tested, ADR-0019)
+- [x] Tenant-isolated `/api/v1/sales` API + frontend (overview, account detail)
+- [x] RBAC: `sales_manager`/`sales_representative` roles granted sales permissions, tested
+- [x] Seed script: demo org account, contacts (1 suppressed), opportunity, outreach (1 sent, 1 blocked)
+- [x] Backend tests: 51 passing total; ruff/mypy clean
+- [ ] Sequences/campaigns, lead finder/enrichment, meetings, sales inbox —
+      not started, need external connectors (Phase 9) for the real version
+
+See `docs/RESUME_BUILD.md` for the next phase (Customer Support).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 5 — Sales
 - [ ] Phase 6 — Customer Support
 - [ ] Phase 7 — Business Automation (workflow builder)
 - [ ] Phase 8 — Cross-module intelligence

@@ -7,9 +7,9 @@ implied to work.
 
 ## Product scope
 
-- **Sales, Support, and Automation** (three of the five primary product
-  modules) have zero domain logic — their nav entries route to a
-  `/coming-soon` page. **Compliance** and **Security** have their core
+- **Support and Automation** (two of the five primary product modules)
+  have zero domain logic — their nav entries route to a `/coming-soon`
+  page. **Compliance**, **Security**, and **Sales** have their core
   backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
 - **Compliance**: no audits (auditor portal), AI governance, privacy
@@ -23,14 +23,22 @@ implied to work.
   Communication, Root Cause, Lessons Learned tabs). These realistically
   need the connector SDK (Phase 9) to do properly rather than one-off
   per-provider integrations.
+- **Sales**: outreach "sending" doesn't call a real email/LinkedIn
+  provider — it only transitions the message's own status (`sent` or
+  `blocked`), gated by a genuine compliance check
+  (`Contact.do_not_contact`), not a stub of one. No sequences/campaigns
+  (multi-step automation), no lead-finding/enrichment (needs external
+  data connectors), no meetings or sales inbox. The suppression check
+  itself is a single boolean, not the fuller jurisdiction/consent/
+  marketing-basis engine spec §91 describes (ADR-0019).
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,
-  Security, and Sales context in one answer) can't work yet — Compliance
-  and Security data exist now but nothing wires either into Copilot
-  retrieval, and Sales doesn't exist at all. There's also no cross-module
-  intent router — every question goes through the same single retrieval
-  path over Knowledge chunks only.
+  Security, and Sales context in one answer) can't work yet — Compliance,
+  Security, and Sales data all exist now but nothing wires any of them
+  into Copilot retrieval. There's also no cross-module intent router —
+  every question goes through the same single retrieval path over
+  Knowledge chunks only.
 - **Compliance frameworks/requirements are a fixed seeded catalog**, not
   an editable admin feature — GDPR, EU AI Act, and ISO 27001 are seeded
   with a handful of representative requirements each (not the complete

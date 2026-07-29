@@ -255,3 +255,23 @@ Compliance → core). Tested in
 `tests/test_security.py::test_critical_incident_creates_linked_compliance_risk`,
 which asserts the risk is visible through the generic
 `/api/v1/compliance/risks` endpoint.
+
+## ADR-0019 — A per-contact suppression flag gates outreach sending, not a full consent engine
+
+**Decision**: `app/sales/service.py::send_outreach_message` checks a
+single `Contact.do_not_contact` boolean before allowing an outreach
+message to transition from `draft` to `sent`; if set, the message is
+marked `blocked` with a reason instead.
+
+**Why**: Spec §91 describes a much richer check ("jurisdiction, data
+source, marketing basis, opt-out, suppression, organization policy") —
+implementing all of that would require modeling consent records, data
+provenance, and per-country marketing rules that don't exist anywhere
+else in this build yet. A boolean suppression flag is the simplest real
+instance of "Compliance governs Sales," genuinely enforced (a suppressed
+contact truly cannot be sent to, tested in
+`tests/test_sales.py::test_suppressed_contact_blocks_outreach_send`), and
+is the natural foundation the richer engine would extend rather than
+replace. No real email/LinkedIn provider exists yet either (progressive
+trust model, spec §B1) — "sending" only transitions this row's status,
+but the compliance gate in front of it is not a stub.

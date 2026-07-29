@@ -70,11 +70,23 @@ Detail page, Security Policies. Incident workspace has a status workflow
 but not the full Timeline/Affected Assets/Evidence/Communication/Root
 Cause/Lessons Learned tab structure spec §19 describes.
 
-## SALES / SUPPORT / AUTOMATION
+## SALES
 
-Not started — Phases 5–7 respectively. Routes will be added under
-`apps/web/app/(app)/sales`, `/support`, `/automation` matching the
-navigation tree in spec §6.
+| Route | Status |
+|---|---|
+| `/sales` | [x] accounts + pipeline overview |
+| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities |
+
+Not yet built (spec §67 lists these under Sales): ICP Builder, Lead
+Finder, Lead Detail, Contact Detail (standalone), Sequences/Sequence
+Builder, Campaigns, Sales Inbox, Meetings, Opportunity Detail (standalone),
+Sales Intelligence.
+
+## SUPPORT / AUTOMATION
+
+Not started — Phases 6–7 respectively. Routes will be added under
+`apps/web/app/(app)/support`, `/automation` matching the navigation tree
+in spec §6.
 
 ## SETTINGS
 

@@ -222,3 +222,72 @@ export type SecurityIncident = {
   closed_at: string | null;
   created_at: string;
 };
+
+export type SalesAccount = {
+  id: string;
+  name: string;
+  industry: string | null;
+  website: string | null;
+  employee_count: number | null;
+  icp_score: number | null;
+  status: "prospect" | "customer" | "churned";
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type SalesContact = {
+  id: string;
+  full_name: string;
+  email: string;
+  job_title: string | null;
+  account_id: string | null;
+  do_not_contact: boolean;
+  created_at: string;
+};
+
+export type SalesLead = {
+  id: string;
+  source: string | null;
+  status: "new" | "qualified" | "contacted" | "disqualified" | "converted";
+  score: number | null;
+  account_id: string | null;
+  contact_id: string | null;
+  created_at: string;
+};
+
+export type OpportunityStage =
+  | "prospecting"
+  | "qualification"
+  | "proposal"
+  | "negotiation"
+  | "closed_won"
+  | "closed_lost";
+
+export type SalesOpportunity = {
+  id: string;
+  account_id: string;
+  title: string;
+  stage: OpportunityStage;
+  value: number | null;
+  probability: number | null;
+  expected_close_at: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type SalesAccountDetail = SalesAccount & {
+  contacts: SalesContact[];
+  opportunities: SalesOpportunity[];
+};
+
+export type OutreachMessage = {
+  id: string;
+  contact_id: string;
+  channel: "email" | "linkedin";
+  subject: string | null;
+  body: string;
+  status: "draft" | "sent" | "blocked";
+  blocked_reason: string | null;
+  created_at: string;
+  sent_at: string | null;
+};

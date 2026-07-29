@@ -77,11 +77,20 @@ timeline/evidence/playbooks as first-class sub-objects. Each requires the
 Integrations/connector SDK (Phase 9) to do properly rather than one-off
 per-provider code — see `docs/RESUME_BUILD.md`.
 
-## Phase 5 — Sales
+## Phase 5 — Sales (backbone in progress)
 
-ICP builder, lead finder, enrichment, accounts/contacts, outreach
-sequences with compliance-gated sending, campaigns, sales inbox, meeting
-assistant, pipeline intelligence, CRM connectors.
+Done: accounts, contacts, leads, opportunities/pipeline, and
+compliance-gated outreach sending (a suppressed contact cannot be sent
+to — spec §91, ADR-0019). This is the "compliance-gated sending" item
+from the original scope, implemented at the simplest real level (a
+suppression flag) rather than the full jurisdiction/consent engine.
+
+Remaining: ICP builder, lead finder, enrichment, outreach sequences
+(multi-step automation), campaigns, sales inbox, meeting assistant,
+richer pipeline intelligence, CRM connectors. Real lead-finding and
+enrichment need external data sources; real sending needs an email/
+LinkedIn provider — both are progressive-trust-model connector work
+(Phase 9), not blockers to the backbone above.
 
 ## Phase 6 — Customer Support
 

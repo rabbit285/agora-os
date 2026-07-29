@@ -41,6 +41,22 @@ const STATUS_VARIANTS: Record<
   recovery: "secondary",
   postmortem: "secondary",
   closed: "success",
+  prospect: "secondary",
+  customer: "success",
+  churned: "outline",
+  qualified: "success",
+  contacted: "warning",
+  disqualified: "outline",
+  converted: "success",
+  prospecting: "secondary",
+  qualification: "warning",
+  proposal: "warning",
+  negotiation: "warning",
+  closed_won: "success",
+  closed_lost: "destructive",
+  draft: "outline",
+  sent: "success",
+  blocked: "destructive",
 };
 
 export function StatusBadge({ status }: { status: string }) {

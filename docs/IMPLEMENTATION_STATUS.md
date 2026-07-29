@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance and Phase 4 Security backbones — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, and Phase 5 Sales backbones — verified end-to-end)
 
 ## Platform
 
@@ -78,7 +78,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance and Pha
 
 ## Sales
 
-- [ ] Not started (Phase 5)
+- [x] Account, Contact, Lead, Opportunity, OutreachMessage models + migration
+- [x] Cross-module hook: `Contact.do_not_contact` blocks outreach send, else it "sends" (tested, ADR-0019)
+- [x] `/api/v1/sales` router — accounts (+ detail), contacts (+ suppression toggle), leads, opportunities, outreach (create + send); tenant-isolated, RBAC-gated
+- [x] RBAC: `sales_manager` / `sales_representative` system roles granted sales permissions
+- [x] Frontend: `/sales` overview (accounts, pipeline) + `/sales/accounts/[id]` detail (contacts with suppression toggle, compose/send outreach, opportunities)
+- [x] Seed script: 1 account, 2 contacts (1 suppressed), 1 opportunity, 2 outreach attempts (1 sent, 1 blocked) for the demo org
+- [ ] Sequences/campaigns (multi-step outreach automation) — not started
+- [ ] Meetings, sales conversations/inbox, pipeline events, playbooks — not started
+- [ ] Real lead-finding, enrichment, email/LinkedIn sending — depend on external connectors (Phase 9)
 
 ## Support
 
@@ -105,7 +113,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance and Pha
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
 - [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
 - [x] Security tests (8 tests: RBAC grant/denial, cross-module risk creation, tenant isolation, status workflows)
-- [x] 43/43 total, ruff+mypy strict clean
+- [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
+- [x] 51/51 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -127,9 +136,10 @@ next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 **Do not read this file as "the product is done."** It tracks a very large,
 explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
-Phase 3 (Compliance) and Phase 4 (Security) have their core backbones
-(see their sections above) but not their larger sub-features (audits, AI
+Phases 3–5 (Compliance, Security, Sales) have their core backbones (see
+their sections above) but not their larger sub-features (audits, AI
 governance, privacy workflows, vendor risk, Trust Center, identity/cloud
-provider integrations, incident playbooks). Sales, Support, Automation
-(Phases 5–7), the cross-module intent router, Phases 8–10, and the AWS
-production deployment have not started.
+provider integrations, incident playbooks, sequences/campaigns, real
+external connectors). Support, Automation (Phases 6–7), the cross-module
+intent router, Phases 8–10, and the AWS production deployment have not
+started.

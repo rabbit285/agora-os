@@ -23,6 +23,8 @@ from app.db.session import AsyncSessionLocal
 from app.identity.models import User
 from app.knowledge.models import Document
 from app.knowledge.service import get_or_create_default_knowledge_base, ingest_document
+from app.sales.models import Account, Contact, Opportunity, OutreachMessage
+from app.sales.service import send_outreach_message
 from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding
 from app.secops.service import create_incident
 from app.security import hash_password
@@ -154,6 +156,14 @@ async def seed() -> None:
         )
         if not existing_assets:
             await _seed_demo_security_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_accounts = (
+            (await db.execute(select(Account).where(Account.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_accounts:
+            await _seed_demo_sales_data(db, organization_id=organization.id, admin_id=admin.id)
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -454,6 +464,86 @@ async def _seed_demo_security_data(
 
     await db.commit()
     logger.info("Seeded demo security data (2 assets, 2 findings, 1 alert, 1 critical incident)")
+
+
+async def _seed_demo_sales_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one account with two contacts (one reachable, one suppressed),
+    an opportunity, and two outreach messages — one to each contact — so
+    the suppression cross-module hook (spec section 91) has a real,
+    non-trivial demonstration: one message sends, one is blocked."""
+    account = Account(
+        organization_id=organization_id,
+        name="Nordwind Robotics GmbH",
+        industry="Industrial Automation",
+        website="https://nordwind-robotics.example",
+        employee_count=180,
+        icp_score=87.5,
+        status="prospect",
+        owner_id=admin_id,
+    )
+    db.add(account)
+    await db.flush()
+
+    reachable_contact = Contact(
+        organization_id=organization_id,
+        account_id=account.id,
+        full_name="Lena Voigt",
+        email="l.voigt@nordwind-robotics.example",
+        job_title="VP Engineering",
+        do_not_contact=False,
+    )
+    suppressed_contact = Contact(
+        organization_id=organization_id,
+        account_id=account.id,
+        full_name="Jonas Weber",
+        email="j.weber@nordwind-robotics.example",
+        job_title="Procurement Lead",
+        do_not_contact=True,
+    )
+    db.add_all([reachable_contact, suppressed_contact])
+    await db.flush()
+
+    db.add(
+        Opportunity(
+            organization_id=organization_id,
+            account_id=account.id,
+            title="Nordwind Robotics — Platform expansion",
+            stage="qualification",
+            value=42000,
+            probability=40,
+            owner_id=admin_id,
+        )
+    )
+
+    for contact in (reachable_contact, suppressed_contact):
+        message = OutreachMessage(
+            organization_id=organization_id,
+            contact_id=contact.id,
+            channel="email",
+            subject="Following up on your compliance automation needs",
+            body=(
+                f"Hi {contact.full_name.split()[0]}, following up on our conversation about "
+                "automating your GDPR compliance workflows. Would you be open to a quick call?"
+            ),
+            created_by=admin_id,
+        )
+        db.add(message)
+        await db.flush()
+        await send_outreach_message(
+            db,
+            organization_id=organization_id,
+            message=message,
+            contact=contact,
+            actor_user_id=admin_id,
+        )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo sales data (1 account, 2 contacts, 1 opportunity, "
+        "2 outreach attempts: 1 sent, 1 blocked by suppression)"
+    )
 
 
 if __name__ == "__main__":

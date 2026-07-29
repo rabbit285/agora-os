@@ -361,6 +361,73 @@ A `critical`-severity `security_incidents` row automatically creates a
 `related_risk_id`, via `app/secops/service.py::create_incident` — Phase
 4's one cross-module hook (spec §19, ADR-0018).
 
+## Tables (Phase 5 — Sales)
+
+```text
+sales_accounts
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  industry TEXT NULL
+  website TEXT NULL
+  employee_count INTEGER NULL
+  icp_score NUMERIC(5,2) NULL
+  status TEXT NOT NULL DEFAULT 'prospect'   -- prospect|customer|churned
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+sales_contacts
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  account_id UUID FK sales_accounts NULL
+  full_name TEXT NOT NULL
+  email TEXT NOT NULL
+  job_title TEXT NULL
+  do_not_contact BOOLEAN NOT NULL DEFAULT false   -- suppression flag, see below
+  created_at, updated_at
+
+sales_leads
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  account_id UUID FK sales_accounts NULL
+  contact_id UUID FK sales_contacts NULL
+  source TEXT NULL
+  status TEXT NOT NULL DEFAULT 'new'   -- new|qualified|contacted|disqualified|converted
+  score NUMERIC(5,2) NULL
+  created_at, updated_at
+
+sales_opportunities
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  account_id UUID FK sales_accounts NOT NULL
+  title TEXT NOT NULL
+  stage TEXT NOT NULL DEFAULT 'prospecting'  -- prospecting|qualification|proposal|negotiation|closed_won|closed_lost
+  value NUMERIC(12,2) NULL
+  probability NUMERIC(5,2) NULL
+  expected_close_at TIMESTAMPTZ NULL
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+sales_outreach_messages
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  contact_id UUID FK sales_contacts NOT NULL
+  channel TEXT NOT NULL DEFAULT 'email'   -- email|linkedin
+  subject TEXT NULL
+  body TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'draft'   -- draft|sent|blocked
+  blocked_reason TEXT NULL
+  created_by UUID FK users NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  sent_at TIMESTAMPTZ NULL
+```
+
+An outreach message can only move from `draft` to `sent` if
+`sales_contacts.do_not_contact` is false at send time; otherwise it moves
+to `blocked` instead, via `app/sales/service.py::send_outreach_message`
+— Phase 5's cross-module hook (spec §91, ADR-0019). No real email/
+LinkedIn provider is wired up yet — sending only transitions this row.
+
 ## Migration policy
 
 - Every schema change ships an Alembic revision with both `upgrade()` and
