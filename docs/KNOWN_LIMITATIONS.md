@@ -7,14 +7,23 @@ implied to work.
 
 ## Product scope
 
-- **Only the platform foundation exists.** Compliance, Security, Sales,
-  Support, and Automation (the five primary product modules) have zero
-  domain logic — their nav entries route to a `/coming-soon` page. See
-  `docs/IMPLEMENTATION_PLAN.md` for the phase order.
-- **No Knowledge module** (documents, RAG, embeddings, entity extraction).
-  The AI gateway exists and logs `AiRun`s, but nothing retrieves grounded
-  context yet — `/api/v1/ai/copilot/ask` is a minimal end-to-end
-  exercise of the gateway, not the real Copilot (spec §8–9).
+- **Compliance, Security, Sales, Support, and Automation** (the five
+  primary product modules) have zero domain logic — their nav entries
+  route to a `/coming-soon` page. See `docs/IMPLEMENTATION_PLAN.md` for
+  the phase order.
+- **The Knowledge module ingests documents but nothing retrieves them
+  yet.** Upload → parse → chunk → embed → store all work end to end, but
+  Phase 2 (spec's "Knowledge & AI Infrastructure") isn't finished — there
+  is no similarity search, no RAG pipeline, and no AI Copilot yet.
+  `/api/v1/ai/copilot/ask` is still a minimal exercise of the gateway
+  (prompt in, demo/real text out), not grounded retrieval (spec §8–9).
+  Embeddings are stored (JSON, see ADR-0007) but unused until that's built.
+- **Document parsing supports text/plain, text/markdown, text/csv, PDF,
+  and DOCX only.** XLSX, PPTX, images/OCR are not implemented; uploading
+  them marks the document `unsupported_format` honestly rather than
+  pretending to extract text (spec §82).
+- **No entity/relationship extraction** (spec §11's knowledge graph).
+  Chunks are stored flat with no cross-linking to other entities yet.
 - **No invitation flow.** New members can only join today via signup
   (which creates a new organization) or direct database insertion (see
   `tests/test_rbac.py` for the pattern). `/invite/[token]` is not built.
@@ -73,6 +82,13 @@ implied to work.
   ports; Agora Origin's compose stack uses an `infra/docker/.env`
   override (gitignored) for non-standard host ports on this machine only.
   See `docs/ENVIRONMENT_VARIABLES.md`.
+- **The web container's Turbopack dev server doesn't reliably detect new
+  route files added while it's already running**, on this Windows +
+  Docker Desktop bind-mount setup (`next dev` itself warns "Slow
+  filesystem detected"). Editing existing files hot-reloads fine; adding
+  a brand-new page under `app/` needed `docker compose restart web` to be
+  picked up. Not a code bug — a note for whoever's developing against
+  this stack locally.
 - **npm audit reports 12 high-severity advisories** in Next.js's bundled
   build-time dependencies (postcss, sharp, and eslint's transitive
   minimatch). All are build-tool-only (no runtime/user-facing exposure);
@@ -85,6 +101,16 @@ implied to work.
   auth-flow tests (pytest, 12 passing). Frontend has typecheck/lint/build
   verification but no browser-driven tests.
 - **No AI evaluation fixtures.** Planned for Phase 2 once RAG exists.
+- **The SQLite-backed unit test suite did not catch two real bugs that
+  only surfaced during a live Docker smoke test**: (1) the MinIO bucket
+  was never created outside the seed script, so the first real upload
+  404'd; (2) the worker process crashed on its first real activity
+  because it had never imported `app.identity.models`, so SQLAlchemy
+  couldn't resolve a foreign key into the `users` table (fixed via
+  `app/db/register_all_models.py`, see ADR-0010). Both are now fixed and
+  covered by a live smoke test, but neither would have been caught by
+  pytest alone — a reminder that fast in-memory tests validate logic, not
+  cross-service integration.
 - **The full-stack smoke test was API-level (curl), not a real browser
   click-through.** Verified: signup → session cookie → `/me` → create task
   → list tasks → AI gateway demo response, all through the live API

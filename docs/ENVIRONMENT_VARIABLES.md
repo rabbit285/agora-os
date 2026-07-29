@@ -34,6 +34,7 @@ are unset, by name only — never their values — and refuses to start in
 | `REDIS_URL` | no | local Redis | |
 | `TEMPORAL_ADDRESS` / `TEMPORAL_NAMESPACE` / `TEMPORAL_DEPLOYMENT_MODE` | no | local Temporal | `TEMPORAL_DEPLOYMENT_MODE` is `local` \| `self_hosted` \| `cloud` |
 | `S3_ENDPOINT_URL` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` / `S3_REGION` | no | local MinIO | swap for real AWS S3 credentials/endpoint in staging/production |
+| `S3_PUBLIC_ENDPOINT_URL` | no | falls back to `S3_ENDPOINT_URL` | the host used when **signing** presigned upload/download URLs handed to the browser. In Docker Compose, `S3_ENDPOINT_URL` is the internal hostname `http://minio:9000`, which the browser can't resolve — this variable points signed URLs at the host-mapped port instead (`http://localhost:9002` by default; see the port-override note below). Not needed outside Docker, where both are already the same reachable host. |
 
 ## Sessions
 

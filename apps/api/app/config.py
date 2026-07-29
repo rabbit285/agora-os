@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     # Object storage
     s3_endpoint_url: str = Field(default="http://localhost:9000", alias="S3_ENDPOINT_URL")
+    # Used only for presigned URLs handed to the browser — inside Docker,
+    # S3_ENDPOINT_URL is an internal hostname (e.g. "http://minio:9000")
+    # the browser can't resolve. Defaults to S3_ENDPOINT_URL for non-Docker
+    # setups where both are already browser-reachable.
+    s3_public_endpoint_url: str | None = Field(default=None, alias="S3_PUBLIC_ENDPOINT_URL")
     s3_bucket: str = Field(default="agora-local", alias="S3_BUCKET")
     s3_access_key_id: str = Field(default="agora", alias="S3_ACCESS_KEY_ID")
     s3_secret_access_key: str = Field(default="agora-secret", alias="S3_SECRET_ACCESS_KEY")
@@ -67,6 +72,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def s3_public_endpoint_url_resolved(self) -> str:
+        return self.s3_public_endpoint_url or self.s3_endpoint_url
 
 
 def _diagnose(settings: Settings) -> None:

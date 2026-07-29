@@ -177,6 +177,47 @@ notifications
   created_at
 ```
 
+## Tables (Phase 2 — Knowledge)
+
+```text
+knowledge_bases
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  description TEXT
+  created_at, updated_at
+  UNIQUE (organization_id, name)
+
+documents
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  knowledge_base_id UUID FK knowledge_bases NOT NULL
+  file_id UUID FK files NOT NULL UNIQUE   -- one Document per uploaded File
+  title TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'pending'  -- pending|processing|ready|failed|unsupported_format
+  error TEXT
+  classification TEXT NOT NULL DEFAULT 'internal'
+  created_by UUID FK users NULL
+  created_at, updated_at
+
+document_chunks
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL   -- denormalized for tenant-isolation queries
+  document_id UUID FK documents NOT NULL
+  chunk_index INTEGER NOT NULL
+  content TEXT NOT NULL
+  embedding JSONB NOT NULL          -- list[float], length AI.EMBEDDING_DIMENSIONS (1536)
+  token_count INTEGER NOT NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  UNIQUE (document_id, chunk_index)
+```
+
+`embedding` is a JSON float array, not a native `pgvector` column — see
+`docs/DECISIONS.md` ADR-0007. No similarity-search index exists yet;
+retrieval (cosine-distance queries) is added when the AI Copilot's RAG
+pipeline needs it, at which point this column is migrated to a real
+`vector(1536)` column with an ivfflat/HNSW index.
+
 ## Migration policy
 
 - Every schema change ships an Alembic revision with both `upgrade()` and

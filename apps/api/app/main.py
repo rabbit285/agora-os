@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -10,12 +12,31 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
+from app.core.storage import ensure_bucket
 from app.identity.router import router as auth_router
-from app.routers import ai, approvals, files, health, notifications, organizations, tasks
+from app.routers import (
+    ai,
+    approvals,
+    files,
+    health,
+    knowledge,
+    notifications,
+    organizations,
+    tasks,
+)
 
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Agora Origin API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Local/dev convenience only — a real AWS deployment provisions the
+    # bucket via Terraform (docs/PLATFORM_ARCHITECTURE.md), not at boot.
+    ensure_bucket()
+    yield
+
+
+app = FastAPI(title="Agora Origin API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,3 +94,4 @@ app.include_router(approvals.router)
 app.include_router(files.router)
 app.include_router(notifications.router)
 app.include_router(ai.router)
+app.include_router(knowledge.router)

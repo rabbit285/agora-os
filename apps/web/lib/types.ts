@@ -52,3 +52,35 @@ export type Notification = {
   read_at: string | null;
   created_at: string;
 };
+
+export type KnowledgeBase = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type DocumentStatus =
+  | "pending"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "unsupported_format";
+
+export type KnowledgeDocument = {
+  id: string;
+  knowledge_base_id: string;
+  file_id: string;
+  title: string;
+  status: DocumentStatus;
+  error: string | null;
+  classification: string;
+  created_at: string;
+};
+
+export type DocumentChunk = {
+  id: string;
+  chunk_index: number;
+  content: string;
+  token_count: number;
+};

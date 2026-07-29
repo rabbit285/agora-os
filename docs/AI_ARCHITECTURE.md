@@ -46,13 +46,31 @@ adapter, chosen at gateway construction time from `settings.AI_PROVIDER`.
   approval-policy engine are introduced with the `Approval` primitive in
   Phase 1 and enforced per-module as each module's actions are implemented.
 
-## Retrieval and citations (spec §F4) — Phase 2+
+## Embeddings (spec §F1, §46 — implemented in Phase 2)
 
-RAG is not implemented in Phase 1 (no documents/knowledge base yet). The
-interface contract is fixed now so Phase 2 doesn't need to change the
-gateway shape: `generate_structured` calls that use retrieved context must
-attach `citations: list[Citation]` (`document_id`, `chunk_id`, `location`) to
-the `AiRun` row, and refuse/qualify when retrieval confidence is low.
+`ModelGateway.embed()` batches a list of texts, logs **one** `AiRun` per
+batch call (not one per chunk — see `docs/DECISIONS.md` ADR-0008), and
+returns fixed-width vectors: `EMBEDDING_DIMENSIONS = 1536`
+(`app/ai/gateway.py`), matching OpenAI's `text-embedding-3-small` so every
+embedding in the system is comparable regardless of which provider
+produced it. `DemoAdapter.embed()` produces a deterministic 1536-float
+fingerprint (repeated SHA-256 hashing, not a real embedding).
+
+Providers that don't support embeddings (Anthropic) raise
+`NotImplementedError`; the gateway catches that specifically and falls
+back to `DemoAdapter` for that call rather than failing document
+ingestion outright — the `AiRun.provider` field records which actually
+happened, so this is never silently mislabeled as a real embedding.
+
+## Retrieval and citations (spec §F4) — remaining Phase 2 work
+
+Embeddings exist (above) but nothing queries them yet — no
+cosine-similarity search, no RAG pipeline, no AI Copilot. Phase 2's scope
+(spec's "Knowledge & AI Infrastructure") isn't finished until this exists:
+`generate_structured` calls that use
+retrieved context must attach `citations: list[Citation]` (`document_id`,
+`chunk_id`, `location`) to the `AiRun` row, and refuse/qualify when
+retrieval confidence is low.
 
 ## Prompt injection defense (spec §F5) — Phase 2+
 

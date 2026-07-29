@@ -29,11 +29,17 @@ Completion).
   `DECISIONS.md`, `KNOWN_LIMITATIONS.md`, `SECURITY_ASSUMPTIONS.md`,
   `RELEASE_CHECKLIST.md`
 
-## Phase 2 — Knowledge & AI Infrastructure
+## Phase 2 — Knowledge & AI Infrastructure (in progress)
 
-Documents, parsing (PDF/DOCX/XLSX/CSV/TXT/HTML), chunking, `pgvector`
-embeddings, entity/relationship extraction, knowledge bases, AI Copilot
-foundation (intent router, context builder, citations), AI Action Log UI.
+Done: knowledge bases, document upload/registration, parsing (PDF, DOCX,
+CSV, TXT, Markdown — XLSX/PPTX/OCR not yet), chunking, embeddings (stored
+as JSON — see `docs/DECISIONS.md` ADR-0007), a durable Temporal ingestion
+workflow, tenant-isolated API + frontend.
+
+Remaining: entity/relationship extraction, similarity search over
+embeddings, the AI Copilot foundation itself (intent router, context
+builder, citations), AI Action Log UI. See `docs/RESUME_BUILD.md` for the
+concrete next steps.
 
 ## Phase 3 — Compliance
 

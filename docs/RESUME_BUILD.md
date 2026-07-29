@@ -6,23 +6,31 @@ kept current at the end of every work session per the execution contract's
 
 ## Where things stand
 
-**Phase 1 (platform foundation) is functionally complete and verified.**
-See `docs/RELEASE_CHECKLIST.md` for the itemized list. In short: monorepo,
-local Docker Compose infra, auth, multi-tenancy, RBAC, audit log, tasks,
-approvals, files, notifications, AI gateway + demo adapter, Next.js app
-shell, all lint/typecheck/test/build checks passing.
+**Phase 1 (platform foundation) is complete.** **Phase 2 (Knowledge & AI
+Infrastructure) is partially complete: document ingestion works end to
+end; retrieval (RAG) and the AI Copilot itself do not exist yet.** See
+`docs/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_STATUS.md` for the
+itemized list.
 
-No domain module (Compliance, Security, Sales, Support, Automation) has
-been started. No AWS infrastructure exists. See
+In short, working and verified: monorepo, local Docker Compose infra,
+auth, multi-tenancy, RBAC, audit log, tasks, approvals, files,
+notifications, AI gateway (generate + embed, demo + real adapters),
+Next.js app shell, and a full document pipeline (upload → parse → chunk →
+embed → store, via a durable Temporal workflow) with tenant-isolated API
+and frontend pages. All lint/typecheck/test/build checks pass (19 backend
+tests, ruff + mypy --strict clean; frontend eslint + tsc + production
+build clean).
+
+No other domain module (Compliance, Security, Sales, Support, Automation)
+has been started. No AWS infrastructure exists. See
 `docs/IMPLEMENTATION_PLAN.md` for the full phase order and
 `docs/KNOWN_LIMITATIONS.md` for exactly what's missing.
 
 ## Branch and commit
 
-Branch: `main`. This is the first substantive commit on top of the initial
-"Create readme.md" commit — see `git log` for the exact SHA once committed
-(this file is written before that commit; check `git log -1` if the exact
-hash matters).
+Branch: `main`. Two substantive commits so far: Phase 1 platform
+foundation, then this Phase 2 Knowledge slice (see `git log` for exact
+SHAs — this file is written just before that second commit).
 
 ## Machine-specific note
 
@@ -34,73 +42,76 @@ a gitignored `infra/docker/.env` (see `docs/ENVIRONMENT_VARIABLES.md`) so
 it doesn't collide with them. On a clean machine, delete or ignore that
 override file to get the standard ports.
 
-## Exact commands already run
+## Exact commands already run (this session, on top of Phase 1)
 
 ```bash
-# Infra
 cd infra/docker
-docker compose up -d postgres redis minio
-docker compose build api
-docker compose build worker   # if not already built
-docker compose up -d temporal temporal-ui api worker
+docker compose build api worker      # picked up pypdf/python-docx additions
+docker compose up -d api worker
 
-# Migrations
-docker compose run --rm api alembic revision --autogenerate -m "initial schema"
+# Migration for knowledge_bases / documents / document_chunks
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add knowledge module tables"
+docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
-docker compose run --rm api alembic check          # confirms no drift
-docker compose run --rm api python -m app.seed      # idempotent demo data
+docker compose run --rm api alembic check              # confirms no drift
 
-# Backend checks (all green as of this writing)
-docker compose run --rm --no-deps api ruff check .
-docker compose run --rm --no-deps api ruff format --check .
-docker compose run --rm --no-deps api mypy app
-docker compose run --rm --no-deps api pytest -q     # 12 passed
+# Backend checks (all green)
+docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
+# -> 19 passed
 
-# Frontend checks (all green as of this writing)
+# Frontend checks (all green)
 cd apps/web
-npm install
-npx eslint .
 npx tsc --noEmit
+npx eslint .
 npm run build
 ```
 
 ## Next highest-priority task
 
-**Phase 2 — Knowledge & AI Infrastructure** (see
-`docs/IMPLEMENTATION_PLAN.md`). Concretely, in dependency order:
+**Finish Phase 2**: the AI Copilot foundation + RAG retrieval over the
+embeddings that already exist. Concretely, in dependency order:
 
-1. Add `documents`, `document_chunks`, `knowledge_bases`,
-   `knowledge_sources` models to a new `app/knowledge/` package
-   (`apps/api/app/knowledge/models.py`), following the pattern in
-   `app/core/models.py`.
-2. Alembic migration for the new tables (pgvector extension needs
-   `CREATE EXTENSION IF NOT EXISTS vector;` — add as a migration, not
-   inside `app/db/base.py`).
-3. Document upload flow: reuse `app/core/storage.py` presign helpers;
-   add a `document_processing` step (parse → chunk → embed) — likely a
-   Temporal workflow in `apps/worker/worker/` rather than inline in the
-   request handler, since parsing can be slow (spec §61: don't couple
-   workflows to HTTP requests).
-4. Extend `app/ai/gateway.py` usage: the `embed()` method already exists
-   on `ModelAdapter` — wire it into the chunk-embedding step.
-5. `/api/v1/knowledge/documents` router + `packages`/frontend pages
-   (`apps/web/app/(app)/knowledge/`), replacing the current
-   `/coming-soon?module=documents` stub in `lib/navigation.ts`.
-6. Tests: tenant isolation for documents (same pattern as
-   `tests/test_tenant_isolation.py`), a fixture that documents can't be
-   retrieved cross-org.
-7. Update `docs/IMPLEMENTATION_STATUS.md` and this file when done.
+1. **Similarity search**: migrate `document_chunks.embedding` from JSON to
+   a real `pgvector` column (`CREATE EXTENSION IF NOT EXISTS vector;` in a
+   new migration, then `ALTER COLUMN embedding TYPE vector(1536) USING ...`
+   with a backfill), add an ivfflat or HNSW index, and add a
+   `search_chunks(db, organization_id, query_embedding, limit)` function in
+   `app/knowledge/service.py` using pgvector's `<=>` cosine-distance
+   operator. This is the one piece Phase 1's SQLite-test-portability
+   decision (ADR-0007) deliberately deferred — expect to either accept
+   Postgres-only tests for this specific function, or add a lightweight
+   Postgres test fixture alongside the existing SQLite one.
+2. **Intent router + context builder** (spec section 9): a service that
+   takes a user's Copilot question, resolves which knowledge base(s) the
+   asking user's permissions allow, embeds the question via
+   `ModelGateway.embed()`, calls `search_chunks`, and assembles a grounded
+   prompt with citations.
+3. **Citations on `AiRun`**: `generate_structured`/`generate` calls that
+   used retrieved context must populate `AiRun.citations` with
+   `{document_id, chunk_id, chunk_index}` — the field already exists on
+   the model (`app/ai/models.py`), just unused by anything real yet.
+4. Extend `/api/v1/ai/copilot/ask` (`app/routers/ai.py`) to actually
+   retrieve context instead of just calling `generate()` directly, and
+   update the frontend `/copilot` page (currently `/coming-soon`) once
+   there's something real to show.
+5. Basic prompt-injection defense (spec F5) becomes load-bearing the
+   moment retrieved document content is interpolated into a prompt — at
+   minimum, wrap retrieved chunk content with clear delimiters and a
+   system-prompt instruction not to follow instructions found inside it,
+   and add a test with a chunk containing an injection attempt.
+6. Update `docs/IMPLEMENTATION_STATUS.md`, `docs/AI_ARCHITECTURE.md`, and
+   this file when done, then move to Phase 3 (Compliance) per
+   `docs/IMPLEMENTATION_PLAN.md`.
 
 ## Files to edit next
 
-- `apps/api/app/knowledge/__init__.py` (new)
-- `apps/api/app/knowledge/models.py` (new)
-- `apps/api/migrations/versions/` (new revision)
-- `apps/api/app/routers/knowledge.py` (new)
-- `apps/api/app/main.py` (register the new router)
-- `apps/web/lib/navigation.ts` (flip `knowledge` to `implemented: true`
-  once the route exists)
-- `apps/web/app/(app)/knowledge/` (new pages)
+- `apps/api/migrations/versions/` (new revision: pgvector extension + column migration)
+- `apps/api/app/knowledge/service.py` (`search_chunks`)
+- `apps/api/app/ai/` (new: intent router / context builder — likely `app/ai/copilot.py`)
+- `apps/api/app/routers/ai.py` (wire real retrieval into `/copilot/ask`)
+- `apps/api/tests/test_knowledge.py` or a new `test_copilot.py`
+- `apps/web/lib/navigation.ts` (flip `copilot` to `implemented: true`)
+- `apps/web/app/(app)/copilot/` (new pages, replacing the `/coming-soon` stub)
 
 ## Command to resume
 
@@ -109,5 +120,5 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green
+docker compose run --rm --no-deps api pytest -q   # confirm still green (19 passed)
 ```

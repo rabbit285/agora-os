@@ -76,3 +76,77 @@ scaffolded via `npx shadcn init`.
 flag combination found in this environment. The resulting components are
 structurally identical to what the CLI would generate; running the CLI
 later to add more components (table, dialog, etc.) remains an option.
+
+## ADR-0007 — Embeddings stored as JSON, not a native pgvector column
+
+**Decision**: `document_chunks.embedding` is a JSON float array
+(`list[float]`, length 1536), not `pgvector`'s `Vector` SQLAlchemy type.
+
+**Why**: A native `Vector` column needs the `pgvector` Postgres extension,
+which SQLite (used for fast in-memory unit tests) has no equivalent for —
+introducing it now would either break test portability or require a
+custom dual-dialect type. Nothing in Phase 2 queries by similarity yet
+(that's the AI Copilot's RAG pipeline, not yet built); JSON storage is
+sufficient until a real cosine-distance query is needed, at which point
+this column migrates to `vector(1536)` with an ivfflat/HNSW index.
+
+## ADR-0008 — One AiRun per embedding batch, not one per chunk
+
+**Decision**: `ModelGateway.embed()` writes a single `AiRun` row per call,
+covering however many texts were embedded in that batch (`output.chunk_count`),
+not one row per text.
+
+**Why**: A single document can produce dozens of chunks; logging one
+`AiRun` per chunk would make `ai_runs` grow much faster than any other
+table for no analytical benefit — the batch-level record already answers
+"what was embedded, by what provider, how long did it take."
+
+## ADR-0009 — Workflow-defining modules never import application code
+
+**Decision**: `apps/worker/worker/workflows.py` imports only `temporalio`
+and the stdlib. Activities (which do need `app.config`, the database, and
+object storage) live in a separate `activities.py`, referenced from
+workflows by string name (`workflow.execute_activity("name", ...)`), and
+imported into `main.py` (never into `workflows.py`).
+
+**Why**: Temporal's Python SDK sandboxes and statically validates the
+entire import graph of any module that defines a `@workflow.defn` class,
+rejecting non-deterministic operations (file/env access) anywhere in that
+graph. The Phase 1 health-check workflow crashed the worker at startup
+because it lived in the same module as `from app.config import settings`
+(which reads a `.env` file) — moving that import to a sibling module the
+workflow never imports fixed it permanently, not just for that one case.
+
+## ADR-0010 — A shared `register_all_models` import module
+
+**Decision**: `app/db/register_all_models.py` imports every domain
+model module purely for its side effects (registering each model's table
+in `Base.metadata`). Alembic's `migrations/env.py`, the test suite's
+`conftest.py`, and any Temporal activity that touches the database import
+this one module instead of hand-picking which specific model classes they
+need.
+
+**Why**: The worker's document-ingestion activity crashed with
+`NoReferencedTableError: ... could not find table 'users'` the first time
+it ran for real — it imported `app.core.models` and `app.knowledge.models`
+directly but never `app.identity.models`, so SQLAlchemy had never seen the
+`users` table in that process and couldn't resolve
+`documents.created_by -> users.id` on flush. The bug wasn't in the FK
+definition, it was that Python module imports are what register a table
+with SQLAlchemy, and each process (API, worker, migrations, tests) only
+imports what it directly references. A single shared "import everything"
+module removes the need to remember this in every new entrypoint.
+
+## ADR-0011 — Presigned URLs signed against a separate "public" S3 endpoint
+
+**Decision**: `app/core/storage.py` has two boto3 clients: `_client()`
+(internal Docker hostname, e.g. `http://minio:9000`, used for server-side
+downloads/uploads) and `_public_client()` (browser-reachable host, e.g.
+`http://localhost:9002`, used only to sign upload/download URLs).
+
+**Why**: A presigned URL's signature is valid only for the host it was
+signed against. Signing with the internal Docker hostname would hand the
+browser a URL it can't resolve at all; signing with the public host
+(`S3_PUBLIC_ENDPOINT_URL`) produces a URL the browser can actually reach,
+while the API/worker keep using the internal hostname for their own
+direct calls.

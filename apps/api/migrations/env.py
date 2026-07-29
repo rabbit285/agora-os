@@ -8,29 +8,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.ai.models import AiRun  # noqa: F401
-from app.audit.models import AuditEvent  # noqa: F401
+import app.db.register_all_models  # noqa: F401 — registers every model's table
 from app.config import settings
-from app.core.models import (  # noqa: F401
-    Approval,
-    File,
-    LegalEntity,
-    Membership,
-    MembershipRole,
-    Notification,
-    Organization,
-    Permission,
-    Role,
-    RolePermission,
-    Task,
-    Team,
-)
 from app.db.base import Base
-from app.identity.models import (
-    PasswordResetToken,  # noqa: F401
-    User,  # noqa: F401
-)
-from app.identity.models import Session as SessionModel  # noqa: F401
 
 config = context.config
 

@@ -21,6 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.models import AiRun
 from app.config import settings
 
+# Fixed so every embedding in the system is comparable regardless of which
+# provider produced it (matches OpenAI's text-embedding-3-small). A column
+# storing embeddings is defined once for this dimension — changing it later
+# means re-embedding everything, not just swapping a config value.
+EMBEDDING_DIMENSIONS = 1536
+
 
 @dataclass
 class GenerateRequest:
@@ -107,8 +113,17 @@ class DemoAdapter:
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         def _vec(text: str) -> list[float]:
-            digest = hashlib.sha256(text.encode()).digest()
-            return [b / 255.0 for b in digest[:16]]
+            # Extend a single sha256 digest deterministically to
+            # EMBEDDING_DIMENSIONS floats by re-hashing with a counter —
+            # not a real embedding, just a stable fixed-width fingerprint.
+            values: list[float] = []
+            counter = 0
+            seed = text.encode()
+            while len(values) < EMBEDDING_DIMENSIONS:
+                digest = hashlib.sha256(seed + counter.to_bytes(4, "big")).digest()
+                values.extend(b / 255.0 for b in digest)
+                counter += 1
+            return values[:EMBEDDING_DIMENSIONS]
 
         return [_vec(t) for t in texts]
 
@@ -177,3 +192,50 @@ class ModelGateway:
                 )
             )
             await db.flush()
+
+    async def embed(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: uuid.UUID,
+        requested_by: uuid.UUID | None,
+        task_type: str,
+        texts: list[str],
+    ) -> list[list[float]]:
+        """Embed a batch of texts, logging one AiRun for the whole batch
+        (not one per text — see docs/DECISIONS.md ADR-0008) rather than
+        flooding ai_runs with a row per document chunk.
+
+        Providers that don't support embeddings (e.g. Anthropic) fall back
+        to the deterministic Demo embedder rather than failing the whole
+        ingestion — the AiRun records which happened via `provider`.
+        """
+        start = time.perf_counter()
+        provider_name = self._adapter.provider_name
+        error: str | None = None
+        try:
+            vectors = await self._adapter.embed(texts)
+        except NotImplementedError:
+            provider_name = "demo"
+            vectors = await DemoAdapter().embed(texts)
+        except Exception as exc:  # noqa: BLE001 - logged into AiRun, then re-raised
+            error = str(exc)
+            raise
+        finally:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            db.add(
+                AiRun(
+                    organization_id=organization_id,
+                    requested_by=requested_by,
+                    task_type=task_type,
+                    provider=provider_name,
+                    model=f"{provider_name}-embeddings",
+                    input_classification="internal",
+                    output={"chunk_count": len(texts)},
+                    latency_ms=latency_ms,
+                    policy_result="allowed" if error is None else "error",
+                    error=error,
+                )
+            )
+            await db.flush()
+        return vectors

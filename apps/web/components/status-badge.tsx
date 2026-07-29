@@ -12,6 +12,10 @@ const STATUS_VARIANTS: Record<
   approved: "success",
   rejected: "destructive",
   expired: "outline",
+  processing: "warning",
+  ready: "success",
+  failed: "destructive",
+  unsupported_format: "outline",
 };
 
 export function StatusBadge({ status }: { status: string }) {

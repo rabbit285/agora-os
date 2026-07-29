@@ -61,7 +61,7 @@ erDiagram
 
 | Domain | Key entities | Phase |
 |---|---|---|
-| Knowledge | documents, document_chunks, knowledge_bases, entities, entity_relationships | 2 |
+| Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
 | Compliance | frameworks, controls, evidence, risks, policies, audits | 3 |
 | AI Governance | ai_systems, ai_assessments, ai_incidents | 3 |
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
@@ -71,6 +71,22 @@ erDiagram
 | Automation | workflows, workflow_versions, workflow_runs | 7 |
 | Integrations | integration_connections, webhooks, api_keys | 9 |
 | Billing | subscriptions, entitlements | 10 |
+
+## Phase 2 entities (implemented)
+
+- **KnowledgeBase** — a named collection of documents per organization. A
+  "General" one is created lazily the first time a document is uploaded
+  without specifying which knowledge base it belongs to.
+- **Document** — one uploaded `File` registered for ingestion. Status
+  moves `pending → processing → ready` or `failed`/`unsupported_format`
+  (spec §I4: honest states, never a fabricated "ready").
+- **DocumentChunk** — one chunk of extracted text plus its embedding
+  vector (stored as JSON — see `docs/DECISIONS.md` ADR-0007) and token
+  count. This is the substrate the AI Copilot's RAG retrieval (not yet
+  built) will query against.
+
+Entity/relationship extraction (spec §11's knowledge graph) is not
+implemented — chunks are stored flat, with no entity linking yet.
 
 ## Cross-module entity linking (spec §81)
 

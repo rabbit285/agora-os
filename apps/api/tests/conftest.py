@@ -11,13 +11,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.ai import models as ai_models  # noqa: F401
-from app.audit import models as audit_models  # noqa: F401
-from app.core import models as core_models  # noqa: F401
+import app.db.register_all_models  # noqa: F401 — registers every model's table
 from app.core.rbac import ensure_system_roles
 from app.db.base import Base
 from app.db.session import get_db
-from app.identity import models as identity_models  # noqa: F401
+from app.knowledge.workflow_client import get_ingestion_starter
 from app.main import app
 
 engine = create_async_engine(
@@ -48,7 +46,17 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     async def _override_get_db() -> AsyncIterator[AsyncSession]:
         yield db_session
 
+    async def _noop_ingestion_starter():  # type: ignore[no-untyped-def]
+        async def _start(document_id: object) -> None:
+            # Tests never have a real Temporal server; ingestion itself is
+            # tested directly against app.knowledge.service.ingest_document
+            # (see tests/test_knowledge.py), not through the workflow.
+            return None
+
+        return _start
+
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_ingestion_starter] = _noop_ingestion_starter
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

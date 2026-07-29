@@ -1,10 +1,11 @@
 # Release Checklist
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
-"Definition of Done" (§83). This is a **Phase 1 / local-only** checkpoint,
-not a production release — most items below are correctly unchecked.
+"Definition of Done" (§83). This is a **Phase 1 + partial Phase 2 /
+local-only** checkpoint, not a production release — most items below are
+correctly unchecked.
 
-## Phase 1 (platform foundation) — this checkpoint
+## Phase 1 (platform foundation) — complete
 
 - [x] Monorepo bootstrapped (`apps/api`, `apps/web`, `apps/worker`)
 - [x] Local Docker Compose environment (Postgres+pgvector, Redis, MinIO, Temporal)
@@ -25,9 +26,25 @@ not a production release — most items below are correctly unchecked.
 - [ ] Frontend automated tests (Playwright/unit) — not yet written
 - [ ] Invitation flow, MFA enforcement — schema only, no flow
 
+## Phase 2 (Knowledge & AI Infrastructure) — partial
+
+- [x] KnowledgeBase, Document, DocumentChunk models + migration
+- [x] Document parsing (text/plain, text/markdown, text/csv, PDF, DOCX)
+- [x] Chunking + embedding (via AI gateway, graceful demo fallback)
+- [x] Durable Temporal ingestion workflow (workflow/activity module split
+      documented in `docs/DECISIONS.md` ADR-0009)
+- [x] Tenant-isolated `/api/v1/knowledge` API + frontend (upload, list, detail)
+- [x] Seed script uploads and fully ingests a real sample document
+- [x] Backend tests: 19 passing total (12 from Phase 1 + 7 new); ruff/mypy clean
+- [ ] Similarity search / RAG retrieval over stored embeddings
+- [ ] AI Copilot (intent router, context builder, citations)
+- [ ] Entity/relationship extraction
+- [ ] Prompt injection defenses (needed once retrieval feeds prompts)
+
+See `docs/RESUME_BUILD.md` for the exact next steps to finish this phase.
+
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 2 — Knowledge & AI Infrastructure (RAG, Copilot)
 - [ ] Phase 3 — Compliance
 - [ ] Phase 4 — Security module
 - [ ] Phase 5 — Sales

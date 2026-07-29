@@ -37,11 +37,18 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | Global search | [ ] |
 | Global Create button | [ ] |
 
-## COMPLIANCE / SECURITY / SALES / SUPPORT / AUTOMATION / KNOWLEDGE
+## KNOWLEDGE
 
-Not started — Phases 3–7, 2, and 9 respectively. Routes will be added under
+| Route | Status |
+|---|---|
+| `/knowledge` | [x] list + upload |
+| `/knowledge/[id]` | [x] detail with chunk viewer |
+
+## COMPLIANCE / SECURITY / SALES / SUPPORT / AUTOMATION
+
+Not started — Phases 3–7 respectively. Routes will be added under
 `apps/web/app/(app)/compliance`, `/security`, `/sales`, `/support`,
-`/automation`, `/knowledge` matching the navigation tree in spec §6.
+`/automation` matching the navigation tree in spec §6.
 
 ## SETTINGS
 

@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-28 (Phase 1 build, verified end-to-end)
+Last updated: 2026-07-28 (Phase 1 + Phase 2 Knowledge module, verified end-to-end)
 
 ## Platform
 
@@ -26,15 +26,26 @@ Last updated: 2026-07-28 (Phase 1 build, verified end-to-end)
 
 ## Knowledge
 
-- [ ] Not started (Phase 2)
+- [x] KnowledgeBase, Document, DocumentChunk models + migration
+- [x] Document parsing: text/plain, text/markdown, text/csv, PDF, DOCX — genuine extractors, not stubs
+- [x] Unsupported formats marked `unsupported_format` honestly, not faked as ready
+- [x] Chunking (fixed-size with overlap) + embedding via AI gateway
+- [x] Temporal `DocumentIngestionWorkflow` (durable, decoupled from the HTTP request)
+- [x] `/api/v1/knowledge` router (knowledge bases, documents, chunks) — tenant-isolated, tested
+- [x] Frontend: upload, list, detail pages with live status polling
+- [x] Seed script uploads and fully ingests one real sample document
+- [ ] Entity/relationship extraction (spec §11 knowledge graph) — not started
+- [ ] RAG retrieval / similarity search — not started (remaining Phase 2 work)
+- [ ] AI Copilot (intent router, context builder, citations) — not started (remaining Phase 2 work)
 
 ## AI
 
 - [x] Model Gateway interface + Demo adapter — live-tested via `/api/v1/ai/copilot/ask`
 - [x] `AiRun` logging
-- [ ] AI Copilot (Phase 2)
-- [ ] RAG / citations (Phase 2)
-- [ ] Prompt injection defenses (Phase 2)
+- [x] `embed()` on the gateway (fixed 1536-dim, graceful demo fallback for non-embedding providers)
+- [ ] AI Copilot (remaining Phase 2 work)
+- [ ] RAG / citations (remaining Phase 2 work)
+- [ ] Prompt injection defenses (remaining Phase 2 work — needed once retrieved content reaches prompts)
 
 ## Compliance
 
@@ -66,11 +77,13 @@ Last updated: 2026-07-28 (Phase 1 build, verified end-to-end)
 
 ## Testing
 
-- [x] Tenant isolation tests (2 tests, passing)
+- [x] Tenant isolation tests (3 tests, passing)
 - [x] RBAC denial tests (2 tests, passing)
-- [x] Auth flow tests (8 tests, passing) — 12/12 total, ruff+mypy strict clean
+- [x] Auth flow tests (8 tests, passing)
+- [x] Knowledge module tests (6 tests: chunking, ingestion, unsupported format, tenant isolation)
+- [x] 19/19 total, ruff+mypy strict clean
 - [ ] Playwright E2E
-- [ ] AI evaluation fixtures (Phase 2+)
+- [ ] AI evaluation fixtures (Phase 3+)
 
 ## Infrastructure (AWS)
 
@@ -88,6 +101,8 @@ deployment has not been started — see `docs/RESUME_BUILD.md` for the exact
 next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 
 **Do not read this file as "the product is done."** It tracks a very large,
-explicitly multi-phase build. As of this writing, only Phase 1 (platform
-foundation) work is in progress; Phases 2–10 and the AWS production
-deployment have not started.
+explicitly multi-phase build. As of this writing, Phase 1 (platform
+foundation) and the Knowledge slice of Phase 2 are complete; Compliance,
+Security, Sales, Support, Automation (Phases 3–7), cross-module
+intelligence and the AI Copilot itself (Phase 3+), Phases 8–10, and the
+AWS production deployment have not started.
