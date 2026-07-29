@@ -291,3 +291,62 @@ export type OutreachMessage = {
   created_at: string;
   sent_at: string | null;
 };
+
+export type SupportCustomer = {
+  id: string;
+  name: string;
+  email: string;
+  plan: string | null;
+  sales_account_id: string | null;
+  status: "active" | "churned";
+  created_at: string;
+};
+
+export type TicketCategory = "billing" | "technical" | "account" | "security" | "general";
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
+export type TicketStatus = "open" | "pending" | "resolved" | "closed";
+
+export type SupportTicket = {
+  id: string;
+  customer_id: string;
+  subject: string;
+  description: string | null;
+  channel: "email" | "chat" | "api";
+  category: TicketCategory;
+  priority: TicketPriority;
+  status: TicketStatus;
+  owner_id: string | null;
+  related_alert_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  sender_type: "customer" | "agent" | "ai";
+  author_id: string | null;
+  body: string;
+  created_at: string;
+};
+
+export type SupportTicketDetail = SupportTicket & {
+  messages: TicketMessage[];
+};
+
+export type KnowledgeArticle = {
+  id: string;
+  title: string;
+  body: string;
+  category: string | null;
+  published: boolean;
+  created_at: string;
+};
+
+export type CSATResponse = {
+  id: string;
+  ticket_id: string;
+  score: number;
+  comment: string | null;
+  created_at: string;
+};

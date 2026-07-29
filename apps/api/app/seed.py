@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,8 @@ from app.sales.service import send_outreach_message
 from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding
 from app.secops.service import create_incident
 from app.security import hash_password
+from app.support.models import CSATResponse, Customer, KnowledgeArticle, TicketMessage
+from app.support.service import create_ticket
 
 logger = logging.getLogger("agora.seed")
 logging.basicConfig(level=logging.INFO)
@@ -164,6 +167,28 @@ async def seed() -> None:
         )
         if not existing_accounts:
             await _seed_demo_sales_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        nordwind_account = (
+            await db.execute(
+                select(Account).where(
+                    Account.organization_id == organization.id,
+                    Account.name == "Nordwind Robotics GmbH",
+                )
+            )
+        ).scalar_one_or_none()
+
+        existing_customers = (
+            (await db.execute(select(Customer).where(Customer.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_customers:
+            await _seed_demo_support_data(
+                db,
+                organization_id=organization.id,
+                admin_id=admin.id,
+                sales_account_id=nordwind_account.id if nordwind_account else None,
+            )
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -543,6 +568,109 @@ async def _seed_demo_sales_data(
     logger.info(
         "Seeded demo sales data (1 account, 2 contacts, 1 opportunity, "
         "2 outreach attempts: 1 sent, 1 blocked by suppression)"
+    )
+
+
+async def _seed_demo_support_data(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    admin_id: uuid.UUID,
+    sales_account_id: uuid.UUID | None,
+) -> None:
+    """Seeds one customer (linked to the Nordwind Robotics sales account —
+    spec section 69 "New Customer"), a resolved billing ticket with a CSAT
+    response, and a ticket categorized "security" so the Support -> Security
+    cross-module hook (spec section 35) has a real demonstration: creating
+    it auto-creates a linked SecurityAlert. Also seeds one published
+    knowledge article."""
+    customer = Customer(
+        organization_id=organization_id,
+        sales_account_id=sales_account_id,
+        name="Nordwind Robotics GmbH",
+        email="support@nordwind-robotics.example",
+        plan="Growth",
+        status="active",
+    )
+    db.add(customer)
+    await db.flush()
+
+    billing_ticket = await create_ticket(
+        db,
+        organization_id=organization_id,
+        customer_id=customer.id,
+        subject="Question about our latest invoice",
+        description="We were charged twice for the March subscription period.",
+        channel="email",
+        category="billing",
+        priority="medium",
+        actor_user_id=admin_id,
+    )
+    db.add(
+        TicketMessage(
+            organization_id=organization_id,
+            ticket_id=billing_ticket.id,
+            sender_type="customer",
+            body="We were charged twice for the March subscription period.",
+        )
+    )
+    db.add(
+        TicketMessage(
+            organization_id=organization_id,
+            ticket_id=billing_ticket.id,
+            sender_type="agent",
+            author_id=admin_id,
+            body=(
+                "Thanks for flagging this - I can see the duplicate charge and have "
+                "issued a refund for the extra charge."
+            ),
+        )
+    )
+    billing_ticket.status = "resolved"
+    billing_ticket.resolved_at = datetime.now(UTC)
+    db.add(
+        CSATResponse(
+            organization_id=organization_id,
+            ticket_id=billing_ticket.id,
+            score=5,
+            comment="Fast and clear resolution, thank you.",
+        )
+    )
+
+    security_ticket = await create_ticket(
+        db,
+        organization_id=organization_id,
+        customer_id=customer.id,
+        subject="Possible unauthorized access to our account",
+        description="One of our engineers noticed a login from an unrecognized location.",
+        channel="email",
+        category="security",
+        priority="high",
+        actor_user_id=admin_id,
+    )
+    db.add(
+        TicketMessage(
+            organization_id=organization_id,
+            ticket_id=security_ticket.id,
+            sender_type="customer",
+            body="One of our engineers noticed a login from an unrecognized location this morning.",
+        )
+    )
+
+    db.add(
+        KnowledgeArticle(
+            organization_id=organization_id,
+            title="How to reset your password",
+            body="Go to Settings, then Security, then Reset Password and follow the emailed link.",
+            category="account",
+            published=True,
+        )
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo support data (1 customer, 2 tickets - 1 resolved with CSAT, "
+        "1 security-flagged ticket that auto-created a SecurityAlert, 1 knowledge article)"
     )
 
 

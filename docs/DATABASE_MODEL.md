@@ -422,6 +422,67 @@ sales_outreach_messages
   sent_at TIMESTAMPTZ NULL
 ```
 
+## Tables (Phase 6 — Customer Support)
+
+```text
+support_customers
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  sales_account_id UUID FK sales_accounts NULL   -- links a converted Sales Account, spec §69
+  name TEXT NOT NULL
+  email TEXT NOT NULL
+  plan TEXT NULL
+  status TEXT NOT NULL DEFAULT 'active'   -- active|churned
+  created_at, updated_at
+
+support_tickets
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  customer_id UUID FK support_customers NOT NULL
+  subject TEXT NOT NULL
+  description TEXT NULL
+  channel TEXT NOT NULL DEFAULT 'email'   -- email|chat|api
+  category TEXT NOT NULL DEFAULT 'general'   -- billing|technical|account|security|general
+  priority TEXT NOT NULL DEFAULT 'medium'   -- low|medium|high|urgent
+  status TEXT NOT NULL DEFAULT 'open'   -- open|pending|resolved|closed
+  owner_id UUID FK users NULL
+  related_alert_id UUID FK security_alerts NULL   -- cross-module hook, see below
+  resolved_at TIMESTAMPTZ NULL
+  created_at, updated_at
+
+support_ticket_messages
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  ticket_id UUID FK support_tickets NOT NULL
+  sender_type TEXT NOT NULL   -- customer|agent|ai
+  author_id UUID FK users NULL
+  body TEXT NOT NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+support_knowledge_articles
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  body TEXT NOT NULL
+  category TEXT NULL
+  published BOOLEAN NOT NULL DEFAULT false
+  created_at, updated_at
+
+support_csat_responses
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  ticket_id UUID FK support_tickets NOT NULL
+  score INTEGER NOT NULL   -- 1-5
+  comment TEXT NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+`support_conversations` and `support_intents` from the spec's data model
+(§46) are deliberately not separate tables — a conversation *is* a ticket
+here, and intent is `Ticket.category`, the same consolidation already
+applied to Security's findings (ADR-0017). `support_slas` and
+`support_qa_reviews` are not modeled yet; see `docs/KNOWN_LIMITATIONS.md`.
+
 An outreach message can only move from `draft` to `sent` if
 `sales_contacts.do_not_contact` is false at send time; otherwise it moves
 to `blocked` instead, via `app/sales/service.py::send_outreach_message`

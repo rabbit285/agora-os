@@ -275,3 +275,29 @@ is the natural foundation the richer engine would extend rather than
 replace. No real email/LinkedIn provider exists yet either (progressive
 trust model, spec §B1) — "sending" only transitions this row's status,
 but the compliance gate in front of it is not a stub.
+
+## ADR-0020 — A ticket categorized "security" auto-creates a `SecurityAlert`, not a `SecurityIncident`
+
+**Decision**: `app/support/service.py::create_ticket` creates a
+`app.secops.models.SecurityAlert` (Security's triage inbox, spec §18) and
+sets `ticket.related_alert_id` when the ticket's `category` is
+`"security"`, escalating the ticket's own priority to `urgent` in the
+same step. It does **not** create a `SecurityIncident` directly.
+
+**Why**: Spec §35's example reads "Ticket mentions security breach →
+mark urgent → notify Security → create incident → notify Compliance →
+preserve evidence." Skipping straight to `SecurityIncident` — which
+already carries its own cross-module hook (ADR-0018: critical incidents
+auto-create a Compliance Risk) — would mean a support agent's category
+selection alone decides an incident exists, bypassing the triage step
+the Security module's own workflow uses for every other finding
+(Finding → Alert → Incident, promoted by a human analyst). Landing on
+`SecurityAlert` keeps Support's hook symmetric with how Security already
+escalates its own data, reuses an existing primitive rather than
+inventing a support-specific one (spec §80), and still delivers the
+spec's "notify Security" step honestly — it just leaves "create
+incident" as the deliberate next human decision, one click away in the
+Security module. Tested in
+`tests/test_support.py::test_security_category_ticket_creates_linked_alert`,
+which asserts the alert is visible through the generic
+`/api/v1/security/alerts` endpoint.

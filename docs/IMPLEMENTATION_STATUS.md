@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, and Phase 5 Sales backbones — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, and Phase 6 Customer Support backbones — verified end-to-end)
 
 ## Platform
 
@@ -90,7 +90,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 
 ## Support
 
-- [ ] Not started (Phase 6)
+- [x] Customer, Ticket, TicketMessage, KnowledgeArticle, CSATResponse models + migration
+- [x] Cross-module hook: a `security`-category ticket auto-creates a linked `SecurityAlert` and escalates the ticket to `urgent` priority (tested, ADR-0020)
+- [x] `/api/v1/support` router — customers, tickets (+ detail with message thread, status transitions), knowledge articles, CSAT; tenant-isolated, RBAC-gated
+- [x] RBAC: `support_manager` / `support_agent` system roles granted support permissions
+- [x] Frontend: `/support` overview (customers, ticket creation/list) + `/support/tickets/[id]` detail (status workflow, linked security alert banner, message thread)
+- [x] Seed script: 1 customer (linked to the Nordwind Robotics sales account), 1 resolved billing ticket with CSAT, 1 security-flagged ticket (auto-created SecurityAlert), 1 published knowledge article
+- [ ] SLA policies/timers, QA review scoring — not started
+- [ ] Multi-channel ingestion (email/chat connectors), AI-drafted replies, confidence-gated auto-resolution — not started, needs Phase 9 connectors and Copilot integration
+- [ ] Knowledge-gap detection, FAQ generation — not started
 
 ## Automation
 
@@ -114,7 +122,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
 - [x] Security tests (8 tests: RBAC grant/denial, cross-module risk creation, tenant isolation, status workflows)
 - [x] Sales tests (8 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle)
-- [x] 51/51 total, ruff+mypy strict clean
+- [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
+- [x] 61/61 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -136,10 +145,10 @@ next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 **Do not read this file as "the product is done."** It tracks a very large,
 explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
-Phases 3–5 (Compliance, Security, Sales) have their core backbones (see
-their sections above) but not their larger sub-features (audits, AI
+Phases 3–6 (Compliance, Security, Sales, Support) have their core backbones
+(see their sections above) but not their larger sub-features (audits, AI
 governance, privacy workflows, vendor risk, Trust Center, identity/cloud
-provider integrations, incident playbooks, sequences/campaigns, real
-external connectors). Support, Automation (Phases 6–7), the cross-module
+provider integrations, incident playbooks, sequences/campaigns, SLA/QA
+scoring, real external connectors). Automation (Phase 7), the cross-module
 intent router, Phases 8–10, and the AWS production deployment have not
 started.

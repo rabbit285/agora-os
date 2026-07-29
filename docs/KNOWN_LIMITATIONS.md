@@ -7,10 +7,10 @@ implied to work.
 
 ## Product scope
 
-- **Support and Automation** (two of the five primary product modules)
-  have zero domain logic — their nav entries route to a `/coming-soon`
-  page. **Compliance**, **Security**, and **Sales** have their core
-  backbones (see below) but not their larger sub-features. See
+- **Automation** (one of the five primary product modules) has zero
+  domain logic — its nav entry routes to a `/coming-soon` page.
+  **Compliance**, **Security**, **Sales**, and **Support** have their
+  core backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
 - **Compliance**: no audits (auditor portal), AI governance, privacy
   workflows (RoPA/DPIA/DSAR), vendor risk, questionnaires, or Trust
@@ -31,12 +31,20 @@ implied to work.
   data connectors), no meetings or sales inbox. The suppression check
   itself is a single boolean, not the fuller jurisdiction/consent/
   marketing-basis engine spec §91 describes (ADR-0019).
+- **Support**: tickets have a `channel` field (`email`/`chat`/`api`) but
+  no real channel connectors — there's no inbound email parsing or chat
+  widget, only the API. No SLA policies/timers, no QA review scoring, no
+  AI-drafted replies or confidence-gated auto-resolution (spec §32 — the
+  Copilot/retrieval infrastructure exists from Phase 2 but nothing wires
+  Support into it yet), no knowledge-gap detection or FAQ generation. The
+  security-category cross-module hook creates a `SecurityAlert` (Security's
+  triage inbox), not a full `SecurityIncident` — see ADR-0020 for why.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,
-  Security, and Sales context in one answer) can't work yet — Compliance,
-  Security, and Sales data all exist now but nothing wires any of them
-  into Copilot retrieval. There's also no cross-module intent router —
+  Security, Sales, and Support context in one answer) can't work yet —
+  that data all exists now but nothing wires any of it into Copilot
+  retrieval. There's also no cross-module intent router —
   every question goes through the same single retrieval path over
   Knowledge chunks only.
 - **Compliance frameworks/requirements are a fixed seeded catalog**, not

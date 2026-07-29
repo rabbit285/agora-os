@@ -67,7 +67,7 @@ erDiagram
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
-| Support | customers, tickets, support_conversations, knowledge_articles | 6 |
+| Support | ~~customers, tickets, ticket_messages, knowledge_articles, csat_responses~~ (implemented — see below), support_slas, support_qa_reviews (not yet) | 6 |
 | Automation | workflows, workflow_versions, workflow_runs | 7 |
 | Integrations | integration_connections, webhooks, api_keys | 9 |
 | Billing | subscriptions, entitlements | 10 |
@@ -192,6 +192,47 @@ spec §25), lead scoring beyond a raw numeric field, meetings, sales
 conversations/inbox, pipeline events, playbooks. Real lead-finding,
 enrichment, and message sending all depend on external connectors that
 don't exist yet (spec's progressive trust model, §B1).
+
+## Phase 6 entities (implemented — Customer Support backbone)
+
+```mermaid
+erDiagram
+  ORGANIZATION ||--o{ SUPPORT_CUSTOMER : has
+  SALES_ACCOUNT ||--o| SUPPORT_CUSTOMER : "may convert to"
+  SUPPORT_CUSTOMER ||--o{ SUPPORT_TICKET : opens
+  SUPPORT_TICKET ||--o{ SUPPORT_TICKET_MESSAGE : contains
+  SUPPORT_TICKET ||--o{ CSAT_RESPONSE : "may receive"
+  SUPPORT_TICKET }o--o| SECURITY_ALERT : "security category creates"
+  ORGANIZATION ||--o{ SUPPORT_KNOWLEDGE_ARTICLE : has
+```
+
+- **Customer** — an organization's own support account; `sales_account_id`
+  optionally links back to the Sales **Account** it converted from (spec
+  §69 "New Customer" cross-module scenario), nullable because not every
+  Support Customer originated in Sales.
+- **Ticket** — consolidates the spec's separate `support_conversations`
+  concept into one row (a conversation *is* a ticket here) and its
+  `support_intents` into `Ticket.category`, mirroring the Security
+  findings consolidation (ADR-0017). `Ticket.related_alert_id` is the
+  cross-module hook: a ticket categorized `security` auto-creates a
+  **SecurityAlert** and escalates the ticket to `urgent` priority (spec
+  §35, ADR-0020) — Security's own triage inbox, not a full Incident; a
+  human security analyst decides whether to promote it further, the same
+  workflow Security already uses for its own findings.
+- **TicketMessage** — one message in the ticket thread, tagged
+  `customer`/`agent`/`ai`.
+- **KnowledgeArticle** — organization-scoped support content;
+  `published` gates customer/AI visibility (not yet enforced by any
+  reader — no AI drafting flow consumes it yet, see
+  `docs/KNOWN_LIMITATIONS.md`).
+- **CSATResponse** — a 1-5 score plus optional comment, tied to a ticket.
+
+Not modeled yet: SLA policies/timers (`support_slas`), QA review scoring
+(`support_qa_reviews`), multi-channel ingestion (only `email`/`chat`/`api`
+exist as a channel tag, no actual channel connector), AI-drafted replies
+or confidence-gated auto-resolution (spec §32 — the Copilot/retrieval
+infrastructure from Phase 2 could support this, but nothing wires Support
+into it yet), knowledge-gap detection, FAQ generation.
 
 ## Cross-module entity linking (spec §81)
 

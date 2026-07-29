@@ -92,11 +92,25 @@ enrichment need external data sources; real sending needs an email/
 LinkedIn provider — both are progressive-trust-model connector work
 (Phase 9), not blockers to the backbone above.
 
-## Phase 6 — Customer Support
+## Phase 6 — Customer Support (backbone in progress)
 
-Support inbox (email/chat/API channels), AI support agent with
-confidence-gated auto-reply, knowledge base, SLA monitoring, QA scoring,
-support automations.
+Done: Customer, Ticket, TicketMessage, KnowledgeArticle, CSATResponse.
+`Ticket.category` consolidates the spec's `support_intents` concept, and a
+ticket *is* a conversation here (no separate `support_conversations`
+table), same simplification as Security's finding categories (ADR-0017).
+A ticket categorized `security` auto-creates a linked `SecurityAlert` and
+escalates the ticket to `urgent` priority — the Phase 6 cross-module hook
+(spec §35, ADR-0020). `Customer.sales_account_id` optionally links back to
+a converted Sales Account (spec §69 "New Customer").
+
+Remaining: SLA policies/timers, QA review scoring, multi-channel ingestion
+(email/chat/API are channel tags today, not real connectors), AI-drafted
+replies and confidence-gated auto-resolution (spec §32 — the Copilot/
+retrieval infrastructure from Phase 2 could support this but nothing wires
+Support into it yet), knowledge-gap detection, FAQ generation, support
+analytics. Real multi-channel support needs the connector SDK (Phase 9);
+AI-drafted replies need Support wired into the existing Copilot retrieval
+path — see `docs/RESUME_BUILD.md`.
 
 ## Phase 7 — Business Automation
 

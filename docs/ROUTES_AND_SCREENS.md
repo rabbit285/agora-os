@@ -82,11 +82,22 @@ Finder, Lead Detail, Contact Detail (standalone), Sequences/Sequence
 Builder, Campaigns, Sales Inbox, Meetings, Opportunity Detail (standalone),
 Sales Intelligence.
 
-## SUPPORT / AUTOMATION
+## SUPPORT
 
-Not started — Phases 6–7 respectively. Routes will be added under
-`apps/web/app/(app)/support`, `/automation` matching the navigation tree
-in spec §6.
+| Route | Status |
+|---|---|
+| `/support` | [x] customers + ticket creation/list overview |
+| `/support/tickets/[id]` | [x] detail: status workflow, linked security alert, message thread |
+
+Not yet built (spec §67 lists these under Support): Conversations
+(separate from Tickets), AI Agent configuration, Knowledge Base standalone
+management UI (API exists, no dedicated page yet), QA scoring dashboard,
+CSAT reporting, support analytics.
+
+## AUTOMATION
+
+Not started — Phase 7. Routes will be added under
+`apps/web/app/(app)/automation` matching the navigation tree in spec §6.
 
 ## SETTINGS
 

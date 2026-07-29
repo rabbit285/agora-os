@@ -39,7 +39,7 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     label: "Support",
-    items: [{ label: "Customer Support", href: "/support", implemented: false }],
+    items: [{ label: "Customer Support", href: "/support", implemented: true }],
   },
   {
     label: "Automation",
@@ -63,6 +63,6 @@ export const MODULES = [
   { key: "compliance", label: "Compliance", href: "/compliance", implemented: true },
   { key: "security", label: "Security", href: "/security", implemented: true },
   { key: "sales", label: "Sales", href: "/sales", implemented: true },
-  { key: "support", label: "Support", href: "/support", implemented: false },
+  { key: "support", label: "Support", href: "/support", implemented: true },
   { key: "automation", label: "Automation", href: "/automation", implemented: false },
 ];

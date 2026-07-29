@@ -2,7 +2,7 @@
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
-Phases 3-5 / local-only** checkpoint, not a production release — most
+Phases 3-6 / local-only** checkpoint, not a production release — most
 items below are correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
@@ -78,11 +78,21 @@ items below are correctly unchecked.
 - [ ] Sequences/campaigns, lead finder/enrichment, meetings, sales inbox —
       not started, need external connectors (Phase 9) for the real version
 
-See `docs/RESUME_BUILD.md` for the next phase (Customer Support).
+## Phase 6 (Support) — backbone complete, sub-features remain
+
+- [x] Customer, Ticket, TicketMessage, KnowledgeArticle, CSATResponse models + migration
+- [x] Cross-module hook: security-category ticket auto-creates a linked SecurityAlert (tested, ADR-0020)
+- [x] Tenant-isolated `/api/v1/support` API + frontend (overview, ticket detail)
+- [x] RBAC: `support_manager`/`support_agent` roles granted support permissions, tested
+- [x] Seed script: demo org customer (linked to Sales account), resolved billing ticket + CSAT, security-flagged ticket + auto-created alert, 1 knowledge article
+- [x] Backend tests: 61 passing total; ruff/mypy clean
+- [ ] SLA policies/timers, QA review scoring, multi-channel connectors, AI-drafted
+      replies — not started, need Phase 9 connectors and Copilot integration
+
+See `docs/RESUME_BUILD.md` for the next phase (Business Automation).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 6 — Customer Support
 - [ ] Phase 7 — Business Automation (workflow builder)
 - [ ] Phase 8 — Cross-module intelligence
 - [ ] Phase 9 — Integrations / connectors

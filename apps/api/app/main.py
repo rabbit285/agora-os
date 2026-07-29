@@ -25,6 +25,7 @@ from app.routers import (
     organizations,
     sales,
     security,
+    support,
     tasks,
 )
 
@@ -101,3 +102,4 @@ app.include_router(knowledge.router)
 app.include_router(compliance.router)
 app.include_router(security.router)
 app.include_router(sales.router)
+app.include_router(support.router)

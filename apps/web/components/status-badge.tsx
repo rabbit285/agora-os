@@ -57,6 +57,16 @@ const STATUS_VARIANTS: Record<
   draft: "outline",
   sent: "success",
   blocked: "destructive",
+  billing: "secondary",
+  technical: "secondary",
+  account: "secondary",
+  security: "destructive",
+  general: "outline",
+  low: "outline",
+  medium: "secondary",
+  high: "warning",
+  urgent: "destructive",
+  active: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {
