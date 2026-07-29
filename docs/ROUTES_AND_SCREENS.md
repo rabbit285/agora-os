@@ -48,15 +48,17 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + AI system inventory + frameworks overview |
+| `/compliance` | [x] controls + risks + AI system inventory + RoPA/DPIA/DSAR + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/ai-systems/[id]` | [x] detail: status workflow, linked approval banner, assessments |
+| `/compliance/dpias/[id]` | [x] detail: status workflow, linked approval banner (high-risk only), findings, link to a linked AI system |
+| `/compliance/dsars/[id]` | [x] detail: status workflow, due date (overdue indicator), fulfilled date, notes |
 
 Not yet built (spec §67 lists these under Compliance): Framework-specific
 dashboards (GDPR/EU AI Act individual views), Evidence Library standalone
-page, AI Inventory/Assessment, Data Inventory/DPIA/DSAR, Vendors,
-Questionnaires, Policies list page (API exists, no UI yet), Audits, Trust
-Center, Regulatory Intelligence.
+page, a standalone Data Inventory/RoPA detail view (list-only today),
+Vendors, Questionnaires, Policies list page (API exists, no UI yet),
+Audits, Trust Center, Regulatory Intelligence.
 
 ## SECURITY
 

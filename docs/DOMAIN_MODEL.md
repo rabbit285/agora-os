@@ -64,7 +64,7 @@ erDiagram
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
 | Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
 | AI Governance | ~~ai_systems, ai_assessments~~ (implemented — see below), ai_incidents (not yet) | 3 |
-| Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
+| Privacy | ~~processing_activities, dpias, dsars~~ (implemented — see below), data_transfers (not yet) | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
 | Support | ~~customers, tickets, ticket_messages, knowledge_articles, csat_responses~~ (implemented — see below), support_slas, support_qa_reviews (not yet) | 6 |
@@ -107,6 +107,11 @@ erDiagram
   ORGANIZATION ||--o{ AI_SYSTEM : has
   AI_SYSTEM ||--o{ AI_ASSESSMENT : "assessed by"
   AI_SYSTEM }o--o| APPROVAL : "high/unacceptable risk requires"
+  ORGANIZATION ||--o{ PROCESSING_ACTIVITY : has
+  ORGANIZATION ||--o{ DSAR : has
+  PROCESSING_ACTIVITY ||--o{ DPIA : "assessed by"
+  AI_SYSTEM }o--o| DPIA : "high/unacceptable risk creates"
+  DPIA }o--o| APPROVAL : "directly-created high risk requires"
 ```
 
 - **Framework / Requirement** — global catalog data (GDPR, EU AI Act, ISO
@@ -138,11 +143,26 @@ erDiagram
   deliberately not reusing ControlAssessment — an AI system isn't a
   Control, and forcing the reuse would mean adding AI-specific columns to
   a Compliance-control-shaped table.
+- **ProcessingActivity / DPIA / DSAR** — spec §2/§12's Privacy
+  sub-features (RoPA, DPIA, DSAR — a Compliance capability, not a
+  separate primary module; see the spec's own module list). ProcessingActivity
+  is the organization's own RoPA entry (GDPR Article 30), tenant-scoped
+  like Control rather than global like Framework. A `DPIA` may link to a
+  ProcessingActivity, an AISystem, or neither; a directly-created
+  `risk_level="high"` DPIA gets its own real Approval, gated exactly like
+  AISystem (this build's fourth reuse of Approval outside its own UI).
+  `register_ai_system` is extended a **second** time (ADR-0029): a
+  high/unacceptable-risk registration now also creates a linked draft
+  DPIA via `DPIA.ai_system_id` — spec §69 "New AI Tool Adoption"'s
+  "Privacy assessment" step — sharing the AISystem's existing Approval
+  rather than creating a redundant second one. DSAR gets
+  `due_at = created_at + 30 days` (GDPR Article 12(3)) and a
+  received→in_progress→fulfilled/rejected lifecycle.
 
 Not modeled yet: framework/evidence versioning, audits (auditor portal),
-ai_incidents, privacy workflows (RoPA, DPIA, DSAR), vendor risk,
-questionnaires, Trust Center — each a substantial feature attaching to
-this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
+ai_incidents, data transfers (the remaining Privacy sub-feature), vendor
+risk, questionnaires, Trust Center — each a substantial feature attaching
+to this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 4 entities (implemented — Security backbone)
 
@@ -345,11 +365,13 @@ all large, open-ended features with no existing primitive to hang them
 off of, unlike the scenarios chosen here. "New Customer" also
 doesn't yet send a real welcome email or update a billing/accounting
 system — no email provider or accounting connector exists (spec §48).
-"New AI Tool Adoption" now has its first real primitive — the AI System
+"New AI Tool Adoption" now has two real steps — the AI System
 Inventory's register→gate→approve hook (see the Phase 3 section above,
-ADR-0027) — but the rest of spec §69's chain (vendor security
-questionnaire, Privacy/DPA review, approved-use policy publication) is
-still not implemented; see `docs/KNOWN_LIMITATIONS.md`.
+ADR-0027) and, as of the Privacy slice, an auto-created DPIA covering the
+chain's "Privacy assessment" step (ADR-0029) — but the rest of spec §69's
+chain (vendor security questionnaire, EU AI Act applicability/DPA review
+as distinct sub-steps, approved-use policy publication) is still not
+implemented; see `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 9 entities (implemented — Integrations backbone: Webhook + six-provider OAuth2 framework)
 

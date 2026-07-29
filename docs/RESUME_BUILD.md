@@ -10,83 +10,83 @@ kept current at the end of every work session per the execution contract's
 Infrastructure) are complete. All five primary product modules —
 Compliance, Security, Sales, Support, and Automation (Phases 3-7) — have
 a real, tested backbone. Phase 8 (Cross-Module Intelligence) has three of
-spec §69's five named scenarios fully implemented, plus a partial fourth.
-Phase 9 (Integrations) now has two connector shapes complete: a generic
-inbound Webhook connector, and a provider-neutral OAuth2 framework with
-six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub,
-Slack, Salesforce. Compliance also has an AI System Inventory (EU AI Act
-risk tiers).** See `docs/RELEASE_CHECKLIST.md` and
-`docs/IMPLEMENTATION_STATUS.md` for the itemized list.
+spec §69's five named scenarios fully implemented, plus a partial fourth
+that now has two of its steps. Phase 9 (Integrations) has two connector
+shapes complete: a generic inbound Webhook connector, and a
+provider-neutral OAuth2 framework with six real (credential-gated)
+adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce.
+Compliance also has an AI System Inventory (EU AI Act risk tiers) and,
+as of this slice, Privacy sub-features (RoPA/DPIA/DSAR).** See
+`docs/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_STATUS.md` for the
+itemized list.
 
-Most recent slice: **completing the OAuth integration framework**
-(explicitly requested — the user confirmed real credentials will be
-supplied later via environment variables, and asked for everything
-credential-free to be finished now). What changed, all in
-`apps/api/app/integrations/` and `apps/worker/`:
+Most recent slice: **Privacy workflows** (`ProcessingActivity`, `DPIA`,
+`DSAR` — spec §2/§12's Privacy sub-features of the AI Compliance module,
+not a separate module; confirmed against the spec text before building,
+since the numbered spec sections don't have a standalone "Privacy"
+heading). All in `apps/api/app/compliance/`:
 
-- **Five new real adapters** alongside HubSpot —
-  `adapters/{google,microsoft,github,slack,salesforce}.py` — each a
-  genuine implementation against that provider's documented OAuth/API
-  endpoints (real HTTP calls, never a stub), none exercised end to end
-  here (no real developer app for any of them, same as HubSpot). Adapter
-  selection moved from HubSpot-only `if` branches into one registry table
-  (`adapters/__init__.py::_provider_specs`) — adding a seventh provider is
-  one adapter module + one table entry + three env vars, not a structural
-  change (ADR-0028).
-- **Permission preview**: every adapter carries a `SCOPES` class
-  attribute; the provider catalog (`GET /api/v1/integrations/providers`)
-  exposes it per provider, and the frontend shows the exact scopes a
-  Connect click will request *before* the user clicks "Authorize" — even
-  for unconfigured providers.
-- **Sync now runs as a durable Temporal workflow**
-  (`IntegrationSyncWorkflow` + `execute_integration_sync_activity`,
-  `apps/worker/`), not inline in the request — closing the gap
-  ADR-0026/`KNOWN_LIMITATIONS.md` flagged. `create_sync_run` (writes the
-  `running` row) and `execute_sync_run` (the actual provider call) are
-  split the same way Knowledge's `ingest_document` is split from
-  `DocumentIngestionWorkflow`, so tests exercise the real logic without a
-  live Temporal connection.
-- **Audit logging for the full lifecycle**: refresh (success + failure),
-  sync (started/succeeded/failed), disconnect (including whether the
-  provider's own revoke call succeeded) — previously only connect/
-  disconnect were logged. Every adapter failure is caught and normalized
-  to a 422, never an unhandled 500.
-- **`.env.local` support** (`Settings` reads `.env` then `.env.local`,
-  later wins) and a new repo-root `.dockerignore` so neither file can ever
-  land in a Docker build context. `docs/ENVIRONMENT_VARIABLES.md` commits
-  to a specific (not yet built) AWS production shape: Secrets Manager +
-  ECS `secrets` injection + least-privilege IAM task roles for credentials,
-  SSM Parameter Store for non-secret config — a design contract for
-  whoever builds Phase 10/AWS, not implemented infrastructure.
-- **Frontend test infrastructure added from scratch**: Vitest + React
-  Testing Library (`apps/web/vitest.config.mts`, `npm test`) — nothing
-  existed before this slice. 5 tests cover the provider catalog, the
-  permission-preview disclosure gating the real OAuth-start call, the
-  connected-connection controls, in-flight-sync button disabling, and
-  disconnect.
+- **ProcessingActivity** — the organization's own RoPA entry (GDPR
+  Article 30): name, purpose, legal basis (GDPR Article 6's six lawful
+  bases), data categories, data subjects, retention period. Tenant-scoped
+  like Control, unlike Framework/Requirement's global catalog data.
+- **DPIA** (GDPR Article 35) — may link to a `ProcessingActivity`, an
+  `AISystem`, both, or neither. A DPIA created directly with
+  `risk_level="high"` gets its own real `core.Approval`, gating
+  `approved` exactly like `AISystem` does (ADR-0027's pattern reused a
+  third time — this build's fourth use of Approval outside its own
+  generic UI).
+- **The AI System hook extended a second time** (ADR-0029):
+  `register_ai_system` now also creates a linked draft `DPIA` for
+  high/unacceptable-risk systems — completing another step of spec §69's
+  "New AI Tool Adoption" chain ("... -> Security assessment -> **Privacy
+  assessment** -> ..."). No second Approval is created for this
+  auto-linked DPIA — it shares the AI system's existing one, since a
+  second sign-off gate for the same registration would be governance
+  fatigue, not additional safety. This mirrors exactly how the Security
+  Incident chain (Phase 8) extended its own hook twice (ADR-0018, then
+  ADR-0023) rather than inventing a second mechanism each time.
+- **DSAR** (GDPR Articles 15-20) — `due_at = created_at + 30 days` (GDPR
+  Article 12(3)'s one-month response window), a
+  received→in_progress→fulfilled/rejected lifecycle, `fulfilled_at` set
+  automatically on completion.
+- **RBAC**: new `compliance.privacy.manage` permission, granted to `dpo`
+  (extending its existing Compliance + AI Governance grant) and `legal`
+  — a system role seeded since Phase 1 with zero permissions, activated
+  for the first time here (mirroring how `ai_governance_manager` was
+  activated by the AI System Inventory slice).
+- **Frontend**: RoPA/DPIA/DSAR sections added to `/compliance` (create
+  forms + lists), plus `/compliance/dpias/[id]` (status workflow, a
+  linked-Approval banner shown only when `approval_id` is set, findings,
+  a link to any linked AI system) and `/compliance/dsars/[id]` (status
+  workflow, due date with an overdue indicator, fulfilled date, notes).
+- **Seed data**: 1 processing activity, 1 medium-risk standalone DPIA
+  linked to it, 1 fulfilled DSAR, 1 still-open DSAR — the high-risk AI
+  system already seeded by the prior slice now also produces its own
+  linked DPIA for free, via the extended hook.
 
-All lint/typecheck/test/build checks pass: **137 backend tests** (was
-101), ruff + mypy --strict clean; frontend eslint + tsc + production build
-clean; **5 new frontend tests**, all passing.
+All lint/typecheck/test/build checks pass: **149 backend tests** (was
+137), ruff + mypy --strict clean; frontend eslint + tsc + production build
+clean; **8 frontend tests** (was 5; 3 new for the Privacy sections), all
+passing.
 
 No AWS infrastructure exists. See `docs/IMPLEMENTATION_PLAN.md` for the
 full phase order and `docs/KNOWN_LIMITATIONS.md` for exactly what's
-missing in each module. Phase 8 still has 3 full + 1 partial of 5 named
-scenarios (Enterprise Sales Security Review remains, needs customer
-questionnaires that don't exist). Phase 9's OAuth framework now covers six
-providers; every other spec §48 category still needs real credentials
-this environment doesn't have.
+missing in each module. Not modeled yet in Privacy: data transfers (the
+remaining spec sub-feature) — a substantial feature (cross-border
+transfer mechanisms, adequacy decisions, SCCs) with no existing primitive
+to hang it off of, deliberately deferred rather than half-built.
 
 ## Branch and commit
 
-Branch: `main`. Fifteen substantive commits: Phase 1 platform foundation,
+Branch: `main`. Sixteen substantive commits: Phase 1 platform foundation,
 Phase 2 Knowledge ingestion, Phase 2 completion (RAG + Copilot), Phase 3
 Compliance backbone, Phase 4 Security backbone, Phase 5 Sales backbone,
 Phase 6 Support backbone, Phase 7 Automation backbone, Phase 8 Support
 Upsell Signal, Phase 8 Security Incident chain extension, Phase 9 Webhook
 connector, Phase 8 New Customer, Phase 9 OAuth2 framework + HubSpot, the
-AI System Inventory slice, and this OAuth framework completion slice. See
-`git log` for exact SHAs.
+AI System Inventory slice, the OAuth framework completion slice, and this
+Privacy (RoPA/DPIA/DSAR) slice. See `git log` for exact SHAs.
 
 ## Machine-specific note
 
@@ -105,106 +105,88 @@ launch it directly (`"/c/Program Files/Docker/Docker/Docker Desktop.exe"`)
 and poll `docker info` every few seconds until it responds (~10-30s);
 containers restart automatically once the daemon is back.
 
+The **api and worker containers share `requirements.txt` but are built as
+separate Docker images** — adding a Python dependency requires rebuilding
+both (`docker compose build api worker`), not just the one you're actively
+testing against. This bit the OAuth framework completion slice (the
+worker's image predated `cryptography` being added, so its first real
+Temporal activity call failed with `ModuleNotFoundError` until rebuilt).
+
 ## Exact commands already run (this session)
 
 ```bash
-# No new Alembic migration needed this slice — the six-provider registry,
-# Temporal sync split, and audit logging are all code-level changes; the
-# existing IntegrationConnection/SyncRun schema already had every column
-# needed.
+# Migration for the Privacy tables
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add privacy processing activities dpias dsars"
+docker compose run --rm --no-deps api ruff format migrations/
+docker compose run --rm api alembic upgrade head
+docker compose run --rm api alembic check   # confirms no drift
 
 # Backend checks (all green)
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 137 passed
+# -> 149 passed
+
+# Seed script re-run (idempotent, confirmed on a second run)
+docker compose run --rm --no-deps api python -m app.seed
 
 # Frontend checks (all green)
 cd apps/web
-npm install -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @testing-library/jest-dom @testing-library/user-event
 npx tsc --noEmit
 npx eslint .
-npx vitest run   # -> 5 passed
+npx vitest run   # -> 8 passed
 npm run build
 ```
 
-Live smoke test completed against the running stack: started a **Slack**
-OAuth flow (not HubSpot, to prove the framework is genuinely
-provider-neutral), completed the mock callback, triggered "sync now",
-confirmed it ran through `IntegrationSyncWorkflow` on the real worker
-(`docker compose logs worker` showed the activity completing), refreshed
-the token, disconnected, and confirmed `audit_events` has the full
-`integrations.oauth.started/connected/refreshed/disconnected` and
-`integrations.sync.started/succeeded` trail.
-
-This surfaced one real bug, now fixed: the **worker's Docker image had
-never been rebuilt** since `cryptography` was added to
-`requirements.txt` earlier this session (for Fernet token encryption) —
-the worker never needed that import before `execute_integration_sync_activity`
-existed, so the gap was latent and harmless until this slice. First sync
-attempt failed with `ModuleNotFoundError: No module named 'cryptography'`,
-retrying indefinitely (Temporal's default unlimited-retry behavior, same
-as the pre-existing `DocumentIngestionWorkflow` activities — no retry
-policy override exists for either, consistent with established
-precedent). Fixed with `docker compose build worker`; the orphaned
-in-flight retry then self-healed on its own next attempt once the image
-was current (and correctly finalized as `failed` with "Connection has no
-stored access token", since the connection had been disconnected in the
-meantime — the honest-failure path working exactly as designed). **If a
-future slice adds a new worker activity with a new third-party
-dependency, remember to rebuild the worker image, not just the api
-image** — they share `requirements.txt` but are built and cached
-separately.
+Still to do before this slice is fully closed out: restart the `api`/
+`web` containers, run a live smoke test against the running stack
+(register a high-risk AI system and confirm a linked DPIA appears via
+`GET /api/v1/compliance/dpias`; create a standalone high-risk DPIA,
+confirm its own Approval gates `approved` via a 422 then a 200 after
+deciding it; create a DSAR and confirm `due_at` is ~30 days out; check
+`audit_events` for the new `compliance.dpia.*`/`compliance.dsar.*`
+actions), then commit.
 
 ## Next highest-priority task
 
-The user has explicitly asked to continue automatically into the
-remaining credential-free product work after the OAuth foundation:
-**Privacy workflows, then AI Incidents**, in that order — both
-self-contained, credential-free slices extending existing backbones
-(Compliance), not inventing a new module.
+Per the user's explicit instruction, continue with **AI Incidents** next
+— the second of the two credential-free slices named, and the piece that
+completes AI Governance's near-term scope now that the Inventory (from
+the prior slice) exists to link against.
 
-1. **Privacy workflows** (spec §13's RoPA / DPIA / DSAR): a Record of
-   Processing Activities register (`ProcessingActivity` — organization's
-   own data-processing catalog, tenant-scoped, unlike Compliance's global
-   Framework/Requirement catalog), Data Protection Impact Assessments
-   (`DPIA`, likely linked to a `ProcessingActivity` and gated similarly to
-   the AI System Inventory's Approval gate — a high-risk processing
-   activity plausibly should require sign-off the same way a high-risk AI
-   system does, ADR-0027's pattern reused a third time), and Data Subject
-   Access Requests (`DSAR` — an intake + fulfillment-status workflow,
-   spec's DSAR portal). Look for a real cross-module hook rather than
-   inventing one speculatively (e.g., does a DSAR plausibly relate to
-   Support tickets or Sales contacts holding the data subject's PII?) —
-   only wire one if it's genuine, per spec §80/§82.
-2. **AI Incidents**: an incident log for the AI systems the Inventory
-   already tracks (`AIIncident`, likely mirroring `SecurityIncident`'s
-   shape: severity, status, linked `AISystem`) — completes AI Governance's
-   near-term scope now that the Inventory (Phase 3 extension) exists to
-   link against.
-3. **Enterprise Sales Security Review** (spec §69's last named
+1. **AI Incidents**: an incident log for AI systems, likely
+   `AIIncident` mirroring `SecurityIncident`'s shape (severity, status,
+   linked `AISystem`, `app/compliance/models.py`) — check spec §12/§19
+   for what an AI-specific incident should capture that a generic
+   SecurityIncident doesn't (e.g., "model produced a harmful/biased
+   output" isn't quite a security incident). Look for a genuine
+   cross-module hook before inventing one: does a `critical`-severity
+   AIIncident plausibly warrant the same Risk-linking + Task +
+   Notification chain `SecurityIncident` already has (ADR-0018,
+   ADR-0023)? If the reasoning holds, reuse that exact pattern rather
+   than a new mechanism — that would be this build's third reuse of that
+   specific chain shape.
+2. **Enterprise Sales Security Review** (spec §69's last named
    cross-module scenario) needs customer questionnaires built first — a
    larger, self-contained feature, not just a cross-module link.
-4. **If the user supplies real credentials** for a specific provider (any
-   of the six adapters, or SSO/IdP metadata for Phase 10) — wire that in
-   immediately; these are now small, bounded tasks given the existing
-   adapter framework / RBAC groundwork.
-5. Phase 10 (Enterprise: SSO/SAML/SCIM, public API + webhooks) or the AWS
+3. **If the user supplies real credentials** for a specific OAuth
+   provider (any of the six adapters) or SSO/IdP metadata for Phase 10 —
+   wire that in immediately; these are now small, bounded tasks given the
+   existing adapter framework / RBAC groundwork.
+4. Phase 10 (Enterprise: SSO/SAML/SCIM, public API + webhooks) or the AWS
    production deployment (spec §L/§M/§N) — both are large, self-contained
    next arcs, but SSO needs a real IdP and AWS deployment needs real cloud
    spend, so treat starting either as a business decision to confirm
    first, not something to infer from a bare "go on."
 
-## Files to edit next (Privacy workflows)
+## Files to edit next (AI Incidents)
 
-- `apps/api/app/compliance/models.py` (new `ProcessingActivity`, `DPIA`,
-  `DSAR` models — or a new `apps/api/app/privacy/` module if the scope
-  justifies a standalone module rather than extending `compliance/`;
-  decide based on how spec §13 frames it relative to §12)
-- `apps/api/app/compliance/service.py` (or `privacy/service.py`) — creation,
-  any real cross-module hook, DPIA approval gating if warranted
-- schemas + router + migration + tests, following the AI System
-  Inventory's exact pattern (ADR-0027) as the template
-- `apps/web/lib/types.ts`, new `apps/web/app/(app)/compliance/...` (or
-  `.../privacy/...`) pages
+- `apps/api/app/compliance/models.py` (new `AIIncident` model)
+- `apps/api/app/compliance/service.py` — creation + cross-module hook if
+  one is genuinely warranted (see reasoning above)
+- schemas + router endpoints on the existing `/api/v1/compliance` router
+  (same "extend Compliance, don't create a new module" reasoning ADR-0029
+  used for Privacy) + migration + tests
+- `apps/web/lib/types.ts`, a new section on `/compliance` + likely
+  `/compliance/ai-incidents/[id]` detail
 - `docs/DECISIONS.md` (new ADR)
 
 ## Command to resume
@@ -214,6 +196,6 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (137 passed)
-cd ../../apps/web && npx vitest run   # confirm still green (5 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (149 passed)
+cd ../../apps/web && npx vitest run   # confirm still green (8 passed)
 ```

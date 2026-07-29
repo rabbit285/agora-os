@@ -62,8 +62,17 @@ high/unacceptable-risk system auto-creates a real Approval and gates the
 the Approval primitive outside its own UI, and the first real primitive
 behind spec §69's "New AI Tool Adoption" cross-module scenario.
 
-Remaining: AI governance beyond the inventory (AI incidents, DPIA),
-privacy (RoPA, DSAR, retention, transfers), vendor risk, questionnaires,
+Also done: Privacy's RoPA/DPIA/DSAR (`ProcessingActivity`/`DPIA`/`DSAR` —
+spec §2/§12 frame these as Compliance sub-features, not a separate
+module). A directly-created high-risk `DPIA` gets its own Approval gate,
+this build's fourth reuse of that primitive; `register_ai_system` is
+extended a second time so a high/unacceptable-risk registration also
+creates a linked draft DPIA — "New AI Tool Adoption"'s Privacy-assessment
+step (ADR-0029). DSAR gets a real 30-day due date (GDPR Article 12(3))
+and a received→in_progress→fulfilled/rejected lifecycle.
+
+Remaining: AI governance beyond the inventory (AI incidents), data
+transfers (Privacy's remaining sub-feature), vendor risk, questionnaires,
 audits (auditor portal), Trust Center, regulatory intelligence feed. Each
 is a substantial feature attaching to the backbone above, not a blocker
 to it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.

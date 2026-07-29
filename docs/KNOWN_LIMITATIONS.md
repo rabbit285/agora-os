@@ -21,9 +21,14 @@ implied to work.
 - **Compliance**: an AI System Inventory (`AISystem`/`AIAssessment`, EU AI
   Act risk tiers) now exists — registering a high/unacceptable-risk system
   auto-creates a real Approval and gates its `approved` status on that
-  Approval being granted (ADR-0027) — but no AI incidents (ai_incidents),
-  no audits (auditor portal), no privacy workflows (RoPA/DPIA/DSAR), no
-  vendor risk, questionnaires, or Trust Center.
+  Approval being granted (ADR-0027). Privacy sub-features also now exist —
+  a RoPA register (`ProcessingActivity`), DPIAs (`DPIA`, with the same
+  high-risk-gates-on-Approval pattern for directly-created ones, and
+  auto-created linked to a high/unacceptable-risk `AISystem` — ADR-0029),
+  and DSARs (`DSAR`, 30-day due date, received→in_progress→fulfilled/
+  rejected lifecycle) — but no data transfers (the remaining Privacy
+  sub-feature), no AI incidents (ai_incidents), no audits (auditor
+  portal), no vendor risk, questionnaires, or Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —
@@ -61,9 +66,11 @@ implied to work.
   named cross-module scenarios are fully implemented ("Support Upsell
   Signal", the "Security Incident" chain, and "New Customer"), plus a
   partial fourth: "New AI Tool Adoption" now has its register→Approval
-  gate hook (ADR-0027, counted under Compliance above), but not the rest
-  of that scenario's chain — vendor security questionnaire, Privacy/DPA
-  review, approved-use policy publication. The remaining scenario
+  gate hook (ADR-0027) and its Privacy-assessment step (an auto-created
+  DPIA, ADR-0029, both counted under Compliance above), but not the rest
+  of that scenario's chain — vendor security questionnaire, EU AI Act
+  applicability/DPA review as distinct steps, approved-use policy
+  publication. The remaining scenario
   (Enterprise Sales Security Review) is not started — it needs customer
   questionnaires, which don't exist yet. No AI daily briefing, business
   process discovery, AI recommendation engine, or organization memory

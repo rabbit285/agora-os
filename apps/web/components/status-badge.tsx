@@ -84,6 +84,8 @@ const STATUS_VARIANTS: Record<
   minimal: "outline",
   limited: "secondary",
   unacceptable: "destructive",
+  received: "secondary",
+  fulfilled: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {

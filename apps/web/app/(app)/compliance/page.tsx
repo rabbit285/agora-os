@@ -11,7 +11,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { AIRiskClassification, AISystem, Control, Framework, Risk } from "@/lib/types";
+import type {
+  AIRiskClassification,
+  AISystem,
+  Control,
+  DPIA,
+  DPIARiskLevel,
+  DSAR,
+  DSARRequestType,
+  Framework,
+  LegalBasis,
+  ProcessingActivity,
+  Risk,
+} from "@/lib/types";
 
 const selectClassName =
   "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
@@ -198,6 +210,294 @@ function AISystemsSection() {
   );
 }
 
+const LEGAL_BASIS_OPTIONS: { value: LegalBasis; label: string }[] = [
+  { value: "consent", label: "Consent" },
+  { value: "contract", label: "Contract" },
+  { value: "legal_obligation", label: "Legal obligation" },
+  { value: "vital_interests", label: "Vital interests" },
+  { value: "public_task", label: "Public task" },
+  { value: "legitimate_interests", label: "Legitimate interests" },
+];
+
+function ProcessingActivitiesSection() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [legalBasis, setLegalBasis] = useState<LegalBasis>("legitimate_interests");
+  const [dataSubjects, setDataSubjects] = useState("");
+  const [retentionPeriod, setRetentionPeriod] = useState("");
+
+  const { data: activities } = useQuery<ProcessingActivity[]>({
+    queryKey: ["compliance", "processing-activities"],
+    queryFn: () => apiFetch<ProcessingActivity[]>("/api/v1/compliance/processing-activities"),
+  });
+
+  const createActivity = useMutation({
+    mutationFn: () =>
+      apiFetch<ProcessingActivity>("/api/v1/compliance/processing-activities", {
+        method: "POST",
+        body: {
+          name,
+          purpose,
+          legal_basis: legalBasis,
+          data_subjects: dataSubjects,
+          retention_period: retentionPeriod,
+        },
+      }),
+    onSuccess: () => {
+      setName("");
+      setPurpose("");
+      setDataSubjects("");
+      setRetentionPeriod("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "processing-activities"] });
+    },
+  });
+
+  const canCreate =
+    name.trim() && purpose.trim() && dataSubjects.trim() && retentionPeriod.trim();
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Record of Processing Activities (RoPA)
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="Activity name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <Input
+            placeholder="Purpose"
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <select
+            className={selectClassName}
+            value={legalBasis}
+            onChange={(e) => setLegalBasis(e.target.value as LegalBasis)}
+          >
+            {LEGAL_BASIS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <Input
+            placeholder="Data subjects (e.g. customers)"
+            value={dataSubjects}
+            onChange={(e) => setDataSubjects(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <Input
+            placeholder="Retention period"
+            value={retentionPeriod}
+            onChange={(e) => setRetentionPeriod(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <Button disabled={!canCreate || createActivity.isPending} onClick={() => createActivity.mutate()}>
+            Add activity
+          </Button>
+        </CardContent>
+      </Card>
+      {activities?.length === 0 && (
+        <p className="text-sm text-neutral-500">No processing activities recorded yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {activities?.map((activity) => (
+          <Card key={activity.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <div className="font-medium text-neutral-900">{activity.name}</div>
+                <div className="text-xs text-neutral-400">
+                  {activity.legal_basis.replace(/_/g, " ")} · {activity.data_subjects}
+                </div>
+              </div>
+              <StatusBadge status={activity.status} />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DPIASection() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [riskLevel, setRiskLevel] = useState<DPIARiskLevel>("low");
+
+  const { data: dpias } = useQuery<DPIA[]>({
+    queryKey: ["compliance", "dpias"],
+    queryFn: () => apiFetch<DPIA[]>("/api/v1/compliance/dpias"),
+  });
+
+  const createDpia = useMutation({
+    mutationFn: () =>
+      apiFetch<DPIA>("/api/v1/compliance/dpias", {
+        method: "POST",
+        body: { title, risk_level: riskLevel },
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setRiskLevel("low");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "dpias"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Data Protection Impact Assessments (DPIA)
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="DPIA title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <select
+            className={selectClassName}
+            value={riskLevel}
+            onChange={(e) => setRiskLevel(e.target.value as DPIARiskLevel)}
+          >
+            <option value="low">Low risk</option>
+            <option value="medium">Medium risk</option>
+            <option value="high">High risk</option>
+          </select>
+          <Button disabled={!title.trim() || createDpia.isPending} onClick={() => createDpia.mutate()}>
+            Start DPIA
+          </Button>
+        </CardContent>
+        <CardContent className="pt-0 pb-4">
+          <p className="text-xs text-neutral-400">
+            A high-risk DPIA automatically requires an Approval before it can be marked approved
+            (GDPR Article 35).
+          </p>
+        </CardContent>
+      </Card>
+      {dpias?.length === 0 && <p className="text-sm text-neutral-500">No DPIAs recorded yet.</p>}
+      <div className="flex flex-col gap-2">
+        {dpias?.map((dpia) => (
+          <Link key={dpia.id} href={`/compliance/dpias/${dpia.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{dpia.title}</div>
+                  {dpia.ai_system_id && (
+                    <div className="text-xs text-neutral-400">Linked to an AI system</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={dpia.risk_level} />
+                  <StatusBadge status={dpia.status} />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DSARSection() {
+  const queryClient = useQueryClient();
+  const [requesterName, setRequesterName] = useState("");
+  const [requesterEmail, setRequesterEmail] = useState("");
+  const [requestType, setRequestType] = useState<DSARRequestType>("access");
+
+  const { data: dsars } = useQuery<DSAR[]>({
+    queryKey: ["compliance", "dsars"],
+    queryFn: () => apiFetch<DSAR[]>("/api/v1/compliance/dsars"),
+  });
+
+  const createDsar = useMutation({
+    mutationFn: () =>
+      apiFetch<DSAR>("/api/v1/compliance/dsars", {
+        method: "POST",
+        body: {
+          requester_name: requesterName,
+          requester_email: requesterEmail,
+          request_type: requestType,
+        },
+      }),
+    onSuccess: () => {
+      setRequesterName("");
+      setRequesterEmail("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "dsars"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Data Subject Access Requests (DSAR)
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="Requester name"
+            value={requesterName}
+            onChange={(e) => setRequesterName(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <Input
+            placeholder="Requester email"
+            value={requesterEmail}
+            onChange={(e) => setRequesterEmail(e.target.value)}
+            className="min-w-[180px] flex-1"
+          />
+          <select
+            className={selectClassName}
+            value={requestType}
+            onChange={(e) => setRequestType(e.target.value as DSARRequestType)}
+          >
+            <option value="access">Access</option>
+            <option value="deletion">Deletion</option>
+            <option value="rectification">Rectification</option>
+            <option value="portability">Portability</option>
+          </select>
+          <Button
+            disabled={!requesterName.trim() || !requesterEmail.trim() || createDsar.isPending}
+            onClick={() => createDsar.mutate()}
+          >
+            Log DSAR
+          </Button>
+        </CardContent>
+        <CardContent className="pt-0 pb-4">
+          <p className="text-xs text-neutral-400">
+            Due 30 days from receipt (GDPR Article 12(3)).
+          </p>
+        </CardContent>
+      </Card>
+      {dsars?.length === 0 && <p className="text-sm text-neutral-500">No DSARs logged yet.</p>}
+      <div className="flex flex-col gap-2">
+        {dsars?.map((dsar) => (
+          <Link key={dsar.id} href={`/compliance/dsars/${dsar.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{dsar.requester_name}</div>
+                  <div className="text-xs text-neutral-400">
+                    {dsar.request_type} · due {new Date(dsar.due_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <StatusBadge status={dsar.status} />
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FrameworksSection() {
   const { data: frameworks } = useQuery<Framework[]>({
     queryKey: ["compliance", "frameworks"],
@@ -230,6 +530,9 @@ export default function CompliancePage() {
       <ControlsSection />
       <RisksSection />
       <AISystemsSection />
+      <ProcessingActivitiesSection />
+      <DPIASection />
+      <DSARSection />
       <FrameworksSection />
     </div>
   );

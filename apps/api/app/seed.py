@@ -24,10 +24,17 @@ from app.compliance.models import (
     ControlMapping,
     Evidence,
     Framework,
+    ProcessingActivity,
     Requirement,
     Risk,
 )
-from app.compliance.service import record_assessment, register_ai_system
+from app.compliance.service import (
+    create_dpia,
+    create_dsar,
+    record_assessment,
+    register_ai_system,
+    update_dsar_status,
+)
 from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
 from app.core.rbac import ensure_system_roles, get_system_role
 from app.core.storage import ensure_bucket, upload_object
@@ -168,6 +175,20 @@ async def seed() -> None:
         )
         if not existing_ai_systems:
             await _seed_demo_ai_systems_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_processing_activities = (
+            (
+                await db.execute(
+                    select(ProcessingActivity).where(
+                        ProcessingActivity.organization_id == organization.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_processing_activities:
+            await _seed_demo_privacy_data(db, organization_id=organization.id, admin_id=admin.id)
 
         existing_assets = (
             (
@@ -507,6 +528,72 @@ async def _seed_demo_ai_systems_data(
     logger.info(
         "Seeded demo AI system inventory (1 high-risk system awaiting approval, "
         "1 low-risk system approved with a passing assessment)"
+    )
+
+
+async def _seed_demo_privacy_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one RoPA entry, one standalone medium-risk DPIA linked to it,
+    and two DSARs (one fulfilled, one still open) — spec section 12's
+    Privacy sub-features (RoPA/DPIA/DSAR). The high-risk AI system seeded
+    by `_seed_demo_ai_systems_data` already produced its own linked DPIA
+    via the "New AI Tool Adoption" hook (ADR-0029); this seeds the
+    directly-created path so both are visible after `python -m app.seed`."""
+    activity = ProcessingActivity(
+        organization_id=organization_id,
+        name="Candidate application processing",
+        purpose="Collect and evaluate job applications for open roles.",
+        legal_basis="legitimate_interests",
+        data_categories=["contact_info", "employment_history"],
+        data_subjects="job applicants",
+        retention_period="12 months after the role is filled",
+        owner_id=admin_id,
+    )
+    db.add(activity)
+    await db.flush()
+
+    await create_dpia(
+        db,
+        organization_id=organization_id,
+        title="Candidate application processing DPIA",
+        processing_activity_id=activity.id,
+        risk_level="medium",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    fulfilled_dsar = await create_dsar(
+        db,
+        organization_id=organization_id,
+        requester_name="Priya Nandakumar",
+        requester_email="priya.nandakumar@example.com",
+        request_type="access",
+        assigned_to=admin_id,
+        actor_user_id=admin_id,
+    )
+    await update_dsar_status(
+        db,
+        dsar=fulfilled_dsar,
+        new_status="fulfilled",
+        notes="Exported all held records and sent via secure link.",
+        actor_user_id=admin_id,
+    )
+
+    await create_dsar(
+        db,
+        organization_id=organization_id,
+        requester_name="Marco Alberti",
+        requester_email="marco.alberti@example.com",
+        request_type="deletion",
+        assigned_to=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo privacy data (1 processing activity, 1 medium-risk DPIA, "
+        "1 fulfilled DSAR, 1 open DSAR)"
     )
 
 

@@ -9,10 +9,9 @@ Evidence, Risk, Policy — is tenant-scoped.
 
 Deliberately not modeled yet (see docs/KNOWN_LIMITATIONS.md): framework
 versioning, evidence versioning, audits (auditor portal), regulatory
-updates (external intelligence feed), RoPA/DPIA/DSAR (privacy-specific
-workflows), vendor risk, questionnaires, Trust Center. Each is a
-substantial feature in its own right; this slice ships the backbone they
-would all attach to.
+updates (external intelligence feed), data transfers, vendor risk,
+questionnaires, Trust Center. Each is a substantial feature in its own
+right; this slice ships the backbone they would all attach to.
 
 `AISystem` / `AIAssessment` add the spec §12 "AI System Inventory" / "AI
 Risk Assessment" screens (EU AI Act governance). `AISystem.approval_id`
@@ -22,6 +21,19 @@ a `high` or `unacceptable`-risk system creates a real `core.Approval`,
 and it cannot be moved to `approved` status until that Approval is
 granted — see app.compliance.service.register_ai_system /
 decide_ai_system_status and docs/DECISIONS.md ADR-0027.
+
+`ProcessingActivity` / `DPIA` / `DSAR` add spec §12's Privacy sub-features
+(Module 1 — AI Compliance explicitly lists "privacy operations, RoPA,
+DPIAs, DSARs" alongside frameworks/controls, not as a separate module).
+`DPIA.ai_system_id` extends the same "New AI Tool Adoption" hook a second
+time: registering a high/unacceptable-risk AI system now also creates a
+linked draft DPIA — the chain's "Privacy assessment" step (spec §69) —
+see app.compliance.service.register_ai_system and docs/DECISIONS.md
+ADR-0029. A `high`-risk-level DPIA created directly (not via that hook)
+gets its own real `core.Approval`, gating `approved` the same way
+`AISystem` does (GDPR Article 35: a DPIA concluding high residual risk
+requires supervisory-authority consultation / formal sign-off before the
+processing can proceed).
 """
 
 from __future__ import annotations
@@ -31,7 +43,7 @@ from datetime import datetime
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, Uuid
+from sqlalchemy.types import JSON, DateTime, Uuid
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utcnow
 
@@ -223,3 +235,91 @@ class AIAssessment(UUIDPrimaryKeyMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProcessingActivity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One entry in the Record of Processing Activities (RoPA, GDPR
+    Article 30) — an organization's own catalog of what personal data it
+    processes and why. Tenant-scoped, unlike Framework/Requirement's
+    global catalog data: this is the organization's own record, not
+    shared regulatory text."""
+
+    __tablename__ = "processing_activities"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # consent | contract | legal_obligation | vital_interests | public_task | legitimate_interests
+    # (GDPR Article 6's six lawful bases)
+    legal_basis: Mapped[str] = mapped_column(String(30), nullable=False)
+    data_categories: Mapped[list[str]] = mapped_column(JSON, default=list)
+    data_subjects: Mapped[str] = mapped_column(String(300), nullable=False)
+    retention_period: Mapped[str] = mapped_column(String(300), nullable=False)
+    # active | archived
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class DPIA(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A Data Protection Impact Assessment (GDPR Article 35). May be
+    conducted for an organization's own `ProcessingActivity`, created
+    automatically for a high/unacceptable-risk `AISystem` (the "New AI
+    Tool Adoption" chain's Privacy assessment step — see
+    app.compliance.service.register_ai_system), or both."""
+
+    __tablename__ = "dpias"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    processing_activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("processing_activities.id"), nullable=True, index=True
+    )
+    # Cross-module hook (spec §69 "New AI Tool Adoption" -> "Privacy assessment").
+    ai_system_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # low | medium | high — DPIA's own concluded risk level, not necessarily
+    # the same scale as AISystem.risk_classification
+    risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    # draft | in_review | approved | rejected
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    findings: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Set only when a `high`-risk-level DPIA is created directly (not via
+    # the AISystem hook, which already has its own Approval) — see
+    # app.compliance.service.create_dpia / decide_dpia_status.
+    approval_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("approvals.id"), nullable=True
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A Data Subject Access Request (GDPR Articles 15-20: access,
+    rectification, erasure, portability). `due_at` defaults to 30 days
+    from creation — GDPR Article 12(3)'s one-month response deadline."""
+
+    __tablename__ = "dsars"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    requester_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    requester_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    # access | deletion | rectification | portability
+    request_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # received | in_progress | fulfilled | rejected
+    status: Mapped[str] = mapped_column(String(20), default="received")
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

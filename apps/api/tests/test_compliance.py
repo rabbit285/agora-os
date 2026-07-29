@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -381,3 +382,297 @@ async def test_ai_system_from_other_org_returns_not_found(client: AsyncClient) -
     )
     assert response.status_code == 404
     await other_client.aclose()
+
+
+# --- Privacy: ProcessingActivity (RoPA), DPIA, DSAR ---
+
+
+async def test_employee_role_cannot_create_processing_activity(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "privacy-emp1@example.com", "Privacy Employee Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="employee-privacy@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/processing-activities",
+        json={
+            "name": "Should fail",
+            "purpose": "irrelevant",
+            "legal_basis": "consent",
+            "data_subjects": "customers",
+            "retention_period": "1 year",
+        },
+    )
+    assert response.status_code == 403
+
+
+async def test_dpo_role_can_create_processing_activity(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "privacy-dpo1@example.com", "Privacy DPO Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="dpo1@example.com", role_key="dpo"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/processing-activities",
+        json={
+            "name": "Customer support ticket data",
+            "purpose": "Resolve support requests",
+            "legal_basis": "contract",
+            "data_categories": ["contact_info", "usage_data"],
+            "data_subjects": "customers",
+            "retention_period": "3 years post-relationship",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["legal_basis"] == "contract"
+    assert body["data_categories"] == ["contact_info", "usage_data"]
+    assert body["status"] == "active"
+
+
+async def test_legal_role_can_create_dsar_but_not_control(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """`legal` is activated for the first time by this Privacy slice — it
+    should get privacy permissions but nothing else (still zero broader
+    compliance permissions), same "only what the module grants" discipline
+    ai_governance_manager's first activation followed (ADR-0027)."""
+    _, org_id = await _signup(client, "privacy-legal1@example.com", "Privacy Legal Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="legal1@example.com", role_key="legal"
+    )
+    client.cookies.set("agora_session", token)
+
+    dsar = await client.post(
+        "/api/v1/compliance/dsars",
+        json={
+            "requester_name": "Jane Doe",
+            "requester_email": "jane@example.com",
+            "request_type": "access",
+        },
+    )
+    assert dsar.status_code == 201, dsar.text
+
+    forbidden = await client.post(
+        "/api/v1/compliance/controls", json={"title": "Should still be forbidden"}
+    )
+    assert forbidden.status_code == 403
+
+
+async def test_dsar_creation_sets_a_thirty_day_due_date(client: AsyncClient) -> None:
+    await _signup(client, "dsar1@example.com", "DSAR Org 1")
+    created_at_floor = datetime.now(UTC)
+    response = await client.post(
+        "/api/v1/compliance/dsars",
+        json={
+            "requester_name": "John Smith",
+            "requester_email": "john@example.com",
+            "request_type": "deletion",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "received"
+    assert body["fulfilled_at"] is None
+
+    due_at = datetime.fromisoformat(body["due_at"].replace("Z", "+00:00"))
+    if due_at.tzinfo is None:
+        due_at = due_at.replace(tzinfo=UTC)
+    delta = due_at - created_at_floor
+    assert timedelta(days=29) < delta < timedelta(days=31)
+
+
+async def test_dsar_status_lifecycle_sets_fulfilled_at(client: AsyncClient) -> None:
+    await _signup(client, "dsar2@example.com", "DSAR Org 2")
+    created = await client.post(
+        "/api/v1/compliance/dsars",
+        json={
+            "requester_name": "Requester Two",
+            "requester_email": "requester2@example.com",
+            "request_type": "access",
+        },
+    )
+    dsar_id = created.json()["id"]
+
+    in_progress = await client.patch(
+        f"/api/v1/compliance/dsars/{dsar_id}/status",
+        json={"status": "in_progress", "notes": "Gathering records"},
+    )
+    assert in_progress.status_code == 200
+    assert in_progress.json()["fulfilled_at"] is None
+    assert in_progress.json()["notes"] == "Gathering records"
+
+    fulfilled = await client.patch(
+        f"/api/v1/compliance/dsars/{dsar_id}/status", json={"status": "fulfilled"}
+    )
+    assert fulfilled.status_code == 200
+    assert fulfilled.json()["status"] == "fulfilled"
+    assert fulfilled.json()["fulfilled_at"] is not None
+
+
+async def test_dsar_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-dsar1@example.com", "Cross DSAR Org 1")
+    created = await client.post(
+        "/api/v1/compliance/dsars",
+        json={
+            "requester_name": "Org 1 requester",
+            "requester_email": "org1@example.com",
+            "request_type": "access",
+        },
+    )
+    dsar_id = created.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-dsar2@example.com", "Cross DSAR Org 2")
+
+    response = await other_client.get(
+        f"/api/v1/compliance/dsars/{dsar_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()
+
+
+async def test_high_risk_dpia_created_directly_requires_its_own_approval(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "dpia1@example.com", "DPIA Org 1")
+    created = await client.post(
+        "/api/v1/compliance/dpias",
+        json={"title": "New marketing analytics pipeline", "risk_level": "high"},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    approval_id = body["approval_id"]
+    assert approval_id is not None
+
+    blocked = await client.patch(
+        f"/api/v1/compliance/dpias/{body['id']}/status", json={"status": "approved"}
+    )
+    assert blocked.status_code == 422
+
+    decided = await client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": True})
+    assert decided.status_code == 200
+
+    approved = await client.patch(
+        f"/api/v1/compliance/dpias/{body['id']}/status", json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
+async def test_low_risk_dpia_has_no_approval_and_approves_directly(client: AsyncClient) -> None:
+    await _signup(client, "dpia2@example.com", "DPIA Org 2")
+    created = await client.post(
+        "/api/v1/compliance/dpias",
+        json={"title": "Internal newsletter list", "risk_level": "low"},
+    )
+    assert created.json()["approval_id"] is None
+    dpia_id = created.json()["id"]
+
+    approved = await client.patch(
+        f"/api/v1/compliance/dpias/{dpia_id}/status",
+        json={"status": "approved", "findings": "No significant risk identified."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["findings"] == "No significant risk identified."
+
+
+async def test_dpia_can_link_to_a_processing_activity(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "dpia3@example.com", "DPIA Org 3")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="dpo3@example.com", role_key="dpo"
+    )
+    client.cookies.set("agora_session", token)
+
+    activity = await client.post(
+        "/api/v1/compliance/processing-activities",
+        json={
+            "name": "Employee background checks",
+            "purpose": "Pre-employment screening",
+            "legal_basis": "legal_obligation",
+            "data_subjects": "job applicants",
+            "retention_period": "6 months",
+        },
+    )
+    activity_id = activity.json()["id"]
+
+    dpia = await client.post(
+        "/api/v1/compliance/dpias",
+        json={
+            "title": "Background check vendor DPIA",
+            "processing_activity_id": activity_id,
+            "risk_level": "medium",
+        },
+    )
+    assert dpia.status_code == 201
+    assert dpia.json()["processing_activity_id"] == activity_id
+    assert dpia.json()["ai_system_id"] is None
+
+
+async def test_dpia_rejects_processing_activity_from_another_org(client: AsyncClient) -> None:
+    await _signup(client, "dpia4@example.com", "DPIA Org 4")
+    response = await client.post(
+        "/api/v1/compliance/dpias",
+        json={
+            "title": "Should fail",
+            "processing_activity_id": str(uuid.uuid4()),
+            "risk_level": "low",
+        },
+    )
+    assert response.status_code == 404
+
+
+async def test_registering_high_risk_ai_system_auto_creates_linked_dpia(
+    client: AsyncClient,
+) -> None:
+    """Extends the "New AI Tool Adoption" hook a second time (ADR-0029):
+    the same registration that creates an Approval (ADR-0027) also
+    creates the chain's "Privacy assessment" step as a real DPIA linked
+    via ai_system_id, sharing the AI system's Approval rather than
+    duplicating it."""
+    await _signup(client, "ai-dpia1@example.com", "AI DPIA Org 1")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Candidate Scoring Model",
+            "purpose": "Scores job candidates automatically",
+            "risk_classification": "high",
+        },
+    )
+    assert created.status_code == 201
+    system_id = created.json()["id"]
+
+    dpias = await client.get("/api/v1/compliance/dpias")
+    assert dpias.status_code == 200
+    matching = [d for d in dpias.json() if d["ai_system_id"] == system_id]
+    assert len(matching) == 1
+    assert matching[0]["status"] == "draft"
+    assert matching[0]["risk_level"] == "high"
+    assert matching[0]["approval_id"] is None
+
+
+async def test_minimal_risk_ai_system_does_not_create_a_dpia(client: AsyncClient) -> None:
+    await _signup(client, "ai-dpia2@example.com", "AI DPIA Org 2")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Internal notes tool", "purpose": "Summarizes meeting notes"},
+    )
+    system_id = created.json()["id"]
+
+    dpias = await client.get("/api/v1/compliance/dpias")
+    matching = [d for d in dpias.json() if d["ai_system_id"] == system_id]
+    assert matching == []

@@ -172,3 +172,85 @@ class AIAssessmentOut(BaseModel):
 
 class AISystemDetailOut(AISystemOut):
     assessments: list[AIAssessmentOut]
+
+
+class ProcessingActivityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    purpose: str = Field(min_length=1, max_length=2000)
+    legal_basis: str = Field(
+        pattern="^(consent|contract|legal_obligation|vital_interests|public_task|"
+        "legitimate_interests)$"
+    )
+    data_categories: list[str] = Field(default_factory=list)
+    data_subjects: str = Field(min_length=1, max_length=300)
+    retention_period: str = Field(min_length=1, max_length=300)
+    owner_id: uuid.UUID | None = None
+
+
+class ProcessingActivityOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    purpose: str
+    legal_basis: str
+    data_categories: list[str]
+    data_subjects: str
+    retention_period: str
+    status: str
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DPIACreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    processing_activity_id: uuid.UUID | None = None
+    risk_level: str = Field(default="low", pattern="^(low|medium|high)$")
+    owner_id: uuid.UUID | None = None
+
+
+class DPIAStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(draft|in_review|approved|rejected)$")
+    findings: str | None = None
+
+
+class DPIAOut(BaseModel):
+    id: uuid.UUID
+    processing_activity_id: uuid.UUID | None
+    ai_system_id: uuid.UUID | None
+    title: str
+    risk_level: str
+    status: str
+    findings: str | None
+    approval_id: uuid.UUID | None
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DSARCreate(BaseModel):
+    requester_name: str = Field(min_length=1, max_length=300)
+    requester_email: str = Field(min_length=3, max_length=320)
+    request_type: str = Field(pattern="^(access|deletion|rectification|portability)$")
+    assigned_to: uuid.UUID | None = None
+
+
+class DSARStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(received|in_progress|fulfilled|rejected)$")
+    notes: str | None = None
+
+
+class DSAROut(BaseModel):
+    id: uuid.UUID
+    requester_name: str
+    requester_email: str
+    request_type: str
+    status: str
+    due_at: datetime
+    fulfilled_at: datetime | None
+    notes: str | None
+    assigned_to: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

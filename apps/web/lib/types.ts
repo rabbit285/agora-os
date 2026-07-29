@@ -188,6 +188,59 @@ export type AISystemDetail = AISystem & {
   assessments: AIAssessment[];
 };
 
+export type LegalBasis =
+  | "consent"
+  | "contract"
+  | "legal_obligation"
+  | "vital_interests"
+  | "public_task"
+  | "legitimate_interests";
+
+export type ProcessingActivity = {
+  id: string;
+  name: string;
+  purpose: string;
+  legal_basis: LegalBasis;
+  data_categories: string[];
+  data_subjects: string;
+  retention_period: string;
+  status: "active" | "archived";
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type DPIARiskLevel = "low" | "medium" | "high";
+export type DPIAStatus = "draft" | "in_review" | "approved" | "rejected";
+
+export type DPIA = {
+  id: string;
+  processing_activity_id: string | null;
+  ai_system_id: string | null;
+  title: string;
+  risk_level: DPIARiskLevel;
+  status: DPIAStatus;
+  findings: string | null;
+  approval_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type DSARRequestType = "access" | "deletion" | "rectification" | "portability";
+export type DSARStatus = "received" | "in_progress" | "fulfilled" | "rejected";
+
+export type DSAR = {
+  id: string;
+  requester_name: string;
+  requester_email: string;
+  request_type: DSARRequestType;
+  status: DSARStatus;
+  due_at: string;
+  fulfilled_at: string | null;
+  notes: string | null;
+  assigned_to: string | null;
+  created_at: string;
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

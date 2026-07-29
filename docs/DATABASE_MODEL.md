@@ -312,6 +312,45 @@ ai_assessments
   notes TEXT
   assessed_by UUID FK users NULL
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+processing_activities      -- Record of Processing Activities (RoPA, GDPR Art. 30)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  purpose TEXT NOT NULL
+  legal_basis TEXT NOT NULL   -- consent|contract|legal_obligation|vital_interests|public_task|legitimate_interests
+  data_categories JSONB NOT NULL DEFAULT '[]'
+  data_subjects TEXT NOT NULL
+  retention_period TEXT NOT NULL
+  status TEXT NOT NULL DEFAULT 'active'  -- active|archived
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+dpias                      -- Data Protection Impact Assessments (GDPR Art. 35)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  processing_activity_id UUID FK processing_activities NULL
+  ai_system_id UUID FK ai_systems NULL       -- cross-module hook, see below
+  title TEXT NOT NULL
+  risk_level TEXT NOT NULL DEFAULT 'low'     -- low|medium|high
+  status TEXT NOT NULL DEFAULT 'draft'       -- draft|in_review|approved|rejected
+  findings TEXT NULL
+  approval_id UUID FK approvals NULL         -- set only for directly-created risk_level='high' DPIAs
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+dsars                      -- Data Subject Access Requests (GDPR Art. 15-20)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  requester_name TEXT NOT NULL
+  requester_email TEXT NOT NULL
+  request_type TEXT NOT NULL     -- access|deletion|rectification|portability
+  status TEXT NOT NULL DEFAULT 'received'  -- received|in_progress|fulfilled|rejected
+  due_at TIMESTAMPTZ NOT NULL     -- created_at + 30 days (GDPR Art. 12(3))
+  fulfilled_at TIMESTAMPTZ NULL
+  notes TEXT NULL
+  assigned_to UUID FK users NULL
+  created_at, updated_at
 ```
 
 A failed `control_assessments` row (`status = 'fail'`) automatically
@@ -325,7 +364,12 @@ An `ai_systems` row with `risk_classification` of `high` or
 Phase 8's third-and-a-half cross-module hook (spec §69 "New AI Tool
 Adoption", ADR-0027). `decide_ai_system_status` refuses to set
 `status = 'approved'` while that linked Approval hasn't itself been
-granted.
+granted. The same registration call also creates a linked `dpias` row
+(`ai_system_id` set, no separate `approval_id` — the AI system's own
+Approval already covers sign-off) — the same hook's second extension,
+completing the chain's "Privacy assessment" step (ADR-0029). A `dpias`
+row created directly with `risk_level = 'high'` gets its own real
+`approvals` row instead, gated the same way `ai_systems` is.
 
 ## Tables (Phase 4 — Security)
 

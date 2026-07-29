@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.compliance.models import (
+    DPIA,
+    DSAR,
     AIAssessment,
     AISystem,
     Control,
@@ -16,6 +18,7 @@ from app.compliance.models import (
     Evidence,
     Framework,
     Policy,
+    ProcessingActivity,
     Requirement,
     Risk,
 )
@@ -31,17 +34,33 @@ from app.compliance.schemas import (
     ControlCreate,
     ControlDetailOut,
     ControlOut,
+    DPIACreate,
+    DPIAOut,
+    DPIAStatusUpdate,
+    DSARCreate,
+    DSAROut,
+    DSARStatusUpdate,
     EvidenceCreate,
     EvidenceOut,
     FrameworkOut,
     PolicyCreate,
     PolicyOut,
+    ProcessingActivityCreate,
+    ProcessingActivityOut,
     RequirementOut,
     RiskCreate,
     RiskOut,
     RiskUpdate,
 )
-from app.compliance.service import decide_ai_system_status, record_assessment, register_ai_system
+from app.compliance.service import (
+    create_dpia,
+    create_dsar,
+    decide_ai_system_status,
+    decide_dpia_status,
+    record_assessment,
+    register_ai_system,
+    update_dsar_status,
+)
 from app.core.models import File
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -442,3 +461,196 @@ async def create_ai_assessment(
     await db.commit()
     await db.refresh(assessment)
     return assessment
+
+
+@router.get("/processing-activities", response_model=list[ProcessingActivityOut])
+async def list_processing_activities(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[ProcessingActivity]:
+    result = await db.execute(
+        select(ProcessingActivity)
+        .where(ProcessingActivity.organization_id == context.organization_id)
+        .order_by(ProcessingActivity.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/processing-activities",
+    response_model=ProcessingActivityOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_processing_activity(
+    payload: ProcessingActivityCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> ProcessingActivity:
+    activity = ProcessingActivity(organization_id=context.organization_id, **payload.model_dump())
+    db.add(activity)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.processing_activity.created",
+        object_type="processing_activity",
+        object_id=str(activity.id),
+        after_state={"name": activity.name, "legal_basis": activity.legal_basis},
+    )
+    await db.commit()
+    await db.refresh(activity)
+    return activity
+
+
+async def _get_org_processing_activity(
+    db: AsyncSession, activity_id: uuid.UUID, organization_id: uuid.UUID
+) -> ProcessingActivity:
+    activity = await db.get(ProcessingActivity, activity_id)
+    if activity is None or activity.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Processing activity not found"
+        )
+    return activity
+
+
+@router.get("/dpias", response_model=list[DPIAOut])
+async def list_dpias(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[DPIA]:
+    result = await db.execute(
+        select(DPIA)
+        .where(DPIA.organization_id == context.organization_id)
+        .order_by(DPIA.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/dpias", response_model=DPIAOut, status_code=status.HTTP_201_CREATED)
+async def create_dpia_endpoint(
+    payload: DPIACreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DPIA:
+    if payload.processing_activity_id is not None:
+        await _get_org_processing_activity(
+            db, payload.processing_activity_id, context.organization_id
+        )
+    dpia = await create_dpia(
+        db,
+        organization_id=context.organization_id,
+        title=payload.title,
+        processing_activity_id=payload.processing_activity_id,
+        risk_level=payload.risk_level,
+        owner_id=payload.owner_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return dpia
+
+
+async def _get_org_dpia(db: AsyncSession, dpia_id: uuid.UUID, organization_id: uuid.UUID) -> DPIA:
+    dpia = await db.get(DPIA, dpia_id)
+    if dpia is None or dpia.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
+    return dpia
+
+
+@router.get("/dpias/{dpia_id}", response_model=DPIAOut)
+async def get_dpia(
+    dpia_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DPIA:
+    return await _get_org_dpia(db, dpia_id, context.organization_id)
+
+
+@router.patch("/dpias/{dpia_id}/status", response_model=DPIAOut)
+async def update_dpia_status(
+    dpia_id: uuid.UUID,
+    payload: DPIAStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DPIA:
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if payload.findings is not None:
+        dpia.findings = payload.findings
+    try:
+        dpia = await decide_dpia_status(
+            db, dpia=dpia, new_status=payload.status, actor_user_id=context.user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(dpia)
+    return dpia
+
+
+@router.get("/dsars", response_model=list[DSAROut])
+async def list_dsars(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[DSAR]:
+    result = await db.execute(
+        select(DSAR)
+        .where(DSAR.organization_id == context.organization_id)
+        .order_by(DSAR.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/dsars", response_model=DSAROut, status_code=status.HTTP_201_CREATED)
+async def create_dsar_endpoint(
+    payload: DSARCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DSAR:
+    dsar = await create_dsar(
+        db,
+        organization_id=context.organization_id,
+        requester_name=payload.requester_name,
+        requester_email=payload.requester_email,
+        request_type=payload.request_type,
+        assigned_to=payload.assigned_to,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dsar)
+    return dsar
+
+
+async def _get_org_dsar(db: AsyncSession, dsar_id: uuid.UUID, organization_id: uuid.UUID) -> DSAR:
+    dsar = await db.get(DSAR, dsar_id)
+    if dsar is None or dsar.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DSAR not found")
+    return dsar
+
+
+@router.get("/dsars/{dsar_id}", response_model=DSAROut)
+async def get_dsar(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DSAR:
+    return await _get_org_dsar(db, dsar_id, context.organization_id)
+
+
+@router.patch("/dsars/{dsar_id}/status", response_model=DSAROut)
+async def update_dsar_status_endpoint(
+    dsar_id: uuid.UUID,
+    payload: DSARStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DSAR:
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    dsar = await update_dsar_status(
+        db,
+        dsar=dsar,
+        new_status=payload.status,
+        notes=payload.notes,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dsar)
+    return dsar

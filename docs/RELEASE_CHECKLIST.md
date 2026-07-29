@@ -152,8 +152,22 @@ Automation) now have a real, tested backbone.
 - [x] RBAC: `ai_governance_manager` role (dormant since Phase 1) activated; `dpo` also granted
 - [x] Seed script: 1 high-risk system (pending approval), 1 minimal-risk system (approved, 1 assessment)
 - [x] Backend tests: 101 passing total; ruff/mypy clean
-- [ ] AI incidents, DPIA, and the rest of the "New AI Tool Adoption" chain
-      (vendor questionnaire, Privacy/DPA review, approved-use policy) — not started
+- [ ] AI incidents and the rest of the "New AI Tool Adoption" chain (vendor
+      questionnaire, EU AI Act applicability/DPA review as distinct steps,
+      approved-use policy) — not started
+
+## Phase 3 extension (Privacy: RoPA/DPIA/DSAR) — added after the OAuth framework completion
+
+- [x] ProcessingActivity, DPIA, DSAR models + migration — GDPR Articles 30, 35, 15-20
+- [x] Cross-module hook: registering a high/unacceptable-risk AI system also creates a linked draft DPIA (the "New AI Tool Adoption" chain's Privacy-assessment step), sharing the AI system's own Approval rather than duplicating it (tested, ADR-0029)
+- [x] Cross-module hook: a directly-created `risk_level="high"` DPIA gets its own real core.Approval, gated exactly like AISystem — this build's fourth reuse of that primitive (tested, ADR-0029)
+- [x] DSAR lifecycle: `due_at` = created_at + 30 days (GDPR Art. 12(3)), received→in_progress→fulfilled/rejected, `fulfilled_at` set on completion
+- [x] Tenant-isolated `/api/v1/compliance/{processing-activities,dpias,dsars}` API + frontend (RoPA/DPIA/DSAR sections on `/compliance`, `/compliance/dpias/[id]` and `/compliance/dsars/[id]` detail)
+- [x] RBAC: new `compliance.privacy.manage` permission granted to `dpo` (extended) and `legal` (dormant since Phase 1, first activated here)
+- [x] Seed script: 1 processing activity, 1 medium-risk standalone DPIA, 1 fulfilled DSAR, 1 open DSAR
+- [x] Backend tests: 149 passing total; ruff/mypy clean
+- [x] Frontend tests: 3 new Vitest tests (8 total) covering the RoPA/DPIA/DSAR sections, DSAR creation, and the AI-system-linked DPIA hint
+- [ ] Data transfers (Privacy's remaining sub-feature) — not started
 
 See `docs/RESUME_BUILD.md` for the next phase.
 

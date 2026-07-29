@@ -655,3 +655,67 @@ HubSpot; `execute_sync_run` exercised directly including its failure
 path; an audit-trail test asserting `integrations.oauth.started/
 connected/refreshed/disconnected` all appear against the connection's
 `object_id`).
+
+## ADR-0029 — Privacy (RoPA/DPIA/DSAR) extends Compliance rather than becoming a new module; the AI System hook gets a second extension
+
+**Decision**: `ProcessingActivity`, `DPIA`, `DSAR` are added to
+`app/compliance/models.py` (not a new `app/privacy/` module), with
+service functions in `app/compliance/service.py` and endpoints on the
+existing `/api/v1/compliance` router. This follows the master spec
+literally: §2's "Module 1 — AI Compliance" capability list names "privacy
+operations, RoPA, DPIAs, DSARs" alongside frameworks/controls/risk —
+Privacy is a Compliance sub-feature, not a sibling primary module (unlike
+Security, Sales, Support, which spec §2 does list as separate modules).
+
+`ProcessingActivity` is the organization's own RoPA entry (GDPR Article
+30): tenant-scoped, unlike Framework/Requirement's global catalog data,
+since it's an org's own record of what it processes, not shared
+regulatory text. `DPIA` (GDPR Article 35) may link to a
+`ProcessingActivity`, an `AISystem`, or neither. A `DPIA` created
+directly with `risk_level="high"` gets its own real `core.Approval`,
+gating `approved` exactly like `AISystem` (ADR-0027) — this build's
+fourth reuse of the Approval primitive outside its own generic UI
+(Automation's `human_approval`, the AI System Inventory, now DPIA).
+`DSAR` (GDPR Articles 15-20) gets `due_at = created_at + 30 days`
+(Article 12(3)'s one-month response window) and a
+received→in_progress→fulfilled/rejected lifecycle, setting
+`fulfilled_at` on completion.
+
+`register_ai_system` (`app/compliance/service.py`) is extended a
+**second** time: alongside creating an Approval for high/
+unacceptable-risk systems (ADR-0027), it now also creates a linked draft
+`DPIA` via `DPIA.ai_system_id` — completing another step of spec §69's
+"New AI Tool Adoption" chain ("... -> Security assessment -> **Privacy
+assessment** -> EU AI Act applicability -> ..."). This mirrors exactly
+how Phase 8's Security Incident chain extended its own hook twice
+(ADR-0018, then ADR-0023) rather than inventing a second mechanism. The
+auto-created DPIA does **not** get its own Approval — the AISystem's
+existing Approval already covers sign-off for that registration; a
+second Approval would be governance-fatigue duplication, not additional
+safety. `legal` — a system role seeded since Phase 1 with zero
+permissions — is activated for the first time (`PRIVACY_PERMISSIONS`,
+alongside `dpo`, which already held Compliance + AI Governance
+permissions from ADR-0027).
+
+**Why**: The user asked to continue with credential-free work after the
+OAuth foundation, specifically naming "Privacy workflows, then AI
+Incidents." Folding Privacy into Compliance (rather than a new module)
+matches what the spec itself says, avoids a redundant router/RBAC
+namespace for a feature the spec treats as one capability among many
+within the same module, and lets the DPIA-Approval-gating logic reuse
+`AISystem`'s exact pattern instead of re-deriving it. Extending
+`register_ai_system` again — rather than adding a separate, disconnected
+DPIA-creation trigger — is spec §80's "do not build disconnected
+modules" principle applied for the third time this build. Tested in
+`tests/test_compliance.py`: RBAC (`employee` denied, `dpo` granted
+processing-activity creation, `legal`'s first activation granted DSAR
+creation but still denied control creation — proving the activation is
+scoped, not a blanket grant), the DSAR 30-day due date and
+fulfilled_at-on-completion lifecycle, the standalone high-risk DPIA's
+Approval gate (422 before decision, 200 after), the low-risk DPIA's
+ungated direct approval, a DPIA correctly linking to a
+tenant-checked `ProcessingActivity`, and — the hook itself —
+`test_registering_high_risk_ai_system_auto_creates_linked_dpia` (asserts
+the DPIA via `GET /compliance/dpias`, not by reading the AI system alone)
+and `test_minimal_risk_ai_system_does_not_create_a_dpia` (the negative
+case, proving the hook doesn't fire for every registration).
