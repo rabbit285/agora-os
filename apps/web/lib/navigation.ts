@@ -27,7 +27,7 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     label: "Compliance",
-    items: [{ label: "Compliance", href: "/compliance", implemented: false }],
+    items: [{ label: "Compliance", href: "/compliance", implemented: true }],
   },
   {
     label: "Security",
@@ -60,7 +60,7 @@ export const NAVIGATION: NavGroup[] = [
 
 export const MODULES = [
   { key: "overview", label: "Business Overview", href: "/", implemented: true },
-  { key: "compliance", label: "Compliance", href: "/compliance", implemented: false },
+  { key: "compliance", label: "Compliance", href: "/compliance", implemented: true },
   { key: "security", label: "Security", href: "/security", implemented: false },
   { key: "sales", label: "Sales", href: "/sales", implemented: false },
   { key: "support", label: "Support", href: "/support", implemented: false },

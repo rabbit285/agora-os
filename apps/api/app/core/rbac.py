@@ -39,12 +39,27 @@ PERMISSIONS: dict[str, str] = {
     "core.approvals.decide": "Approve or reject pending approvals",
     "org.settings.manage": "Manage organization profile and settings",
     "org.users.manage": "Invite, suspend, and manage user memberships and roles",
+    "compliance.controls.manage": "Create controls, map requirements, record assessments",
+    "compliance.evidence.manage": "Attach and manage evidence",
+    "compliance.risks.manage": "Create and update risks",
+    "compliance.policies.manage": "Create and publish policies",
 }
 
-# Only org_admin gets the Phase 1 permission set; every other role is seeded
-# with zero permissions until its owning module defines what it should hold.
+COMPLIANCE_PERMISSIONS = [
+    "compliance.controls.manage",
+    "compliance.evidence.manage",
+    "compliance.risks.manage",
+    "compliance.policies.manage",
+]
+
+# Only org_admin gets the full Phase 1 permission set; module-specific
+# roles get only their own module's permissions. Every other role is
+# seeded with zero permissions until its owning module defines what it
+# should hold.
 ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "org_admin": list(PERMISSIONS.keys()),
+    "compliance_manager": COMPLIANCE_PERMISSIONS,
+    "dpo": COMPLIANCE_PERMISSIONS,
 }
 
 

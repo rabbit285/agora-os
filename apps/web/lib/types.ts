@@ -99,3 +99,63 @@ export type CopilotAnswer = {
   grounded: boolean;
   citations: Citation[];
 };
+
+export type Framework = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+};
+
+export type Requirement = {
+  id: string;
+  reference_code: string;
+  title: string;
+  description: string | null;
+};
+
+export type ControlStatus = "not_started" | "in_progress" | "implemented" | "needs_review";
+
+export type Control = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: ControlStatus;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type ControlAssessment = {
+  id: string;
+  status: "pass" | "fail" | "partial" | "not_assessed";
+  notes: string | null;
+  assessed_by: string | null;
+  created_at: string;
+};
+
+export type ControlDetail = Control & {
+  requirements: Requirement[];
+  assessments: ControlAssessment[];
+};
+
+export type Evidence = {
+  id: string;
+  file_id: string;
+  control_id: string | null;
+  title: string;
+  valid_until: string | null;
+  created_at: string;
+};
+
+export type Risk = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  likelihood: "low" | "medium" | "high";
+  impact: "low" | "medium" | "high";
+  status: "open" | "mitigated" | "accepted";
+  control_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};

@@ -17,6 +17,7 @@ from app.identity.router import router as auth_router
 from app.routers import (
     ai,
     approvals,
+    compliance,
     files,
     health,
     knowledge,
@@ -95,3 +96,4 @@ app.include_router(files.router)
 app.include_router(notifications.router)
 app.include_router(ai.router)
 app.include_router(knowledge.router)
+app.include_router(compliance.router)

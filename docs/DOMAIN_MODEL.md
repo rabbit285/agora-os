@@ -62,7 +62,7 @@ erDiagram
 | Domain | Key entities | Phase |
 |---|---|---|
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
-| Compliance | frameworks, controls, evidence, risks, policies, audits | 3 |
+| Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
 | AI Governance | ai_systems, ai_assessments, ai_incidents | 3 |
 | Privacy | processing_activities, dpias, dsars, data_transfers | 3 |
 | Security | security_assets, security_findings, vulnerabilities, security_incidents | 4 |
@@ -87,6 +87,45 @@ erDiagram
 
 Entity/relationship extraction (spec §11's knowledge graph) is not
 implemented — chunks are stored flat, with no entity linking yet.
+Retrieval and the AI Copilot (Phase 2's remaining scope at the time the
+note above was written) are now implemented — see `docs/AI_ARCHITECTURE.md`.
+
+## Phase 3 entities (implemented — Compliance backbone)
+
+```mermaid
+erDiagram
+  FRAMEWORK ||--o{ REQUIREMENT : defines
+  REQUIREMENT ||--o{ CONTROL_MAPPING : "mapped via"
+  CONTROL ||--o{ CONTROL_MAPPING : "mapped via"
+  CONTROL ||--o{ CONTROL_ASSESSMENT : "assessed by"
+  CONTROL ||--o{ EVIDENCE : "supported by"
+  CONTROL ||--o{ RISK : "may mitigate"
+  ORGANIZATION ||--o{ CONTROL : has
+  ORGANIZATION ||--o{ RISK : has
+  ORGANIZATION ||--o{ POLICY : has
+  FILE ||--o{ EVIDENCE : "referenced by"
+```
+
+- **Framework / Requirement** — global catalog data (GDPR, EU AI Act, ISO
+  27001 seeded; NIS2/DORA/SOC 2/custom frameworks follow the same pattern
+  when needed), not tenant-scoped — regulatory text doesn't vary per
+  organization, same reasoning as system Roles.
+- **Control** — an organization's own implemented measure, optionally
+  mapped to one or more catalog Requirements via **ControlMapping**.
+- **ControlAssessment** — a point-in-time pass/fail/partial judgement. A
+  `fail` assessment automatically creates a `core.Task` (spec §80's
+  "shared primitives" principle in action, not a Compliance-specific
+  follow-up mechanism).
+- **Evidence** — reuses the Phase 1 **File** primitive rather than a
+  parallel storage path; optionally attached to a Control.
+- **Risk / Policy** — organization-scoped; a Risk may reference the
+  Control that mitigates it.
+
+Not modeled yet: framework/evidence versioning, audits (auditor portal),
+AI governance (ai_systems/ai_assessments), privacy workflows (RoPA, DPIA,
+DSAR), vendor risk, questionnaires, Trust Center — each a substantial
+feature attaching to this backbone, not blocking it. See
+`docs/KNOWN_LIMITATIONS.md`.
 
 ## Cross-module entity linking (spec §81)
 

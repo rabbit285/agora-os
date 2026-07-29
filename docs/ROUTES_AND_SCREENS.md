@@ -44,11 +44,24 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/knowledge` | [x] list + upload |
 | `/knowledge/[id]` | [x] detail with chunk viewer |
 
-## COMPLIANCE / SECURITY / SALES / SUPPORT / AUTOMATION
+## COMPLIANCE
 
-Not started — Phases 3–7 respectively. Routes will be added under
-`apps/web/app/(app)/compliance`, `/security`, `/sales`, `/support`,
-`/automation` matching the navigation tree in spec §6.
+| Route | Status |
+|---|---|
+| `/compliance` | [x] controls + risks + frameworks overview |
+| `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
+
+Not yet built (spec §67 lists these under Compliance): Framework-specific
+dashboards (GDPR/EU AI Act individual views), Evidence Library standalone
+page, AI Inventory/Assessment, Data Inventory/DPIA/DSAR, Vendors,
+Questionnaires, Policies list page (API exists, no UI yet), Audits, Trust
+Center, Regulatory Intelligence.
+
+## SECURITY / SALES / SUPPORT / AUTOMATION
+
+Not started — Phases 4–7 respectively. Routes will be added under
+`apps/web/app/(app)/security`, `/sales`, `/support`, `/automation`
+matching the navigation tree in spec §6.
 
 ## SETTINGS
 

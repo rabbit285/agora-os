@@ -219,6 +219,85 @@ rather than via a `<=>` query (ADR-0012); no ivfflat/HNSW index exists.
 Fine at current chunk volumes, explicitly not fine at scale — see the
 ADR for when this needs to become a real `vector(1536)` column.
 
+## Tables (Phase 3 — Compliance)
+
+```text
+frameworks                -- catalog data, NOT tenant-scoped (like system roles)
+  id UUID PK
+  key TEXT NOT NULL UNIQUE          -- "gdpr" | "eu_ai_act" | "iso27001" | ...
+  name TEXT NOT NULL
+  description TEXT
+  created_at, updated_at
+
+requirements               -- catalog data, NOT tenant-scoped
+  id UUID PK
+  framework_id UUID FK frameworks NOT NULL
+  reference_code TEXT NOT NULL      -- "Art. 30", "A.5.1", ...
+  title TEXT NOT NULL
+  description TEXT
+  UNIQUE (framework_id, reference_code)
+
+controls
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  description TEXT
+  status TEXT NOT NULL DEFAULT 'not_started'  -- not_started|in_progress|implemented|needs_review
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+control_mappings           -- many-to-many: which catalog requirements a control satisfies
+  control_id UUID FK controls NOT NULL
+  requirement_id UUID FK requirements NOT NULL
+  PRIMARY KEY (control_id, requirement_id)
+
+control_assessments
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  control_id UUID FK controls NOT NULL
+  status TEXT NOT NULL               -- pass|fail|partial|not_assessed
+  notes TEXT
+  assessed_by UUID FK users NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+evidence
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  control_id UUID FK controls NULL   -- may stand alone in the evidence library
+  file_id UUID FK files NOT NULL     -- reuses the Phase 1 File primitive
+  title TEXT NOT NULL
+  valid_until TIMESTAMPTZ NULL
+  created_by UUID FK users NULL
+  created_at, updated_at
+
+risks
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  description TEXT
+  category TEXT NOT NULL DEFAULT 'general'
+  likelihood TEXT NOT NULL           -- low|medium|high
+  impact TEXT NOT NULL               -- low|medium|high
+  status TEXT NOT NULL DEFAULT 'open'  -- open|mitigated|accepted
+  control_id UUID FK controls NULL
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+policies
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  file_id UUID FK files NULL
+  status TEXT NOT NULL DEFAULT 'draft'  -- draft|published
+  owner_id UUID FK users NULL
+  created_at, updated_at
+```
+
+A failed `control_assessments` row (`status = 'fail'`) automatically
+creates a `core.tasks` row (`module = 'compliance'`) via
+`app/compliance/service.py::record_assessment` — the one cross-module
+hook this slice ships (spec §80).
+
 ## Migration policy
 
 - Every schema change ships an Alembic revision with both `upgrade()` and

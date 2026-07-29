@@ -16,6 +16,15 @@ const STATUS_VARIANTS: Record<
   ready: "success",
   failed: "destructive",
   unsupported_format: "outline",
+  not_started: "outline",
+  implemented: "success",
+  needs_review: "warning",
+  pass: "success",
+  fail: "destructive",
+  partial: "warning",
+  not_assessed: "outline",
+  mitigated: "success",
+  accepted: "secondary",
 };
 
 export function StatusBadge({ status }: { status: string }) {

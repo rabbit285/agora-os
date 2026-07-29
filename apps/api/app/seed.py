@@ -14,6 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.gateway import ModelGateway
+from app.compliance.models import Control, ControlMapping, Evidence, Framework, Requirement, Risk
+from app.compliance.service import record_assessment
 from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
 from app.core.rbac import ensure_system_roles, get_system_role
 from app.core.storage import ensure_bucket, upload_object
@@ -117,8 +119,27 @@ async def seed() -> None:
             .scalars()
             .all()
         )
+        evidence_file_id = None
         if not existing_documents:
-            await _seed_sample_document(db, organization_id=organization.id, uploaded_by=admin.id)
+            evidence_file_id = await _seed_sample_document(
+                db, organization_id=organization.id, uploaded_by=admin.id
+            )
+
+        gdpr_requirements = await _ensure_compliance_catalog(db)
+
+        existing_controls = (
+            (await db.execute(select(Control).where(Control.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_controls:
+            await _seed_demo_compliance_data(
+                db,
+                organization_id=organization.id,
+                admin_id=admin.id,
+                gdpr_requirements=gdpr_requirements,
+                evidence_file_id=evidence_file_id,
+            )
 
         logger.info(
             "Seed complete. Log in as %s / %s (org: %s)",
@@ -153,7 +174,7 @@ maintained in the vendor register.
 
 async def _seed_sample_document(
     db: AsyncSession, *, organization_id: uuid.UUID, uploaded_by: uuid.UUID
-) -> None:
+) -> uuid.UUID:
     """Uploads and fully ingests one real sample document so the Knowledge
     module has honest, non-empty demo data (spec section 84) rather than a
     fabricated "ready" status with no underlying file."""
@@ -192,6 +213,159 @@ async def _seed_sample_document(
         db, document_id=document.id, file_bytes=data, gateway=ModelGateway()
     )
     logger.info("Seeded sample document %s (status=%s)", document.id, status)
+    return file_record.id
+
+
+CATALOG_FRAMEWORKS: dict[str, tuple[str, list[tuple[str, str]]]] = {
+    "gdpr": (
+        "GDPR",
+        [
+            ("Art. 5", "Principles relating to processing of personal data"),
+            ("Art. 30", "Records of processing activities"),
+            ("Art. 33", "Notification of a personal data breach"),
+            ("Art. 35", "Data protection impact assessment"),
+        ],
+    ),
+    "eu_ai_act": (
+        "EU AI Act",
+        [
+            ("Art. 9", "Risk management system"),
+            ("Art. 13", "Transparency and provision of information to users"),
+        ],
+    ),
+    "iso27001": (
+        "ISO 27001",
+        [
+            ("A.5.1", "Policies for information security"),
+            ("A.8.1", "Inventory of information and other associated assets"),
+        ],
+    ),
+}
+
+
+async def _ensure_compliance_catalog(db: AsyncSession) -> dict[str, Requirement]:
+    """Idempotently seeds the global framework/requirement catalog (spec
+    section 12). Returns the GDPR requirements by reference code, which
+    the demo org's controls map to."""
+    gdpr_requirements: dict[str, Requirement] = {}
+
+    for key, (name, requirements) in CATALOG_FRAMEWORKS.items():
+        framework = (
+            await db.execute(select(Framework).where(Framework.key == key))
+        ).scalar_one_or_none()
+        if framework is None:
+            framework = Framework(key=key, name=name)
+            db.add(framework)
+            await db.flush()
+
+        for reference_code, title in requirements:
+            requirement = (
+                await db.execute(
+                    select(Requirement).where(
+                        Requirement.framework_id == framework.id,
+                        Requirement.reference_code == reference_code,
+                    )
+                )
+            ).scalar_one_or_none()
+            if requirement is None:
+                requirement = Requirement(
+                    framework_id=framework.id, reference_code=reference_code, title=title
+                )
+                db.add(requirement)
+                await db.flush()
+            if key == "gdpr":
+                gdpr_requirements[reference_code] = requirement
+
+    await db.commit()
+    return gdpr_requirements
+
+
+async def _seed_demo_compliance_data(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    admin_id: uuid.UUID,
+    gdpr_requirements: dict[str, Requirement],
+    evidence_file_id: uuid.UUID | None,
+) -> None:
+    """Seeds a few controls (one mapped to GDPR Art. 30, one to Art. 33),
+    an assessment for each — one pass, one fail so the cross-module
+    Task-creation hook (app.compliance.service.record_assessment) has
+    something real to demonstrate — plus one risk and, if the sample
+    document was seeded, an evidence link to it."""
+    ropa_control = Control(
+        organization_id=organization_id,
+        title="Maintain Records of Processing Activities",
+        description="Keep an up-to-date RoPA covering all processing activities.",
+        owner_id=admin_id,
+        status="implemented",
+    )
+    breach_control = Control(
+        organization_id=organization_id,
+        title="Breach Notification Runbook",
+        description="Documented process to notify the supervisory authority within 72 hours.",
+        owner_id=admin_id,
+    )
+    db.add_all([ropa_control, breach_control])
+    await db.flush()
+
+    if "Art. 30" in gdpr_requirements:
+        db.add(
+            ControlMapping(
+                control_id=ropa_control.id, requirement_id=gdpr_requirements["Art. 30"].id
+            )
+        )
+    if "Art. 33" in gdpr_requirements:
+        db.add(
+            ControlMapping(
+                control_id=breach_control.id, requirement_id=gdpr_requirements["Art. 33"].id
+            )
+        )
+    await db.flush()
+
+    await record_assessment(
+        db,
+        organization_id=organization_id,
+        control=ropa_control,
+        status="pass",
+        notes="RoPA reviewed and current as of this quarter.",
+        assessed_by=admin_id,
+    )
+    await record_assessment(
+        db,
+        organization_id=organization_id,
+        control=breach_control,
+        status="fail",
+        notes="Runbook exists but has not been tested with a tabletop exercise.",
+        assessed_by=admin_id,
+    )
+
+    if evidence_file_id is not None:
+        db.add(
+            Evidence(
+                organization_id=organization_id,
+                control_id=ropa_control.id,
+                file_id=evidence_file_id,
+                title="GDPR Compliance Overview",
+                created_by=admin_id,
+            )
+        )
+
+    db.add(
+        Risk(
+            organization_id=organization_id,
+            title="Vendor sub-processor list not reviewed in 12 months",
+            description="Annual sub-processor risk review is overdue.",
+            category="privacy",
+            likelihood="medium",
+            impact="medium",
+            control_id=ropa_control.id,
+            owner_id=admin_id,
+        )
+    )
+
+    await db.commit()
+    logger.info("Seeded demo compliance data (2 controls, 2 assessments, 1 risk)")
 
 
 if __name__ == "__main__":

@@ -46,12 +46,20 @@ modules exist yet either), and an AI Action Log UI (the data exists on
 `AiRun`; no screen surfaces it). Pick these up when a concrete module
 needs them rather than building ahead of demand.
 
-## Phase 3 — Compliance
+## Phase 3 — Compliance (backbone in progress)
 
-Frameworks (GDPR, EU AI Act, ISO 27001, ISO 42001, SOC 2, NIS2, DORA),
-controls, evidence, AI governance (AI system inventory, DPIA), privacy
-(RoPA, DSAR, retention, transfers), risk register, vendor risk,
-questionnaires, policies, audits, Trust Center, regulatory intelligence.
+Done: the core spec §12 chain — Framework → Requirement → Control →
+Evidence/Assessment → Risk — plus Policy, with GDPR/EU AI Act/ISO 27001
+seeded as catalog data (ISO 42001/SOC 2/NIS2/DORA/custom frameworks follow
+the same pattern, add rows when a concrete need arises rather than ahead
+of it). A failed assessment auto-creates a remediation `Task` — the
+cross-module hook required by spec §80.
+
+Remaining: AI governance (AI system inventory, DPIA), privacy (RoPA, DSAR,
+retention, transfers), vendor risk, questionnaires, audits (auditor
+portal), Trust Center, regulatory intelligence feed. Each is a
+substantial feature attaching to the backbone above, not a blocker to it
+— see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
 ## Phase 4 — Security
 

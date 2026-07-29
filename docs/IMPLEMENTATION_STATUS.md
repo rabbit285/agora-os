@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete — Knowledge ingestion, RAG retrieval, and AI Copilot — verified end-to-end)
+Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance backbone — verified end-to-end)
 
 ## Platform
 
@@ -49,7 +49,19 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete — Knowledge ingestion, RA
 
 ## Compliance
 
-- [ ] Not started (Phase 3)
+- [x] Framework/Requirement catalog (global, seeded: GDPR, EU AI Act, ISO 27001)
+- [x] Control, ControlMapping, ControlAssessment models + migration
+- [x] Evidence (reuses Phase 1 File primitive), Risk, Policy models
+- [x] Cross-module hook: a `fail` assessment auto-creates a `core.Task` (tested)
+- [x] `/api/v1/compliance` router — frameworks, controls, assessments, evidence, risks, policies; tenant-isolated, RBAC-gated
+- [x] RBAC: `compliance_manager` / `dpo` system roles granted compliance permissions
+- [x] Frontend: `/compliance` overview + `/compliance/controls/[id]` detail
+- [x] Seed script: 2 controls, 2 assessments (one pass, one fail), 1 risk, 1 evidence link for the demo org
+- [ ] Framework/evidence versioning — not modeled
+- [ ] Audits (auditor portal), regulatory intelligence feed — not started
+- [ ] AI Governance (ai_systems/ai_assessments/ai_incidents) — not started
+- [ ] Privacy workflows (RoPA, DPIA, DSAR, retention, transfers) — not started
+- [ ] Vendor risk, questionnaires, Trust Center — not started
 
 ## Security
 
@@ -82,7 +94,8 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete — Knowledge ingestion, RA
 - [x] Auth flow tests (8 tests, passing)
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
-- [x] 26/26 total, ruff+mypy strict clean
+- [x] Compliance tests (9 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle)
+- [x] 35/35 total, ruff+mypy strict clean
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -104,6 +117,9 @@ next steps and `docs/IMPLEMENTATION_PLAN.md` for phase ordering.
 **Do not read this file as "the product is done."** It tracks a very large,
 explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
-Compliance, Security, Sales, Support, Automation (Phases 3–7), the
-cross-module intent router beyond Knowledge, Phases 8–10, and the AWS
+Phase 3 (Compliance) has its core backbone (frameworks, controls,
+assessments, evidence, risks, policies) but not its larger sub-features
+(audits, AI governance, privacy workflows, vendor risk, Trust Center —
+see the Compliance section above). Security, Sales, Support, Automation
+(Phases 4–7), the cross-module intent router, Phases 8–10, and the AWS
 production deployment have not started.

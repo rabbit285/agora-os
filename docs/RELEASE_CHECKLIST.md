@@ -1,9 +1,9 @@
 # Release Checklist
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
-"Definition of Done" (§83). This is a **Phase 1 + Phase 2 / local-only**
-checkpoint, not a production release — most items below are correctly
-unchecked.
+"Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial Phase 3
+/ local-only** checkpoint, not a production release — most items below are
+correctly unchecked.
 
 ## Phase 1 (platform foundation) — complete
 
@@ -42,11 +42,23 @@ unchecked.
 - [ ] Entity/relationship extraction — deferred, no consumer needs it yet
 - [ ] Cross-module intent router — deferred, no other modules exist yet to route across
 
-See `docs/RESUME_BUILD.md` for the next phase (Compliance).
+## Phase 3 (Compliance) — backbone complete, sub-features remain
+
+- [x] Framework/Requirement catalog (global, seeded: GDPR, EU AI Act, ISO 27001)
+- [x] Control, ControlMapping, ControlAssessment, Evidence, Risk, Policy models + migration
+- [x] Cross-module hook: failed assessment auto-creates a `core.Task` (tested)
+- [x] Tenant-isolated `/api/v1/compliance` API + frontend (overview, control detail)
+- [x] RBAC: `compliance_manager`/`dpo` roles granted compliance permissions, tested
+- [x] Seed script: demo org controls, assessments, risk, evidence link
+- [x] Backend tests: 35 passing total; ruff/mypy clean
+- [ ] Audits, AI governance, privacy workflows (RoPA/DPIA/DSAR), vendor
+      risk, questionnaires, Trust Center, regulatory intelligence — not
+      started, each a substantial feature in its own right
+
+See `docs/RESUME_BUILD.md` for the next phase (Security).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
-- [ ] Phase 3 — Compliance
 - [ ] Phase 4 — Security module
 - [ ] Phase 5 — Sales
 - [ ] Phase 6 — Customer Support

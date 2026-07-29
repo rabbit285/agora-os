@@ -167,3 +167,43 @@ that grows by orders of magnitude, at which point the column migrates to
 real `pgvector` alongside the query. Explicitly not "premature
 optimization avoided" — it's "this becomes wrong at scale, and that's
 written down here on purpose."
+
+## ADR-0013 — Frameworks/Requirements are global catalog data, not tenant-scoped
+
+**Decision**: `compliance.frameworks` and `compliance.requirements` have
+no `organization_id` at all — they're shared, seeded-once rows every
+organization reads from, the same pattern already used for system Roles
+(`app/core/rbac.py`).
+
+**Why**: GDPR Article 30 says the same thing for every organization;
+copying the regulatory text into a per-tenant row would just be
+duplication with no behavioral difference. What genuinely varies per
+organization — whether and how they satisfy a requirement — lives on
+`Control` (tenant-scoped) via `ControlMapping`, not on the requirement
+itself.
+
+## ADR-0014 — Evidence reuses the Phase 1 File primitive
+
+**Decision**: `compliance.evidence.file_id` points at `core.files`, the
+same table/upload flow Knowledge documents also use — there is no
+separate compliance-specific object-storage path.
+
+**Why**: Spec §80 explicitly warns against building disconnected modules
+with duplicate primitives. Evidence is fundamentally "a file with some
+compliance metadata attached" — reusing `core.files` means it
+automatically gets signed upload/download URLs, tenant scoping, and
+classification for free, rather than re-implementing storage handling a
+third time (Knowledge's `Document` already reuses it once).
+
+## ADR-0015 — A failed control assessment auto-creates a Task, not a compliance-specific follow-up
+
+**Decision**: `app/compliance/service.py::record_assessment` creates a
+`core.Task` (`module="compliance"`) when an assessment's status is
+`fail`, using the exact same shared primitive Tasks/Approvals already use
+— no `ComplianceRemediationItem` or similar module-specific type exists.
+
+**Why**: This is the cross-module hook spec §80 requires ("do not build
+disconnected modules... use shared entities wherever appropriate").
+Tested in `tests/test_compliance.py::test_failed_assessment_creates_remediation_task`
+— it asserts the task is visible through the generic `/api/v1/tasks`
+endpoint, not a compliance-specific one.

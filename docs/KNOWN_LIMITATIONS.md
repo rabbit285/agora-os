@@ -7,16 +7,30 @@ implied to work.
 
 ## Product scope
 
-- **Compliance, Security, Sales, Support, and Automation** (the five
-  primary product modules) have zero domain logic — their nav entries
-  route to a `/coming-soon` page. See `docs/IMPLEMENTATION_PLAN.md` for
-  the phase order.
+- **Security, Sales, Support, and Automation** (four of the five primary
+  product modules) have zero domain logic — their nav entries route to a
+  `/coming-soon` page. **Compliance** has its core backbone (frameworks,
+  controls, assessments, evidence, risks, policies) but not audits, AI
+  governance, privacy workflows (RoPA/DPIA/DSAR), vendor risk,
+  questionnaires, or the Trust Center. See `docs/IMPLEMENTATION_PLAN.md`
+  for the phase order.
 - **The AI Copilot only knows about the Knowledge module.** It retrieves
   and cites uploaded documents (spec §8–9's basic case works end to end),
   but the cross-functional examples in spec §8 (pulling from Compliance,
-  Security, and Sales context in one answer) can't work yet because none
-  of those modules exist. There's also no cross-module intent router —
-  every question goes through the same single retrieval path.
+  Security, and Sales context in one answer) can't work yet — Compliance
+  data exists now but nothing wires it into Copilot retrieval, and
+  Security/Sales don't exist at all. There's also no cross-module intent
+  router — every question goes through the same single retrieval path.
+- **Compliance frameworks/requirements are a fixed seeded catalog**, not
+  an editable admin feature — GDPR, EU AI Act, and ISO 27001 are seeded
+  with a handful of representative requirements each (not the complete
+  regulatory text), enough to demonstrate the Framework → Requirement →
+  Control chain genuinely, not exhaustively. Adding a framework today
+  means adding a Python dict entry (`app/seed.py::CATALOG_FRAMEWORKS`),
+  not a UI action.
+- **No framework/evidence versioning**, no audits (auditor portal), no
+  regulatory-update feed. See `docs/DOMAIN_MODEL.md`'s Phase 3 section for
+  the full list of what the Compliance backbone doesn't cover yet.
 - **Document parsing supports text/plain, text/markdown, text/csv, PDF,
   and DOCX only.** XLSX, PPTX, images/OCR are not implemented; uploading
   them marks the document `unsupported_format` honestly rather than
