@@ -45,6 +45,7 @@ PERMISSIONS: dict[str, str] = {
     "compliance.policies.manage": "Create and publish policies",
     "compliance.ai_systems.manage": "Register AI systems and record AI risk assessments",
     "compliance.privacy.manage": "Manage processing activities, DPIAs, and DSARs",
+    "compliance.vendors.manage": "Create vendors and record vendor risk assessments",
     "security.assets.manage": "Create and update the security asset inventory",
     "security.findings.manage": "Create and update security findings",
     "security.alerts.manage": "Triage and update security alerts",
@@ -65,6 +66,7 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.evidence.manage",
     "compliance.risks.manage",
     "compliance.policies.manage",
+    "compliance.vendors.manage",
 ]
 
 AI_GOVERNANCE_PERMISSIONS = [

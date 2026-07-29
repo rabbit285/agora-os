@@ -86,6 +86,8 @@ const STATUS_VARIANTS: Record<
   unacceptable: "destructive",
   received: "secondary",
   fulfilled: "success",
+  under_review: "warning",
+  offboarded: "outline",
 };
 
 export function StatusBadge({ status }: { status: string }) {

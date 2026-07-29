@@ -22,6 +22,8 @@ from app.compliance.models import (
     ProcessingActivity,
     Requirement,
     Risk,
+    Vendor,
+    VendorAssessment,
 )
 from app.compliance.schemas import (
     AIAssessmentCreate,
@@ -55,6 +57,12 @@ from app.compliance.schemas import (
     RiskCreate,
     RiskOut,
     RiskUpdate,
+    VendorAssessmentCreate,
+    VendorAssessmentOut,
+    VendorCreate,
+    VendorDetailOut,
+    VendorOut,
+    VendorStatusUpdate,
 )
 from app.compliance.service import (
     create_ai_incident,
@@ -63,6 +71,7 @@ from app.compliance.service import (
     decide_ai_system_status,
     decide_dpia_status,
     record_assessment,
+    record_vendor_assessment,
     register_ai_system,
     update_ai_incident_status,
     update_dsar_status,
@@ -236,10 +245,13 @@ async def create_evidence(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
     if payload.control_id is not None:
         await _get_org_control(db, payload.control_id, context.organization_id)
+    if payload.vendor_id is not None:
+        await _get_org_vendor(db, payload.vendor_id, context.organization_id)
 
     evidence = Evidence(
         organization_id=context.organization_id,
         control_id=payload.control_id,
+        vendor_id=payload.vendor_id,
         file_id=payload.file_id,
         title=payload.title,
         valid_until=payload.valid_until,
@@ -728,3 +740,121 @@ async def update_ai_incident_status_endpoint(
     await db.commit()
     await db.refresh(incident)
     return incident
+
+
+@router.get("/vendors", response_model=list[VendorOut])
+async def list_vendors(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[Vendor]:
+    result = await db.execute(
+        select(Vendor)
+        .where(Vendor.organization_id == context.organization_id)
+        .order_by(Vendor.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/vendors", response_model=VendorOut, status_code=status.HTTP_201_CREATED)
+async def create_vendor(
+    payload: VendorCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> Vendor:
+    vendor = Vendor(organization_id=context.organization_id, **payload.model_dump())
+    db.add(vendor)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.vendor.created",
+        object_type="vendor",
+        object_id=str(vendor.id),
+        after_state={"name": vendor.name, "category": vendor.category},
+    )
+    await db.commit()
+    await db.refresh(vendor)
+    return vendor
+
+
+async def _get_org_vendor(
+    db: AsyncSession, vendor_id: uuid.UUID, organization_id: uuid.UUID
+) -> Vendor:
+    vendor = await db.get(Vendor, vendor_id)
+    if vendor is None or vendor.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
+    return vendor
+
+
+@router.get("/vendors/{vendor_id}", response_model=VendorDetailOut)
+async def get_vendor(
+    vendor_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> VendorDetailOut:
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    assessments_result = await db.execute(
+        select(VendorAssessment)
+        .where(VendorAssessment.vendor_id == vendor.id)
+        .order_by(VendorAssessment.created_at.desc())
+    )
+    evidence_result = await db.execute(
+        select(Evidence).where(Evidence.vendor_id == vendor.id).order_by(Evidence.created_at.desc())
+    )
+    return VendorDetailOut(
+        **VendorOut.model_validate(vendor).model_dump(),
+        assessments=[
+            VendorAssessmentOut.model_validate(a) for a in assessments_result.scalars().all()
+        ],
+        evidence=[EvidenceOut.model_validate(e) for e in evidence_result.scalars().all()],
+    )
+
+
+@router.patch("/vendors/{vendor_id}/status", response_model=VendorOut)
+async def update_vendor_status(
+    vendor_id: uuid.UUID,
+    payload: VendorStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> Vendor:
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    before_status = vendor.status
+    vendor.status = payload.status
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.vendor.status_changed",
+        object_type="vendor",
+        object_id=str(vendor.id),
+        before_state={"status": before_status},
+        after_state={"status": vendor.status},
+    )
+    await db.commit()
+    await db.refresh(vendor)
+    return vendor
+
+
+@router.post(
+    "/vendors/{vendor_id}/assessments",
+    response_model=VendorAssessmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_vendor_assessment(
+    vendor_id: uuid.UUID,
+    payload: VendorAssessmentCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> VendorAssessment:
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    assessment = await record_vendor_assessment(
+        db,
+        organization_id=context.organization_id,
+        vendor=vendor,
+        risk_conclusion=payload.risk_conclusion,
+        notes=payload.notes,
+        assessed_by=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment

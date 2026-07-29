@@ -26,6 +26,7 @@ import type {
   ProcessingActivity,
   Risk,
   Severity,
+  Vendor,
 } from "@/lib/types";
 
 const selectClassName =
@@ -112,6 +113,76 @@ function RisksSection() {
               <StatusBadge status={risk.status} />
             </CardContent>
           </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VendorsSection() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+
+  const { data: vendors } = useQuery<Vendor[]>({
+    queryKey: ["compliance", "vendors"],
+    queryFn: () => apiFetch<Vendor[]>("/api/v1/compliance/vendors"),
+  });
+
+  const createVendor = useMutation({
+    mutationFn: () =>
+      apiFetch<Vendor>("/api/v1/compliance/vendors", {
+        method: "POST",
+        body: { name, category: category.trim() || "general" },
+      }),
+    onSuccess: () => {
+      setName("");
+      setCategory("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "vendors"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Vendors
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="Vendor name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Input
+            placeholder="Category (e.g. cloud_infrastructure)"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Button disabled={!name.trim() || createVendor.isPending} onClick={() => createVendor.mutate()}>
+            Add vendor
+          </Button>
+        </CardContent>
+      </Card>
+      {vendors?.length === 0 && <p className="text-sm text-neutral-500">No vendors recorded yet.</p>}
+      <div className="flex flex-col gap-2">
+        {vendors?.map((vendor) => (
+          <Link key={vendor.id} href={`/compliance/vendors/${vendor.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{vendor.name}</div>
+                  <div className="text-xs text-neutral-400">{vendor.category}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <SeverityBadge severity={vendor.risk_tier} />
+                  <StatusBadge status={vendor.status} />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>
@@ -639,6 +710,7 @@ export default function CompliancePage() {
       />
       <ControlsSection />
       <RisksSection />
+      <VendorsSection />
       <AISystemsSection />
       <AIIncidentsSection />
       <ProcessingActivitiesSection />

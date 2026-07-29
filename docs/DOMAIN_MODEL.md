@@ -62,7 +62,7 @@ erDiagram
 | Domain | Key entities | Phase |
 |---|---|---|
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
-| Compliance | ~~frameworks, requirements, controls, evidence, risks, policies~~ (implemented — see below), audits (not yet) | 3 |
+| Compliance | ~~frameworks, requirements, controls, evidence, risks, policies, vendors~~ (implemented — see below), audits, questionnaires, trust center, data transfers (not yet) | 3 |
 | AI Governance | ~~ai_systems, ai_assessments, ai_incidents~~ (implemented — see below) | 3 |
 | Privacy | ~~processing_activities, dpias, dsars~~ (implemented — see below), data_transfers (not yet) | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
@@ -115,6 +115,10 @@ erDiagram
   AI_SYSTEM ||--o{ AI_INCIDENT : has
   AI_INCIDENT }o--o| RISK : "critical severity links to"
   AI_INCIDENT }o--o| TASK : "critical severity creates"
+  ORGANIZATION ||--o{ VENDOR : has
+  VENDOR ||--o{ VENDOR_ASSESSMENT : "assessed by"
+  VENDOR_ASSESSMENT }o--o| RISK : "high/critical conclusion creates"
+  VENDOR ||--o{ EVIDENCE : "supported by"
 ```
 
 - **Framework / Requirement** — global catalog data (GDPR, EU AI Act, ISO
@@ -172,9 +176,19 @@ erDiagram
   than `SecurityIncident`'s eight-stage IR vocabulary, which is
   security-response-specific and doesn't map naturally onto "a model gave
   biased decisions."
+- **Vendor / VendorAssessment** — spec §12/§67's "Vendors" screen, an
+  organization's own third-party vendor register. `VendorAssessment`
+  mirrors `ControlAssessment` deliberately (same judgement shape); a
+  `high`/`critical` conclusion auto-creates a linked Compliance **Risk**
+  (`category="vendor"`) and updates the vendor's own `risk_tier` — the
+  `record_assessment`→Task hook shape reused for a fourth entity type
+  (ADR-0031). **Evidence** gained a second optional target
+  (`vendor_id`, alongside `control_id`) rather than a new evidence table,
+  since a SOC 2 report or DPA is the same File-backed artifact shape
+  either way.
 
 Not modeled yet: framework/evidence versioning, audits (auditor portal),
-data transfers (the remaining Privacy sub-feature), vendor risk,
+data transfers (the remaining Privacy sub-feature), security
 questionnaires, Trust Center — each a substantial feature attaching to
 this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
 

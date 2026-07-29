@@ -142,6 +142,7 @@ export type Evidence = {
   id: string;
   file_id: string;
   control_id: string | null;
+  vendor_id: string | null;
   title: string;
   valid_until: string | null;
   created_at: string;
@@ -254,6 +255,36 @@ export type AIIncident = {
   related_task_id: string | null;
   owner_id: string | null;
   created_at: string;
+};
+
+export type VendorStatus = "active" | "under_review" | "offboarded";
+
+export type Vendor = {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  website: string | null;
+  contact_email: string | null;
+  risk_tier: Severity;
+  status: VendorStatus;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type VendorAssessment = {
+  id: string;
+  vendor_id: string;
+  risk_conclusion: Severity;
+  notes: string | null;
+  related_risk_id: string | null;
+  assessed_by: string | null;
+  created_at: string;
+};
+
+export type VendorDetail = Vendor & {
+  assessments: VendorAssessment[];
+  evidence: Evidence[];
 };
 
 export type Severity = "low" | "medium" | "high" | "critical";

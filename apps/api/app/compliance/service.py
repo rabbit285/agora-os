@@ -32,6 +32,12 @@ third time (ADR-0018, ADR-0023, now ADR-0030) — an AI incident that's
 does, since both represent the same underlying obligation (assess and
 respond to a serious incident affecting people), not two different
 concepts that happen to share a severity field.
+
+`record_vendor_assessment` reuses `record_assessment`'s "assessment
+creates a tracked consequence" hook shape (spec §80) for a fourth entity
+type: a `critical`/`high` vendor risk conclusion auto-creates a linked
+Compliance `Risk`, the same way a failed Control assessment auto-creates
+a Task. See docs/DECISIONS.md ADR-0031.
 """
 
 from __future__ import annotations
@@ -42,11 +48,22 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.compliance.models import DPIA, DSAR, AIIncident, AISystem, Control, ControlAssessment, Risk
+from app.compliance.models import (
+    DPIA,
+    DSAR,
+    AIIncident,
+    AISystem,
+    Control,
+    ControlAssessment,
+    Risk,
+    Vendor,
+    VendorAssessment,
+)
 from app.core.models import Approval, Notification, Task
 from app.db.base import utcnow
 
 _HIGH_RISK_TIERS = {"high", "unacceptable"}
+_HIGH_VENDOR_RISK_TIERS = {"high", "critical"}
 DSAR_RESPONSE_WINDOW_DAYS = 30
 
 
@@ -430,3 +447,56 @@ async def update_ai_incident_status(
         after_state={"status": new_status},
     )
     return incident
+
+
+async def record_vendor_assessment(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    vendor: Vendor,
+    risk_conclusion: str,
+    notes: str | None,
+    assessed_by: uuid.UUID | None,
+) -> VendorAssessment:
+    assessment = VendorAssessment(
+        organization_id=organization_id,
+        vendor_id=vendor.id,
+        risk_conclusion=risk_conclusion,
+        notes=notes,
+        assessed_by=assessed_by,
+    )
+    db.add(assessment)
+    await db.flush()
+
+    vendor.risk_tier = risk_conclusion
+
+    if risk_conclusion in _HIGH_VENDOR_RISK_TIERS:
+        risk = Risk(
+            organization_id=organization_id,
+            title=f"Vendor risk: {vendor.name}",
+            description=notes
+            or f"Auto-created from a {risk_conclusion}-risk assessment of vendor {vendor.name}.",
+            category="vendor",
+            likelihood="high" if risk_conclusion == "critical" else "medium",
+            impact="high" if risk_conclusion == "critical" else "high",
+            owner_id=vendor.owner_id,
+        )
+        db.add(risk)
+        await db.flush()
+        assessment.related_risk_id = risk.id
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=assessed_by,
+        action="compliance.vendor.assessed",
+        object_type="vendor",
+        object_id=str(vendor.id),
+        after_state={
+            "risk_conclusion": risk_conclusion,
+            "related_risk_id": str(assessment.related_risk_id)
+            if assessment.related_risk_id
+            else None,
+        },
+    )
+    return assessment

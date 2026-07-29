@@ -849,3 +849,146 @@ async def test_ai_incident_from_other_org_returns_not_found(client: AsyncClient)
     )
     assert response.status_code == 404
     await other_client.aclose()
+
+
+# --- Vendor Risk ---
+
+
+async def test_employee_role_cannot_create_vendor(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "vendor-emp1@example.com", "Vendor Employee Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-vendor@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post("/api/v1/compliance/vendors", json={"name": "Should fail"})
+    assert response.status_code == 403
+
+
+async def test_compliance_manager_can_create_vendor(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "vendor-cm1@example.com", "Vendor CM Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="cm-vendor@example.com",
+        role_key="compliance_manager",
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/vendors",
+        json={"name": "Acme Cloud Storage Inc", "category": "cloud_infrastructure"},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["risk_tier"] == "low"
+    assert body["status"] == "active"
+
+
+async def test_critical_vendor_assessment_creates_linked_risk(client: AsyncClient) -> None:
+    await _signup(client, "vendor1@example.com", "Vendor Org 1")
+    vendor = await client.post("/api/v1/compliance/vendors", json={"name": "Sketchy Analytics LLC"})
+    vendor_id = vendor.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/compliance/vendors/{vendor_id}/assessments",
+        json={"risk_conclusion": "critical", "notes": "No SOC 2 report, data stored unencrypted."},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["related_risk_id"] is not None
+
+    risks = await client.get("/api/v1/compliance/risks")
+    risk_titles = [r["title"] for r in risks.json()]
+    assert any("Sketchy Analytics LLC" in t for t in risk_titles)
+
+    vendor_detail = await client.get(f"/api/v1/compliance/vendors/{vendor_id}")
+    assert vendor_detail.json()["risk_tier"] == "critical"
+    assert len(vendor_detail.json()["assessments"]) == 1
+
+
+async def test_low_risk_vendor_assessment_does_not_create_a_risk(client: AsyncClient) -> None:
+    await _signup(client, "vendor2@example.com", "Vendor Org 2")
+    vendor = await client.post("/api/v1/compliance/vendors", json={"name": "Reliable Vendor Co"})
+    vendor_id = vendor.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/compliance/vendors/{vendor_id}/assessments",
+        json={"risk_conclusion": "low"},
+    )
+    assert response.status_code == 201
+    assert response.json()["related_risk_id"] is None
+
+
+async def test_vendor_status_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "vendor3@example.com", "Vendor Org 3")
+    vendor = await client.post("/api/v1/compliance/vendors", json={"name": "Transitioning Vendor"})
+    vendor_id = vendor.json()["id"]
+
+    updated = await client.patch(
+        f"/api/v1/compliance/vendors/{vendor_id}/status", json={"status": "under_review"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "under_review"
+
+    offboarded = await client.patch(
+        f"/api/v1/compliance/vendors/{vendor_id}/status", json={"status": "offboarded"}
+    )
+    assert offboarded.status_code == 200
+    assert offboarded.json()["status"] == "offboarded"
+
+
+async def test_evidence_can_attach_to_a_vendor(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from app.core.models import File
+
+    _, org_id = await _signup(client, "vendor-evidence1@example.com", "Vendor Evidence Org")
+    vendor = await client.post("/api/v1/compliance/vendors", json={"name": "Documented Vendor Inc"})
+    vendor_id = vendor.json()["id"]
+
+    file_record = File(
+        organization_id=org_id,
+        storage_key="org/vendor/soc2.pdf",
+        original_filename="soc2.pdf",
+        content_type="application/pdf",
+        size_bytes=100,
+        uploaded_by=uuid.uuid4(),
+    )
+    db_session.add(file_record)
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/compliance/evidence",
+        json={
+            "file_id": str(file_record.id),
+            "title": "SOC 2 Type II report",
+            "vendor_id": vendor_id,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["vendor_id"] == vendor_id
+
+    vendor_detail = await client.get(f"/api/v1/compliance/vendors/{vendor_id}")
+    assert len(vendor_detail.json()["evidence"]) == 1
+    assert vendor_detail.json()["evidence"][0]["title"] == "SOC 2 Type II report"
+
+
+async def test_vendor_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-vendor1@example.com", "Cross Vendor Org 1")
+    vendor = await client.post("/api/v1/compliance/vendors", json={"name": "Org 1 vendor"})
+    vendor_id = vendor.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-vendor2@example.com", "Cross Vendor Org 2")
+
+    response = await other_client.get(
+        f"/api/v1/compliance/vendors/{vendor_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

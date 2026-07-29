@@ -66,6 +66,7 @@ class EvidenceCreate(BaseModel):
     file_id: uuid.UUID
     title: str = Field(min_length=1, max_length=300)
     control_id: uuid.UUID | None = None
+    vendor_id: uuid.UUID | None = None
     valid_until: datetime | None = None
 
 
@@ -73,6 +74,7 @@ class EvidenceOut(BaseModel):
     id: uuid.UUID
     file_id: uuid.UUID
     control_id: uuid.UUID | None
+    vendor_id: uuid.UUID | None
     title: str
     valid_until: datetime | None
     created_at: datetime
@@ -281,3 +283,53 @@ class AIIncidentOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class VendorCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    category: str = "general"
+    website: str | None = None
+    contact_email: str | None = None
+    owner_id: uuid.UUID | None = None
+
+
+class VendorStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(active|under_review|offboarded)$")
+
+
+class VendorOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    category: str
+    website: str | None
+    contact_email: str | None
+    risk_tier: str
+    status: str
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VendorAssessmentCreate(BaseModel):
+    risk_conclusion: str = Field(pattern="^(low|medium|high|critical)$")
+    notes: str | None = None
+
+
+class VendorAssessmentOut(BaseModel):
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    risk_conclusion: str
+    notes: str | None
+    related_risk_id: uuid.UUID | None
+    assessed_by: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VendorDetailOut(VendorOut):
+    assessments: list[VendorAssessmentOut]
+    evidence: list[EvidenceOut]

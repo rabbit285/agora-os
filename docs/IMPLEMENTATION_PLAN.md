@@ -77,7 +77,13 @@ Also done: AI Incidents (`AIIncident`, spec §50's "AI GOVERNANCE"
 response Task + owner Notification) for a third time (ADR-0018,
 ADR-0023, ADR-0030) rather than inventing a fourth mechanism.
 
-Remaining: data transfers (Privacy's remaining sub-feature), vendor risk,
+Also done: Vendor Risk (`Vendor`/`VendorAssessment`, spec §12/§67
+"Vendors"). A `high`/`critical` assessment conclusion reuses
+`record_assessment`'s hook shape for a fourth entity type, auto-creating
+a linked Risk (ADR-0031). `Evidence` gained a second optional target
+(`vendor_id`) alongside `control_id`.
+
+Remaining: data transfers (Privacy's remaining sub-feature), security
 questionnaires, audits (auditor portal), Trust Center, regulatory
 intelligence feed. Each is a substantial feature attaching to the
 backbone above, not a blocker

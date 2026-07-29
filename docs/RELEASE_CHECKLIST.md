@@ -178,6 +178,16 @@ Automation) now have a real, tested backbone.
 - [x] Backend tests: 157 passing total; ruff/mypy clean
 - [x] Frontend tests: 2 new Vitest tests (10 total) covering the AI Incidents section rendering and logging a new incident
 
+## Phase 3 extension (Vendor Risk) — added after the AI Incidents slice
+
+- [x] Vendor, VendorAssessment models + migration — spec §12/§67 "Vendors" screen
+- [x] Cross-module hook: a `high`/`critical` vendor assessment reuses `record_assessment`'s hook shape a fourth time, auto-creating a linked Compliance Risk (`category="vendor"`) and updating the vendor's `risk_tier` (tested, ADR-0031)
+- [x] `Evidence.vendor_id` added as a second optional target alongside `control_id` — no new evidence table
+- [x] Tenant-isolated `/api/v1/compliance/vendors` API (RBAC via `compliance.vendors.manage`, added to the `COMPLIANCE_PERMISSIONS` bundle) + frontend (Vendors section on `/compliance`, `/compliance/vendors/[id]` detail with assessment form/history/evidence)
+- [x] Seed script: 1 low-risk vendor, 1 vendor with a critical assessment + linked risk
+- [x] Backend tests: 164 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (12 total) covering the Vendors section rendering and adding a new vendor
+
 See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)

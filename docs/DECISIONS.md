@@ -763,3 +763,43 @@ true for an AI incident, not a forced parallel. Tested in
 reuse is real, not just described), the negative case
 (`test_high_severity_ai_incident_does_not_create_risk_or_task`), the
 status lifecycle, and tenant isolation.
+
+## ADR-0031 — Vendor Risk reuses record_assessment's hook shape a fourth time; Evidence gains a second optional target
+
+**Decision**: `Vendor` / `VendorAssessment` (`app/compliance/models.py`,
+spec §12/§67's "Vendors" screen) follow `Control`/`ControlAssessment`'s
+exact shape: a tenant-scoped entity plus a point-in-time judgement
+(`risk_conclusion`: low/medium/high/critical, mirroring the
+likelihood/impact/severity vocabulary already used across Risk,
+SecurityAsset, and AIIncident). `record_vendor_assessment` reuses
+`record_assessment`'s "assessment creates a tracked consequence" hook
+shape (spec §80) for a fourth entity type: a `high`/`critical`
+conclusion auto-creates a linked Compliance `Risk`
+(`category="vendor"`), the same way a `fail` Control assessment
+auto-creates a Task — a different consequence (Risk vs. Task) because a
+vendor risk is genuinely a risk-register concern (an ongoing exposure to
+track), not a remediation checklist item.
+
+`Evidence.vendor_id` is added as a second optional target alongside the
+existing `control_id` (both nullable, either or neither may be set) —
+not a new evidence table, since a SOC 2 report or signed DPA is the same
+kind of artifact (a File with a title and optional expiry) whether it
+backs a Control or a Vendor. `VendorDetailOut` includes both
+`assessments` and `evidence`, connecting Vendor to Risk, Control-shaped
+assessment history, and Evidence in one response — directly serving the
+user's explicit request to connect these features to the existing
+Risks/Controls/Evidence primitives.
+
+**Why**: Continuing spec §80's "shared primitives" discipline for a
+fourth time (after ControlAssessment→Task, AISystem→Approval+DPIA,
+AIIncident→Risk+Task+Notification) rather than inventing a
+vendor-specific remediation or risk-tracking mechanism. Generalizing
+Evidence rather than duplicating it avoids a second file-attachment path
+with its own validation/storage logic for what is semantically identical
+data. Tested in `tests/test_compliance.py`: RBAC (`employee` denied,
+`compliance_manager` granted — via the existing `COMPLIANCE_PERMISSIONS`
+bundle, no new role-grant line needed since `compliance.vendors.manage`
+was added to that bundle), the critical-assessment-creates-risk hook,
+the negative case for low risk, the vendor status lifecycle, evidence
+attaching to a vendor and appearing in its detail response, and tenant
+isolation.

@@ -44,6 +44,16 @@ chain `app.secops.service.create_incident` already established for
 `SecurityIncident` (ADR-0018, ADR-0023) — this build's third use of that
 specific hook shape, not a new mechanism. See
 app.compliance.service.create_ai_incident and docs/DECISIONS.md ADR-0030.
+
+`Vendor` / `VendorAssessment` add spec §12/§67's "Vendors" screen (vendor
+risk management). `Evidence.vendor_id` generalizes Evidence beyond
+Control (a SOC 2 report or DPA is evidence about a vendor, not a
+Control). A `VendorAssessment` concluding `critical`/`high` risk
+auto-creates a linked Compliance `Risk` — the same "assessment creates a
+tracked consequence" hook shape `record_assessment` established for
+Control (spec §80), reused for a fourth entity type. See
+app.compliance.service.record_vendor_assessment and docs/DECISIONS.md
+ADR-0031.
 """
 
 from __future__ import annotations
@@ -141,7 +151,8 @@ class ControlAssessment(UUIDPrimaryKeyMixin, Base):
 class Evidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A stored artifact (reuses the Phase 1 File primitive — spec section
     80: shared platform primitives, not a duplicate storage path) that
-    supports a Control, or stands alone in the evidence library."""
+    supports a Control or a Vendor, or stands alone in the evidence
+    library."""
 
     __tablename__ = "evidence"
 
@@ -150,6 +161,12 @@ class Evidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     control_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
+    )
+    # A SOC 2 report, DPA, or security questionnaire response is evidence
+    # about a Vendor, not a Control — kept as a second optional target
+    # rather than a new evidence table (spec §80).
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True, index=True
     )
     file_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("files.id"), nullable=False
@@ -368,3 +385,57 @@ class AIIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+class Vendor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """An organization's own third-party vendor record (spec §12/§67
+    "Vendors" screen) — tenant-scoped, like Control, unlike Framework's
+    global catalog data."""
+
+    __tablename__ = "vendors"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    category: Mapped[str] = mapped_column(String(100), default="general")
+    website: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # low | medium | high | critical — current concluded risk tier, mirrors
+    # the vocabulary Risk/SecurityAsset already use, kept updated by
+    # record_vendor_assessment rather than a separate rollup job.
+    risk_tier: Mapped[str] = mapped_column(String(10), default="low")
+    # active | under_review | offboarded
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class VendorAssessment(UUIDPrimaryKeyMixin, Base):
+    """Point-in-time risk judgement of a Vendor — mirrors
+    ControlAssessment's shape deliberately (same "assessment creates a
+    tracked consequence" hook, spec §80). A `critical`/`high` conclusion
+    auto-creates a linked Compliance Risk — see
+    app.compliance.service.record_vendor_assessment."""
+
+    __tablename__ = "vendor_assessments"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    vendor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=False, index=True
+    )
+    # low | medium | high | critical
+    risk_conclusion: Mapped[str] = mapped_column(String(10), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Cross-module hook: set when risk_conclusion is high/critical.
+    related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
+    )
+    assessed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

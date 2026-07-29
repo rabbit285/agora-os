@@ -28,12 +28,14 @@ from app.compliance.models import (
     ProcessingActivity,
     Requirement,
     Risk,
+    Vendor,
 )
 from app.compliance.service import (
     create_ai_incident,
     create_dpia,
     create_dsar,
     record_assessment,
+    record_vendor_assessment,
     register_ai_system,
     update_dsar_status,
 )
@@ -217,6 +219,14 @@ async def seed() -> None:
                     admin_id=admin.id,
                     ai_system=resume_screening_system,
                 )
+
+        existing_vendors = (
+            (await db.execute(select(Vendor).where(Vendor.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_vendors:
+            await _seed_demo_vendor_data(db, organization_id=organization.id, admin_id=admin.id)
 
         existing_assets = (
             (
@@ -649,6 +659,51 @@ async def _seed_demo_ai_incident_data(
 
     await db.commit()
     logger.info("Seeded demo AI incident (1 critical incident with linked risk + response task)")
+
+
+async def _seed_demo_vendor_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one low-risk vendor (no assessment yet) and one vendor with a
+    critical assessment — exercising the cross-module hook that links a
+    critical/high vendor risk conclusion to a real Compliance Risk
+    (ADR-0031), the same "assessment creates a tracked consequence" shape
+    record_assessment established for Control."""
+    db.add(
+        Vendor(
+            organization_id=organization_id,
+            name="CloudHost Infrastructure Inc",
+            description="Primary cloud hosting provider.",
+            category="cloud_infrastructure",
+            website="https://cloudhost.example",
+            owner_id=admin_id,
+        )
+    )
+
+    risky_vendor = Vendor(
+        organization_id=organization_id,
+        name="QuickScribe Transcription LLC",
+        description="Third-party transcription service used for support call summaries.",
+        category="data_processor",
+        contact_email="security@quickscribe.example",
+        owner_id=admin_id,
+    )
+    db.add(risky_vendor)
+    await db.flush()
+
+    await record_vendor_assessment(
+        db,
+        organization_id=organization_id,
+        vendor=risky_vendor,
+        risk_conclusion="critical",
+        notes="No signed DPA on file and no evidence of encryption at rest for transcripts.",
+        assessed_by=admin_id,
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo vendor data (1 low-risk vendor, 1 vendor with a critical assessment + linked risk)"
+    )
 
 
 async def _seed_demo_security_data(

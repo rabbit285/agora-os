@@ -6,183 +6,184 @@ kept current at the end of every work session per the execution contract's
 
 ## Where things stand
 
-**Phase 1 (platform foundation) and Phase 2 (Knowledge & AI
-Infrastructure) are complete. All five primary product modules —
-Compliance, Security, Sales, Support, and Automation (Phases 3-7) — have
-a real, tested backbone. Phase 8 (Cross-Module Intelligence) has three of
-spec §69's five named scenarios fully implemented, plus a partial fourth
-with two of its steps done. Phase 9 (Integrations) has two connector
-shapes complete: a generic inbound Webhook connector, and a
-provider-neutral OAuth2 framework with six real (credential-gated)
-adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce.
-Compliance now also has AI Governance (AI System Inventory + AI
-Incidents) and Privacy (RoPA/DPIA/DSAR) sub-features.** See
-`docs/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_STATUS.md` for the
-itemized list.
+Phase 1 (platform foundation) and Phase 2 (Knowledge & AI Infrastructure)
+are complete. All five primary product modules — Compliance, Security,
+Sales, Support, and Automation (Phases 3-7) — have a real, tested
+backbone. Phase 8 (Cross-Module Intelligence) has three of spec §69's
+five named scenarios fully implemented, plus a partial fourth ("New AI
+Tool Adoption") with two of its steps done. Phase 9 (Integrations) has a
+Webhook connector and a provider-neutral OAuth2 framework with six real
+(credential-gated) adapters.
 
-Most recent slice: **AI Incidents** (`AIIncident`,
-`app/compliance/models.py` — spec §50's "AI GOVERNANCE" `ai_incidents`
-table). Always tied to a specific `AISystem` (`ai_system_id`
-non-nullable, unlike `DPIA`'s optional links), with severity
-(low/medium/high/critical) and a deliberately simple
-open→investigating→resolved→closed lifecycle — not `SecurityIncident`'s
-eight-stage IR vocabulary, which is security-response-specific and
-doesn't map naturally onto "a model gave biased decisions."
+**Currently in progress**: the user asked to build out the remaining
+Compliance/Trust capabilities in this order: (1) Vendor Risk, (2) Security
+Questionnaires, (3) Audits, (4) Trust Center, (5) Enterprise Sales
+Security Review, (6) Data Transfers — each connected to existing
+Vendors/Risks/Controls/Evidence/Documents/Tasks/Approvals/Notifications/
+Sales Opportunities/AI Copilot/audit systems, with the Enterprise Sales
+Security Review implementing the full 10-step spec §69 flow. AWS
+deployment must wait for explicit approval — infra code may be prepared
+but no billable resources created.
 
-**Cross-module hook (ADR-0030)**: `create_ai_incident` reuses
-`app.secops.service.create_incident`'s exact `critical`-severity chain
-for a **third** time (after Security's own use, ADR-0018, and its Phase 8
-extension, ADR-0023): a critical AI incident creates a linked Compliance
-`Risk` (`category="ai_governance"`), a response `core.Task`
-(`module="compliance"`, `priority="urgent"`), and — if owned — a
-`core.Notification`. This wasn't copied reflexively: a critical AI
-incident and a critical security incident represent the same underlying
-obligation (assess and respond to a serious incident affecting people —
-EU AI Act Article 73's "serious incident" reporting duty plays the same
-role GDPR's breach-notification duty plays for `SecurityIncident`), so
-reusing the identical chain is the correct call, not just a
-pattern-match. RBAC reuses the existing `compliance.ai_systems.manage`
-permission rather than minting a new one — AI incidents are managed by
-whoever already manages the AI System Inventory.
+**Completed so far in this sequence**: **Vendor Risk** (`Vendor`/
+`VendorAssessment`, `app/compliance/models.py`, ADR-0031). A `high`/
+`critical` assessment conclusion reuses `record_assessment`'s "assessment
+creates a tracked consequence" hook shape for a fourth entity type,
+auto-creating a linked Compliance `Risk` (`category="vendor"`) and
+updating the vendor's own `risk_tier`. `Evidence` gained a second
+optional target (`vendor_id`, alongside `control_id`) rather than a new
+evidence table. RBAC: `compliance.vendors.manage` added to the existing
+`COMPLIANCE_PERMISSIONS` bundle (`compliance_manager`/`dpo` get it
+automatically, no new role-grant line). Frontend: a Vendors section on
+`/compliance` (create form, list) + `/compliance/vendors/[id]` detail
+(status dropdown, assessment form, assessment history, evidence list).
+Seed data: 1 low-risk vendor, 1 vendor with a critical assessment (linked
+Risk visible via `/api/v1/compliance/risks`).
 
-**Frontend**: an AI Incidents section on `/compliance` (log form with an
-AI-system picker, severity select, list) and
-`/compliance/ai-incidents/[id]` detail — mirrors
-`/security/incidents/[id]`'s exact layout (status workflow, linked-Risk
-banner, linked-Task banner), reusing the existing `SeverityBadge`
-component.
+All checks pass: **164 backend tests** (was 157), ruff + mypy --strict
+clean; frontend eslint + tsc + production build clean; **12 frontend
+tests** (was 10), all passing. Live Docker smoke test: recorded a
+`high`-risk assessment on the seeded low-risk vendor, confirmed
+`risk_tier` updated and a real linked Risk appeared via
+`/api/v1/compliance/risks`, confirmed the `compliance.vendor.assessed`
+audit trail, confirmed both new frontend routes render.
 
-**Seed data**: 1 critical AI incident logged against the demo org's
-already-seeded high-risk "Applicant Resume Screening Assistant" AI
-system, producing a real linked Risk and response Task.
-
-All lint/typecheck/test/build checks pass: **157 backend tests** (was
-149), ruff + mypy --strict clean; frontend eslint + tsc + production build
-clean; **10 frontend tests** (was 8; 2 new for AI Incidents), all
-passing.
-
-No AWS infrastructure exists. See `docs/IMPLEMENTATION_PLAN.md` for the
-full phase order and `docs/KNOWN_LIMITATIONS.md` for exactly what's
-missing in each module. Compliance's AI Governance sub-feature is now
-essentially complete for this build's near-term scope (Inventory +
-Assessments + Incidents); Privacy still lacks data transfers (the one
-remaining spec sub-feature, deliberately deferred — cross-border transfer
-mechanisms/adequacy decisions/SCCs are a substantial feature with no
-existing primitive to hang off of).
+**Remaining in this sequence, in order**: Security Questionnaires, Audits,
+Trust Center, Enterprise Sales Security Review, Data Transfers. See
+"Next highest-priority task" below for the concrete plan for each,
+established before starting so the whole sequence stays internally
+consistent (e.g. Questionnaires must exist before the Sales Security
+Review can create/import one).
 
 ## Branch and commit
 
-Branch: `main`. Seventeen substantive commits: Phase 1 platform
-foundation, Phase 2 Knowledge ingestion, Phase 2 completion (RAG +
-Copilot), Phase 3 Compliance backbone, Phase 4 Security backbone, Phase
-5 Sales backbone, Phase 6 Support backbone, Phase 7 Automation backbone,
-Phase 8 Support Upsell Signal, Phase 8 Security Incident chain
-extension, Phase 9 Webhook connector, Phase 8 New Customer, Phase 9
-OAuth2 framework + HubSpot, the AI System Inventory slice, the OAuth
-framework completion slice, the Privacy (RoPA/DPIA/DSAR) slice, and this
-AI Incidents slice. See `git log` for exact SHAs.
+Branch: `main`. Eighteen substantive commits through the Vendor Risk
+slice (Phase 1 through the AI Incidents slice, then this one). See
+`git log` for exact SHAs.
 
 ## Machine-specific note
 
 This dev machine already runs two unrelated Docker projects
 (`compliance-os` at `D:\AI SaaS`, ports 5432/6379/9000-9001/8000, and
-`ai-sales-os`, ports 5433/6380) that predate this repository and are not
-part of it. Agora Origin's compose stack was given alternate host ports via
-a gitignored `infra/docker/.env` (see `docs/ENVIRONMENT_VARIABLES.md`) so
-it doesn't collide with them. On a clean machine, delete or ignore that
-override file to get the standard ports.
+`ai-sales-os`, ports 5433/6380) that predate this repository. Agora
+Origin's compose stack uses alternate host ports via a gitignored
+`infra/docker/.env` (see `docs/ENVIRONMENT_VARIABLES.md`).
 
-Docker Desktop on this machine has intermittently stopped mid-session more
-than once. If `docker compose` commands start failing with `failed to
-connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`,
-launch it directly (`"/c/Program Files/Docker/Docker/Docker Desktop.exe"`)
-and poll `docker info` every few seconds until it responds (~10-30s);
-containers restart automatically once the daemon is back.
+Docker Desktop on this machine has intermittently stopped mid-session. If
+`docker compose` commands fail with `failed to connect to the docker API
+at npipe:////./pipe/dockerDesktopLinuxEngine`, launch it directly
+(`"/c/Program Files/Docker/Docker/Docker Desktop.exe"`) and poll
+`docker info` until it responds (~10-30s); containers restart
+automatically.
 
 The **api and worker containers share `requirements.txt` but are built as
-separate Docker images** — adding a Python dependency requires rebuilding
-both (`docker compose build api worker`), not just the one you're actively
-testing against (this bit the OAuth framework completion slice).
+separate Docker images** — a new Python dependency needs
+`docker compose build api worker`, not just one.
 
-## Exact commands already run (this session)
+## Exact commands already run (this session, Vendor Risk slice)
 
 ```bash
-# Migration for the ai_incidents table
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add ai incidents table"
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add vendor risk tables"
 docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
 docker compose run --rm api alembic check   # confirms no drift
 
-# Backend checks (all green)
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 157 passed
+# -> 164 passed
 
-# Seed script re-run (idempotent, confirmed on a second run)
-docker compose run --rm --no-deps api python -m app.seed
+docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed twice
 
-# Frontend checks (all green)
 cd apps/web
 npx tsc --noEmit
 npx eslint .
-npx vitest run   # -> 10 passed
+npx vitest run   # -> 12 passed
 npm run build
 ```
 
-Still to do before this slice is fully closed out: restart the `api`/
-`web` containers, run a live smoke test against the running stack (log a
-critical AI incident against a real AI system and confirm the linked
-Risk/Task appear via the real `/api/v1/compliance/risks` and
-`/api/v1/tasks` endpoints, confirm a non-critical incident does *not*
-create either, check `audit_events` for `compliance.ai_incident.*`
-rows), then commit.
+## Next highest-priority task: Security Questionnaires (item 2 of 6)
 
-## Next highest-priority task
+Plan established now so later slices (especially the Sales Security
+Review) build on stable ground:
 
-Both slices the user explicitly named ("Privacy workflows, then AI
-Incidents") are now complete. No further direction has been given.
-Reasonable directions, in priority order — none of these should be
-started without confirming, since each is either a business decision or
-a large, open-ended feature:
+- **Models** (in `app/compliance/`, same "Compliance owns this
+  sub-feature" reasoning as Privacy/Vendor Risk): `Questionnaire`
+  (organization_id, title, source: customer_provided|internal_template,
+  status: draft|in_progress|completed, opportunity_id nullable FK
+  `sales_opportunities` — the forward-looking link the Sales Security
+  Review slice will use, owner_id), `QuestionnaireQuestion`
+  (questionnaire_id, text, category: compliance|security, order_index),
+  `QuestionnaireAnswer` (question_id, answer_text, status:
+  draft|approved|missing, source_type: ai_suggested|manual|
+  reused_from_library, evidence_id nullable FK evidence, control_id
+  nullable FK controls, answered_by).
+- **AI-assisted answers**: reuse `app.ai.copilot`'s existing
+  retrieve→ground→generate→cite path to draft an answer grounded in the
+  Knowledge base when a question has no existing approved answer to
+  reuse from the org's own answer library (previously-approved answers
+  across any questionnaire, matched by simple text similarity — no new
+  vector infra needed, reuse Knowledge's existing embeddings path if a
+  richer match is warranted). AI-drafted answers are always
+  `status="draft"` — never auto-approved, consistent with this build's
+  human-in-the-loop discipline everywhere else (Approval gates on
+  AISystem/DPIA, never autonomous customer-facing output).
+- **RBAC**: add `compliance.questionnaires.manage`, likely to the
+  `COMPLIANCE_PERMISSIONS` bundle (same reasoning as Vendor Risk).
+- Router endpoints on the existing `/api/v1/compliance` router.
+- Frontend: a Questionnaires section on `/compliance` +
+  `/compliance/questionnaires/[id]` detail (question/answer list,
+  approve-answer action, evidence attach).
+- Full test/seed/smoke-test/doc/commit cycle, matching every prior slice
+  this session.
 
-1. **If the user supplies real credentials** for a specific OAuth
-   provider (any of the six adapters) or SSO/IdP metadata for Phase 10 —
-   wire that in immediately; these are now small, bounded tasks given the
-   existing adapter framework / RBAC groundwork.
-2. **Enterprise Sales Security Review** (spec §69's last named
-   cross-module scenario) needs customer questionnaires built first — a
-   larger, self-contained feature, not just a cross-module link. This is
-   the last of spec §69's five named scenarios still fully unstarted.
-3. **Data transfers** (Privacy's remaining sub-feature) — cross-border
-   transfer mechanisms, adequacy decisions, SCCs. A real, bounded,
-   credential-free feature if the user wants Compliance rounded out
-   further, but substantial enough to treat as its own slice rather than
-   folding into a "continue" instruction silently.
-4. **Vendor risk / questionnaires / audits (auditor portal) / Trust
-   Center / regulatory intelligence feed** — spec §12's remaining
-   Compliance sub-features, each a substantial standalone feature.
-5. Phase 10 (Enterprise: SSO/SAML/SCIM, public API + webhooks) or the AWS
-   production deployment (spec §L/§M/§N) — both are large, self-contained
-   next arcs, but SSO needs a real IdP and AWS deployment needs real cloud
-   spend, so treat starting either as a business decision to confirm
-   first, not something to infer from a bare "go on."
+## Then: Audits, Trust Center, Enterprise Sales Security Review, Data Transfers
 
-Given no further explicit instruction exists at the time of writing, the
-right move on a bare continuation signal is to ask which of the above the
-user wants, rather than guessing at a multi-day feature — unlike the
-Privacy/AI Incidents slices, which were explicitly named.
+- **Audits**: `Audit` (framework_id nullable, auditor_name, status:
+  planned|in_progress|completed, scheduled_at/completed_at) +
+  `AuditFinding` (control_id nullable, severity, status: open|remediated)
+  — a `high`/`critical` finding creates a remediation Task, the same
+  `record_assessment` hook shape reused a fifth time.
+- **Trust Center**: `TrustCenterItem` (category matching spec §B4's exact
+  bullet list: security_overview/privacy_overview/subprocessors/
+  data_locations/encryption_practices/availability/
+  vulnerability_reporting/compliance_roadmap/dpa_availability/
+  incident_communication/responsible_ai/ai_provider_disclosures/
+  retention_deletion/business_continuity, status: planned|in_progress|
+  implemented|independently_assessed|certified — spec's own status
+  vocabulary, not invented — is_public bool). Genuinely public: one
+  unauthenticated `GET /api/v1/trust-center/public/{org_slug}` route
+  (same "deliberately unauthenticated, narrowly scoped" pattern as the
+  webhook receiver/OAuth callback) exposing only `is_public=true` rows,
+  plus published+`is_public` Policies as downloadable documents. An
+  `EvidenceRequest` model (public POST, no auth) backs spec's "evidence
+  request workflow," creating a `core.Task`.
+- **Enterprise Sales Security Review**: the big one. `SecurityReview`
+  (opportunity_id FK sales_opportunities, questionnaire_id nullable,
+  trust_package_file_id nullable FK files, status: in_progress|blocked|
+  cleared, is_deal_blocker). Add a `security_review` stage to
+  `Opportunity.stage` (between `proposal` and `negotiation`). Orchestrates
+  the full spec §69 flow: create/import a Questionnaire → auto-suggest
+  answers (reuse the Questionnaires slice's answer-library + AI Copilot
+  logic) → auto-attach Evidence for answers referencing a Control →
+  compute missing items → create a remediation Task per missing item →
+  require an Approval before clearing when `Opportunity.value` is above a
+  materiality threshold (a judgment call to document in the ADR, mirroring
+  how every other high-stakes gate in this build uses Approval) → generate
+  a real trust package (a compiled document of approved Q&A + evidence
+  titles, stored as a File) → notify `Opportunity.owner_id` → keep
+  `is_deal_blocker=true` until cleared, surfaced on the Sales account/
+  opportunity detail page.
+- **Data Transfers**: `DataTransfer` (processing_activity_id nullable,
+  destination_country, transfer_mechanism: adequacy_decision|sccs|bcrs|
+  derogation, safeguards_description, status), extending Privacy exactly
+  like ProcessingActivity/DPIA/DSAR did (ADR-0029's pattern).
 
-## Files to edit next (if data transfers are added)
-
-- `apps/api/app/compliance/models.py` (new `DataTransfer` model — likely:
-  processing_activity_id or organization-level, destination
-  country/region, transfer mechanism (SCCs/adequacy decision/BCRs/
-  derogation), safeguards description)
-- `apps/api/app/compliance/service.py`, `schemas.py`,
-  `app/routers/compliance.py` — following the RoPA/DPIA/DSAR pattern
-  (ADR-0029) as the template
-- migration + tests + `apps/web/lib/types.ts` + a new section on
-  `/compliance`
-- `docs/DECISIONS.md` (new ADR)
+Each slice gets its own migration, full test coverage, seed data, a live
+Docker smoke test, a full documentation-set update, and its own commit —
+matching every slice completed this session. No AWS resources are to be
+created without explicit approval; only prepare infra-as-code where it
+naturally fits (none of these six slices inherently need new AWS
+infrastructure, so this constraint is unlikely to come up before Phase 10
+work begins).
 
 ## Command to resume
 
@@ -191,6 +192,6 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (157 passed)
-cd ../../apps/web && npx vitest run   # confirm still green (10 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (164 passed)
+cd ../../apps/web && npx vitest run   # confirm still green (12 passed)
 ```

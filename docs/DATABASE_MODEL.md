@@ -392,6 +392,43 @@ a linked `risks` row and a `core.tasks` response row (plus a
 shape for a third time (ADR-0018, ADR-0023, ADR-0030), not a new
 mechanism.
 
+```text
+vendors                    -- vendor risk management (spec §12/§67 "Vendors")
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  name TEXT NOT NULL
+  description TEXT NULL
+  category TEXT NOT NULL DEFAULT 'general'
+  website TEXT NULL
+  contact_email TEXT NULL
+  risk_tier TEXT NOT NULL DEFAULT 'low'   -- low|medium|high|critical
+  status TEXT NOT NULL DEFAULT 'active'   -- active|under_review|offboarded
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+vendor_assessments
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  vendor_id UUID FK vendors NOT NULL
+  risk_conclusion TEXT NOT NULL   -- low|medium|high|critical
+  notes TEXT NULL
+  related_risk_id UUID FK risks NULL   -- cross-module hook, see below
+  assessed_by UUID FK users NULL
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+`evidence` gains a second nullable target: `vendor_id UUID FK vendors
+NULL` alongside the existing `control_id` — a SOC 2 report or DPA is
+evidence about a Vendor, not a Control, but the same File-backed shape
+(spec §80, ADR-0031).
+
+A `vendor_assessments` row with `risk_conclusion` of `high` or `critical`
+automatically creates a linked `risks` row (`category='vendor'`) and
+updates the vendor's own `risk_tier`, via
+`app/compliance/service.py::record_vendor_assessment` — reusing
+`record_assessment`'s "assessment creates a tracked consequence" hook
+shape for a fourth entity type (ADR-0031).
+
 ## Tables (Phase 4 — Security)
 
 Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`

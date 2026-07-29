@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AIIncident, AISystem, DPIA, DSAR, ProcessingActivity } from "@/lib/types";
+import type { AIIncident, AISystem, DPIA, DSAR, ProcessingActivity, Vendor } from "@/lib/types";
 
 import CompliancePage from "./page";
 
@@ -80,6 +80,19 @@ const AI_INCIDENT_FIXTURE: AIIncident = {
   created_at: new Date().toISOString(),
 };
 
+const VENDOR_FIXTURE: Vendor = {
+  id: "22222222-3333-4444-5555-666666666666",
+  name: "QuickScribe Transcription LLC",
+  description: "Third-party transcription service.",
+  category: "data_processor",
+  website: null,
+  contact_email: null,
+  risk_tier: "critical",
+  status: "active",
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -95,6 +108,7 @@ function mockRoutes(overrides: {
   dsars?: DSAR[];
   aiSystems?: AISystem[];
   aiIncidents?: AIIncident[];
+  vendors?: Vendor[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -110,6 +124,10 @@ function mockRoutes(overrides: {
       return { ...AI_INCIDENT_FIXTURE };
     }
     if (path === "/api/v1/compliance/ai-incidents") return overrides.aiIncidents ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/vendors") {
+      return { ...VENDOR_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/vendors") return overrides.vendors ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -212,6 +230,41 @@ describe("CompliancePage — AI Incidents section", () => {
           title: "Model drifted after retraining",
           severity: "critical",
         },
+      }),
+    );
+  });
+});
+
+describe("CompliancePage — Vendors section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders vendors with their risk tier and status", async () => {
+    mockRoutes({ vendors: [VENDOR_FIXTURE] });
+    renderPage();
+
+    expect(await screen.findByText("QuickScribe Transcription LLC")).toBeInTheDocument();
+    expect(screen.getByText("data_processor")).toBeInTheDocument();
+    expect(screen.getByText("critical")).toBeInTheDocument();
+  });
+
+  it("adds a new vendor with the entered name and category", async () => {
+    mockRoutes({});
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByPlaceholderText("Vendor name"), "New Vendor Inc");
+    await user.type(
+      screen.getByPlaceholderText("Category (e.g. cloud_infrastructure)"),
+      "cloud_infrastructure",
+    );
+    await user.click(screen.getByRole("button", { name: "Add vendor" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/vendors", {
+        method: "POST",
+        body: { name: "New Vendor Inc", category: "cloud_infrastructure" },
       }),
     );
   });

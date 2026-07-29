@@ -29,9 +29,13 @@ implied to work.
   rejected lifecycle). AI Incidents (`AIIncident`) also now exist — a
   `critical`-severity incident reuses `SecurityIncident`'s exact
   critical-severity chain (linked Risk + response Task + owner
-  Notification, ADR-0030) — but no data transfers (the remaining Privacy
-  sub-feature), no audits (auditor portal), no vendor risk,
-  questionnaires, or Trust Center.
+  Notification, ADR-0030). Vendor Risk (`Vendor`/`VendorAssessment`) also
+  now exists — a `high`/`critical` assessment conclusion auto-creates a
+  linked Risk, reusing `record_assessment`'s hook shape for a fourth
+  entity type (ADR-0031); `Evidence` can now attach to a Vendor as well
+  as a Control — but no data transfers (the remaining Privacy
+  sub-feature), no audits (auditor portal), no security questionnaires,
+  or Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —
