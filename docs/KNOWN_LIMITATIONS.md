@@ -11,19 +11,28 @@ implied to work.
   primary product modules) have zero domain logic — their nav entries
   route to a `/coming-soon` page. See `docs/IMPLEMENTATION_PLAN.md` for
   the phase order.
-- **The Knowledge module ingests documents but nothing retrieves them
-  yet.** Upload → parse → chunk → embed → store all work end to end, but
-  Phase 2 (spec's "Knowledge & AI Infrastructure") isn't finished — there
-  is no similarity search, no RAG pipeline, and no AI Copilot yet.
-  `/api/v1/ai/copilot/ask` is still a minimal exercise of the gateway
-  (prompt in, demo/real text out), not grounded retrieval (spec §8–9).
-  Embeddings are stored (JSON, see ADR-0007) but unused until that's built.
+- **The AI Copilot only knows about the Knowledge module.** It retrieves
+  and cites uploaded documents (spec §8–9's basic case works end to end),
+  but the cross-functional examples in spec §8 (pulling from Compliance,
+  Security, and Sales context in one answer) can't work yet because none
+  of those modules exist. There's also no cross-module intent router —
+  every question goes through the same single retrieval path.
 - **Document parsing supports text/plain, text/markdown, text/csv, PDF,
   and DOCX only.** XLSX, PPTX, images/OCR are not implemented; uploading
   them marks the document `unsupported_format` honestly rather than
   pretending to extract text (spec §82).
 - **No entity/relationship extraction** (spec §11's knowledge graph).
   Chunks are stored flat with no cross-linking to other entities yet.
+- **Similarity search is a Python-side linear scan** (cosine similarity
+  over every chunk in the organization), not a native `pgvector` ANN
+  query — correct today, but explicitly not built to scale past a
+  moderate number of chunks per organization. See `docs/DECISIONS.md`
+  ADR-0012 for the migration path.
+- **Prompt injection defense is prompt-level only** (retrieved content is
+  delimited and framed as untrusted data — spec §F5). There's no tool-
+  execution allowlist because the Copilot can't take actions yet, only
+  answer questions; that becomes necessary before any AI-triggered action
+  ships.
 - **No invitation flow.** New members can only join today via signup
   (which creates a new organization) or direct database insertion (see
   `tests/test_rbac.py` for the pattern). `/invite/[token]` is not built.

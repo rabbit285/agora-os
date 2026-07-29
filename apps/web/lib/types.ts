@@ -84,3 +84,18 @@ export type DocumentChunk = {
   content: string;
   token_count: number;
 };
+
+export type Citation = {
+  document_id: string;
+  chunk_id: string;
+  chunk_index: number;
+  score: number;
+};
+
+export type CopilotAnswer = {
+  text: string;
+  provider: string;
+  model: string;
+  grounded: boolean;
+  citations: Citation[];
+};

@@ -161,7 +161,14 @@ class ModelGateway:
         organization_id: uuid.UUID,
         requested_by: uuid.UUID | None,
         request: GenerateRequest,
+        citations: list[dict[str, Any]] | None = None,
     ) -> GenerateResult:
+        """`citations`, when given, overrides whatever the adapter itself
+        returned. Citations should come from *retrieval* (which chunks were
+        actually fetched and fed into the prompt), never from the model's
+        own output — an LLM asserting its own sources proves nothing (spec
+        F4). Callers doing RAG (see app.ai.copilot) pass their retrieval
+        results here explicitly."""
         start = time.perf_counter()
         error: str | None = None
         result: GenerateResult | None = None
@@ -173,6 +180,9 @@ class ModelGateway:
             raise
         finally:
             latency_ms = int((time.perf_counter() - start) * 1000)
+            resolved_citations = (
+                citations if citations is not None else (result.citations if result else [])
+            )
             db.add(
                 AiRun(
                     organization_id=organization_id,
@@ -184,7 +194,7 @@ class ModelGateway:
                     prompt_version=request.prompt_version,
                     input_classification=request.input_classification,
                     output={"text": result.text} if result else None,
-                    citations=result.citations if result else [],
+                    citations=resolved_citations,
                     confidence=result.confidence if result else None,
                     latency_ms=latency_ms,
                     policy_result="allowed" if error is None else "error",

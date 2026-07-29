@@ -6,31 +6,32 @@ kept current at the end of every work session per the execution contract's
 
 ## Where things stand
 
-**Phase 1 (platform foundation) is complete.** **Phase 2 (Knowledge & AI
-Infrastructure) is partially complete: document ingestion works end to
-end; retrieval (RAG) and the AI Copilot itself do not exist yet.** See
-`docs/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_STATUS.md` for the
-itemized list.
+**Phase 1 (platform foundation) and Phase 2 (Knowledge & AI
+Infrastructure) are both complete.** See `docs/RELEASE_CHECKLIST.md` and
+`docs/IMPLEMENTATION_STATUS.md` for the itemized list.
 
-In short, working and verified: monorepo, local Docker Compose infra,
+Working and verified end to end: monorepo, local Docker Compose infra,
 auth, multi-tenancy, RBAC, audit log, tasks, approvals, files,
-notifications, AI gateway (generate + embed, demo + real adapters),
-Next.js app shell, and a full document pipeline (upload → parse → chunk →
-embed → store, via a durable Temporal workflow) with tenant-isolated API
-and frontend pages. All lint/typecheck/test/build checks pass (19 backend
-tests, ruff + mypy --strict clean; frontend eslint + tsc + production
-build clean).
+notifications, a full document pipeline (upload → parse → chunk → embed →
+store, via a durable Temporal workflow), similarity search over
+embeddings, and a retrieval-grounded AI Copilot (`/copilot`) that answers
+questions using only uploaded documents and cites exactly which chunks it
+used. All lint/typecheck/test/build checks pass (26 backend tests, ruff +
+mypy --strict clean; frontend eslint + tsc + production build clean).
 
 No other domain module (Compliance, Security, Sales, Support, Automation)
 has been started. No AWS infrastructure exists. See
 `docs/IMPLEMENTATION_PLAN.md` for the full phase order and
-`docs/KNOWN_LIMITATIONS.md` for exactly what's missing.
+`docs/KNOWN_LIMITATIONS.md` for exactly what's missing — notably,
+similarity search is a Python-side linear scan (fine now, not at scale —
+ADR-0012), and the Copilot only knows about the Knowledge module (no
+cross-module intent router since no other module exists yet to route to).
 
 ## Branch and commit
 
-Branch: `main`. Two substantive commits so far: Phase 1 platform
-foundation, then this Phase 2 Knowledge slice (see `git log` for exact
-SHAs — this file is written just before that second commit).
+Branch: `main`. Three substantive commits: Phase 1 platform foundation,
+Phase 2 Knowledge ingestion, and this Phase 2 completion (RAG + Copilot).
+See `git log` for exact SHAs.
 
 ## Machine-specific note
 
@@ -42,22 +43,15 @@ a gitignored `infra/docker/.env` (see `docs/ENVIRONMENT_VARIABLES.md`) so
 it doesn't collide with them. On a clean machine, delete or ignore that
 override file to get the standard ports.
 
-## Exact commands already run (this session, on top of Phase 1)
+## Exact commands already run (this session, on top of Phase 1 + Knowledge ingestion)
 
 ```bash
 cd infra/docker
-docker compose build api worker      # picked up pypdf/python-docx additions
-docker compose up -d api worker
-
-# Migration for knowledge_bases / documents / document_chunks
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add knowledge module tables"
-docker compose run --rm --no-deps api ruff format migrations/
-docker compose run --rm api alembic upgrade head
-docker compose run --rm api alembic check              # confirms no drift
+docker compose ps   # confirm the stack from earlier sessions is still up
 
 # Backend checks (all green)
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 19 passed
+# -> 26 passed
 
 # Frontend checks (all green)
 cd apps/web
@@ -66,52 +60,57 @@ npx eslint .
 npm run build
 ```
 
+No new migration was needed this round — retrieval and the Copilot only
+add Python modules (`app/knowledge/retrieval.py`, `app/ai/copilot.py`,
+`app/ai/schemas.py`), no new tables.
+
 ## Next highest-priority task
 
-**Finish Phase 2**: the AI Copilot foundation + RAG retrieval over the
-embeddings that already exist. Concretely, in dependency order:
+**Start Phase 3 — Compliance** (spec sections 12, 3rd module in
+`docs/IMPLEMENTATION_PLAN.md`). This is the first of the five primary
+product modules and the largest single phase in the spec. Suggested
+dependency order, following the pattern established in `app/knowledge/`:
 
-1. **Similarity search**: migrate `document_chunks.embedding` from JSON to
-   a real `pgvector` column (`CREATE EXTENSION IF NOT EXISTS vector;` in a
-   new migration, then `ALTER COLUMN embedding TYPE vector(1536) USING ...`
-   with a backfill), add an ivfflat or HNSW index, and add a
-   `search_chunks(db, organization_id, query_embedding, limit)` function in
-   `app/knowledge/service.py` using pgvector's `<=>` cosine-distance
-   operator. This is the one piece Phase 1's SQLite-test-portability
-   decision (ADR-0007) deliberately deferred — expect to either accept
-   Postgres-only tests for this specific function, or add a lightweight
-   Postgres test fixture alongside the existing SQLite one.
-2. **Intent router + context builder** (spec section 9): a service that
-   takes a user's Copilot question, resolves which knowledge base(s) the
-   asking user's permissions allow, embeds the question via
-   `ModelGateway.embed()`, calls `search_chunks`, and assembles a grounded
-   prompt with citations.
-3. **Citations on `AiRun`**: `generate_structured`/`generate` calls that
-   used retrieved context must populate `AiRun.citations` with
-   `{document_id, chunk_id, chunk_index}` — the field already exists on
-   the model (`app/ai/models.py`), just unused by anything real yet.
-4. Extend `/api/v1/ai/copilot/ask` (`app/routers/ai.py`) to actually
-   retrieve context instead of just calling `generate()` directly, and
-   update the frontend `/copilot` page (currently `/coming-soon`) once
-   there's something real to show.
-5. Basic prompt-injection defense (spec F5) becomes load-bearing the
-   moment retrieved document content is interpolated into a prompt — at
-   minimum, wrap retrieved chunk content with clear delimiters and a
-   system-prompt instruction not to follow instructions found inside it,
-   and add a test with a chunk containing an injection attempt.
-6. Update `docs/IMPLEMENTATION_STATUS.md`, `docs/AI_ARCHITECTURE.md`, and
-   this file when done, then move to Phase 3 (Compliance) per
-   `docs/IMPLEMENTATION_PLAN.md`.
+1. **Data model first**: `app/compliance/models.py` — frameworks,
+   framework_versions, requirements, controls, control_mappings,
+   control_assessments, evidence, evidence_versions, risks, policies,
+   audits, regulatory_updates (spec §50). Link evidence to `core.files`
+   and (once it exists) `knowledge.documents`, not a duplicate storage
+   path.
+2. **Seed one framework concretely** rather than all seven abstractly:
+   GDPR is explicitly named throughout the spec and the seeded sample
+   document (`docs/RESUME_BUILD.md`'s predecessor already seeded a "GDPR
+   Compliance Overview" document) — start there, add EU AI Act/ISO 27001
+   as the pattern repeats cleanly.
+3. **Migration**, then `app/routers/compliance.py` — framework overview,
+   control detail, evidence library endpoints, tenant-isolated and
+   RBAC-gated behind `compliance.controls.*` / `compliance.evidence.*`
+   permission keys (extend `app/core/rbac.py`'s `PERMISSIONS` dict and
+   grant them to `compliance_manager`/`dpo` system roles, not just
+   `org_admin`).
+4. **Frontend**: replace the `/coming-soon?module=compliance` stub —
+   framework overview page first, control detail second.
+5. **Cross-module hook**: since compliance is meant to *govern* other
+   modules (spec §91), at minimum wire one real example now — e.g. the
+   AI Copilot's Compliance-aware answers, or a `compliance.controls.view`
+   permission check somewhere real — rather than only building it as an
+   island, per spec §80 ("do not build disconnected modules").
+6. Tests: tenant isolation + RBAC denial for the new endpoints (same
+   pattern as `tests/test_tenant_isolation.py` / `tests/test_rbac.py`).
+7. Update `docs/DATABASE_MODEL.md`, `docs/DOMAIN_MODEL.md`,
+   `docs/IMPLEMENTATION_STATUS.md`, `docs/IMPLEMENTATION_PLAN.md`, and
+   this file when done.
 
 ## Files to edit next
 
-- `apps/api/migrations/versions/` (new revision: pgvector extension + column migration)
-- `apps/api/app/knowledge/service.py` (`search_chunks`)
-- `apps/api/app/ai/` (new: intent router / context builder — likely `app/ai/copilot.py`)
-- `apps/api/app/routers/ai.py` (wire real retrieval into `/copilot/ask`)
-- `apps/api/tests/test_knowledge.py` or a new `test_copilot.py`
-- `apps/web/lib/navigation.ts` (flip `copilot` to `implemented: true`)
-- `apps/web/app/(app)/copilot/` (new pages, replacing the `/coming-soon` stub)
+- `apps/api/app/compliance/` (new package: `models.py`, `schemas.py`, `service.py`)
+- `apps/api/app/routers/compliance.py` (new)
+- `apps/api/app/core/rbac.py` (new permission keys)
+- `apps/api/migrations/versions/` (new revision)
+- `apps/api/app/seed.py` (seed a GDPR framework + a few controls/evidence for the demo org)
+- `apps/api/tests/test_compliance.py` (new)
+- `apps/web/lib/navigation.ts` (flip `compliance` to `implemented: true`)
+- `apps/web/app/(app)/compliance/` (new pages)
 
 ## Command to resume
 
@@ -120,5 +119,5 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (19 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (26 passed)
 ```

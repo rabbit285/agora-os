@@ -30,7 +30,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | Route | Status |
 |---|---|
 | `/` (Unified Dashboard) | [~] placeholder metrics |
-| `/copilot` | [ ] |
+| `/copilot` | [x] retrieval-grounded Q&A with citations |
 | `/tasks` | [x] list + create |
 | `/approvals` | [x] list + approve/reject |
 | `/notifications` | [~] |

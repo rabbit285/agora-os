@@ -1,9 +1,9 @@
 # Release Checklist
 
 Honest status against the spec's "Definition of Full Completion" (§J) and
-"Definition of Done" (§83). This is a **Phase 1 + partial Phase 2 /
-local-only** checkpoint, not a production release — most items below are
-correctly unchecked.
+"Definition of Done" (§83). This is a **Phase 1 + Phase 2 / local-only**
+checkpoint, not a production release — most items below are correctly
+unchecked.
 
 ## Phase 1 (platform foundation) — complete
 
@@ -26,7 +26,7 @@ correctly unchecked.
 - [ ] Frontend automated tests (Playwright/unit) — not yet written
 - [ ] Invitation flow, MFA enforcement — schema only, no flow
 
-## Phase 2 (Knowledge & AI Infrastructure) — partial
+## Phase 2 (Knowledge & AI Infrastructure) — complete
 
 - [x] KnowledgeBase, Document, DocumentChunk models + migration
 - [x] Document parsing (text/plain, text/markdown, text/csv, PDF, DOCX)
@@ -35,13 +35,14 @@ correctly unchecked.
       documented in `docs/DECISIONS.md` ADR-0009)
 - [x] Tenant-isolated `/api/v1/knowledge` API + frontend (upload, list, detail)
 - [x] Seed script uploads and fully ingests a real sample document
-- [x] Backend tests: 19 passing total (12 from Phase 1 + 7 new); ruff/mypy clean
-- [ ] Similarity search / RAG retrieval over stored embeddings
-- [ ] AI Copilot (intent router, context builder, citations)
-- [ ] Entity/relationship extraction
-- [ ] Prompt injection defenses (needed once retrieval feeds prompts)
+- [x] Similarity search over stored embeddings (cosine, tenant-scoped — ADR-0012)
+- [x] AI Copilot: retrieve → ground → generate → cite (`/copilot` page + API)
+- [x] Prompt injection defenses (source delimiting, tested against an actual injection attempt)
+- [x] Backend tests: 26 passing total; ruff/mypy clean
+- [ ] Entity/relationship extraction — deferred, no consumer needs it yet
+- [ ] Cross-module intent router — deferred, no other modules exist yet to route across
 
-See `docs/RESUME_BUILD.md` for the exact next steps to finish this phase.
+See `docs/RESUME_BUILD.md` for the next phase (Compliance).
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 

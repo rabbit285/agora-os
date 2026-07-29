@@ -213,10 +213,11 @@ document_chunks
 ```
 
 `embedding` is a JSON float array, not a native `pgvector` column — see
-`docs/DECISIONS.md` ADR-0007. No similarity-search index exists yet;
-retrieval (cosine-distance queries) is added when the AI Copilot's RAG
-pipeline needs it, at which point this column is migrated to a real
-`vector(1536)` column with an ivfflat/HNSW index.
+`docs/DECISIONS.md` ADR-0007. Similarity search
+(`app/knowledge/retrieval.py::search_chunks`) scores chunks in Python
+rather than via a `<=>` query (ADR-0012); no ivfflat/HNSW index exists.
+Fine at current chunk volumes, explicitly not fine at scale — see the
+ADR for when this needs to become a real `vector(1536)` column.
 
 ## Migration policy
 

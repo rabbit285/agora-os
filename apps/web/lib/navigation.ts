@@ -20,7 +20,7 @@ export const NAVIGATION: NavGroup[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/", implemented: true },
-      { label: "AI Copilot", href: "/copilot", implemented: false },
+      { label: "AI Copilot", href: "/copilot", implemented: true },
       { label: "Tasks", href: "/tasks", implemented: true },
       { label: "Approvals", href: "/approvals", implemented: true },
     ],

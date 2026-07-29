@@ -25,10 +25,9 @@ adapter, chosen at gateway construction time from `settings.AI_PROVIDER`.
 - `generate*` returns fixed, labeled-as-demo text keyed off a hash of the
   input so responses are stable across calls in tests.
 - Every `AiRun` row written by the demo adapter has `provider = "demo"`.
-- The frontend must render an "AI: Demo data" badge whenever
-  `ai_run.provider == "demo"` — never presented as a live provider result
-  (spec §I4). This badge is a Phase 2 UI item once Copilot screens exist;
-  Phase 1 only guarantees the backend never conflates the two.
+- The frontend renders a "Demo data" badge whenever the Copilot response's
+  `provider == "demo"` (`apps/web/app/(app)/copilot/page.tsx`) — never
+  presented as a live provider result (spec §I4).
 - If `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are unset, gateway construction
   falls back to `DemoAdapter` rather than raising, so the app boots without
   paid keys (spec C2).
@@ -62,19 +61,55 @@ back to `DemoAdapter` for that call rather than failing document
 ingestion outright — the `AiRun.provider` field records which actually
 happened, so this is never silently mislabeled as a real embedding.
 
-## Retrieval and citations (spec §F4) — remaining Phase 2 work
+## Retrieval and citations (spec §F4 — implemented)
 
-Embeddings exist (above) but nothing queries them yet — no
-cosine-similarity search, no RAG pipeline, no AI Copilot. Phase 2's scope
-(spec's "Knowledge & AI Infrastructure") isn't finished until this exists:
-`generate_structured` calls that use
-retrieved context must attach `citations: list[Citation]` (`document_id`,
-`chunk_id`, `location`) to the `AiRun` row, and refuse/qualify when
-retrieval confidence is low.
+`app/knowledge/retrieval.py::search_chunks` scores every one of an
+organization's stored chunk embeddings against a query embedding with
+cosine similarity (Python-side — see `docs/DECISIONS.md` ADR-0012, not a
+native `pgvector` query) and returns the top matches, always scoped to
+`organization_id` — a query can never cross a tenant boundary regardless
+of what a caller asks for.
 
-## Prompt injection defense (spec §F5) — Phase 2+
+`app/ai/copilot.py::ask_copilot` is the retrieval-grounded Copilot (spec
+section 9):
 
-Applies once external/uploaded content is retrievable by the AI (Phase 2
-Knowledge module onward). Recorded here so the gateway's future `tool
-allowlist` and `content sanitization` hooks are anticipated in the Protocol
-shape rather than bolted on later.
+1. Embed the question (`ModelGateway.embed`).
+2. `search_chunks` for the asking user's organization.
+3. If nothing is found, answer honestly that there's no indexed content
+   yet (`NO_EVIDENCE_MESSAGE`) rather than calling the model with no
+   grounding and risking an unsupported answer (spec F4: "refuse or
+   qualify when evidence is insufficient").
+4. Otherwise build a prompt wrapping each retrieved chunk in a `<source>`
+   block and call `ModelGateway.generate()`.
+5. Citations attached to the response and to the `AiRun` row come from
+   **what was retrieved in step 2**, never from anything the model claims
+   about itself — an LLM asserting its own sources proves nothing.
+
+`/api/v1/ai/copilot/ask` (`app/routers/ai.py`) is a thin wrapper around
+this. The frontend `/copilot` page shows the answer, a "Demo data" badge
+when unconfigured, and links back to the source document/chunk.
+
+Not yet implemented: the intent router across modules (spec's cross-
+functional Copilot examples — pulling from Compliance/Security/Sales
+context, not just Knowledge), and organization-scoped knowledge-base
+filtering in the UI (the API supports `knowledge_base_id` in
+`search_chunks` already; nothing calls it yet since there's normally only
+the one default "General" knowledge base).
+
+## Prompt injection defense (spec §F5 — implemented, minimal)
+
+`build_grounded_prompt` (`app/ai/copilot.py`) wraps every retrieved chunk
+in an explicit `<source id="N">...</source>` block preceded by an
+instruction that content inside those tags is untrusted data to quote or
+summarize, never instructions to follow — tested in
+`tests/test_copilot.py::test_build_grounded_prompt_delimits_untrusted_source_content`
+with a chunk containing an actual injection attempt, asserting the
+delimiters and warning text are present and ordered before the question.
+
+This is a **prompt-level** defense only — it relies on the model
+respecting the system framing. It is not a tool-execution allowlist or a
+sandboxed sanitization pass, because Phase 2 has no AI-triggered tool
+calls or actions yet (the Copilot only reads and answers). A tool
+allowlist becomes necessary the moment the Copilot (or a workflow AI step)
+can take an action based on retrieved content — track that against spec
+F5 before shipping any such capability.

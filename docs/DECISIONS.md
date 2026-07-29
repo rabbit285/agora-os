@@ -150,3 +150,20 @@ browser a URL it can't resolve at all; signing with the public host
 (`S3_PUBLIC_ENDPOINT_URL`) produces a URL the browser can actually reach,
 while the API/worker keep using the internal hostname for their own
 direct calls.
+
+## ADR-0012 — Cosine similarity computed in Python, not via a pgvector query
+
+**Decision**: `app/knowledge/retrieval.py::search_chunks` pulls all of an
+organization's chunk embeddings and scores them against the query
+embedding with a plain Python `cosine_similarity`, rather than a
+`pgvector` `<=>` operator query with an ivfflat/HNSW index.
+
+**Why**: Continues ADR-0007's trade-off — embeddings are stored as JSON,
+which SQLite (unit tests) can hold but can't run a native vector-distance
+query against. A linear scan is functionally correct and fast enough at
+the chunk volumes a single organization's knowledge base reaches during
+this build (dozens to low thousands of chunks); it stops being fine once
+that grows by orders of magnitude, at which point the column migrates to
+real `pgvector` alongside the query. Explicitly not "premature
+optimization avoided" — it's "this becomes wrong at scale, and that's
+written down here on purpose."

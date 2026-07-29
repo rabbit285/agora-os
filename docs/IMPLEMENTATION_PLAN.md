@@ -29,17 +29,22 @@ Completion).
   `DECISIONS.md`, `KNOWN_LIMITATIONS.md`, `SECURITY_ASSUMPTIONS.md`,
   `RELEASE_CHECKLIST.md`
 
-## Phase 2 — Knowledge & AI Infrastructure (in progress)
+## Phase 2 — Knowledge & AI Infrastructure (complete)
 
 Done: knowledge bases, document upload/registration, parsing (PDF, DOCX,
 CSV, TXT, Markdown — XLSX/PPTX/OCR not yet), chunking, embeddings (stored
 as JSON — see `docs/DECISIONS.md` ADR-0007), a durable Temporal ingestion
-workflow, tenant-isolated API + frontend.
+workflow, tenant-isolated API + frontend, similarity search (cosine, in
+Python — ADR-0012), and a retrieval-grounded AI Copilot (retrieve →
+ground → generate → cite, with minimal prompt-injection defenses).
 
-Remaining: entity/relationship extraction, similarity search over
-embeddings, the AI Copilot foundation itself (intent router, context
-builder, citations), AI Action Log UI. See `docs/RESUME_BUILD.md` for the
-concrete next steps.
+Not done, and deliberately deferred rather than blocking Phase 2 exit:
+entity/relationship extraction (spec §11 knowledge graph — no module yet
+needs it), the cross-module intent router (spec's cross-functional
+Copilot examples pulling from Compliance/Security/Sales — none of those
+modules exist yet either), and an AI Action Log UI (the data exists on
+`AiRun`; no screen surfaces it). Pick these up when a concrete module
+needs them rather than building ahead of demand.
 
 ## Phase 3 — Compliance
 
