@@ -218,6 +218,18 @@ Automation) now have a real, tested backbone.
 - [x] Frontend tests: 3 new Vitest tests (19 total) covering Trust Center item rendering, saving an item, and fulfilling an evidence request
 - [x] Live Docker smoke test: confirmed the public endpoint returns real data with **zero cookies sent**; confirmed a 404 for an unknown org slug; submitted a public evidence request with no auth and confirmed a real linked Task via `/api/v1/tasks`; confirmed authenticated management list/fulfill endpoints; confirmed the full `trust_center.*` audit trail in Postgres including anonymous (`actor_user_id IS NULL`) rows; confirmed both `/compliance` and `/trust/acme-ai-technologies` return HTTP 200
 
+## Phase 8 (Enterprise Sales Security Review) — added after the Trust Center slice, completes spec §69's five named cross-module scenarios
+
+- [x] `SecurityReview` model + migration (`app/compliance/models.py`) — one row per Sales Opportunity (unique, 409 on a second attempt); starting a review creates/imports a `Questionnaire` and moves `Opportunity.stage` to a new `security_review` value, setting `is_deal_blocker=True` — the payoff for `Questionnaire.opportunity_id` existing since ADR-0032 with no caller until now
+- [x] Materiality-threshold gate: an Opportunity at/above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` (50,000) opens a real `core.Approval` at start, reusing the same primitive the AI System Inventory/DPIA gates use; clearing is refused until it's granted (tested, ADR-0035)
+- [x] Sync reuses `suggest_questionnaire_answer` for every still-missing question, attaches the most relevant `Evidence` for any Control-referencing answer with none yet, and opens one deduplicated remediation `core.Task` per remaining gap — a sixth reuse of the "creates a tracked consequence" hook shape (tested)
+- [x] Clear is refused (422) while gaps or a pending Approval remain; once satisfied, compiles every approved Q&A + Evidence titles into a real trust-package `core.File` and notifies the opportunity owner
+- [x] Tenant-isolated `/api/v1/compliance/security-reviews` API (create/list/detail/status/sync/clear; RBAC via `compliance.security_reviews.manage`, added to the `COMPLIANCE_PERMISSIONS` bundle) + frontend (Security Reviews section on `/compliance` with a start-review form, `/compliance/security-reviews/[id]` detail with gap count/approval status/sync/clear actions, and a deal-blocker indicator on the Sales account detail page)
+- [x] Seed script: 1 in-progress review for the seeded Nordwind Robotics opportunity, importing its existing questionnaire, with 1 remediation task from the sync
+- [x] Backend tests: 198 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (21 total) covering the Security Reviews section rendering and starting a new review
+- [x] Live Docker smoke test: confirmed the seeded review (imported questionnaire); created a high-value opportunity and confirmed a real Approval opened on start; confirmed sync suggests an answer and opens a remediation task; confirmed clear is refused (422) both for open gaps and, after resolving them, for the still-pending Approval; confirmed clear succeeds once the Approval is granted, generating a real trust-package File; confirmed the full `compliance.security_review.*` audit trail in Postgres; confirmed `/compliance`, `/compliance/security-reviews/[id]`, and `/sales/accounts/[id]` all return HTTP 200
+
 See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)

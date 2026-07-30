@@ -12,6 +12,8 @@ import type {
   EvidenceRequest,
   ProcessingActivity,
   Questionnaire,
+  SalesOpportunity,
+  SecurityReview,
   TrustCenterItem,
   Vendor,
 } from "@/lib/types";
@@ -149,6 +151,30 @@ const EVIDENCE_REQUEST_FIXTURE: EvidenceRequest = {
   created_at: new Date().toISOString(),
 };
 
+const OPPORTUNITY_FIXTURE: SalesOpportunity = {
+  id: "88888888-9999-aaaa-bbbb-cccccccccccc",
+  account_id: "99999999-aaaa-bbbb-cccc-dddddddddddd",
+  title: "Security Review Corp — Platform deal",
+  stage: "security_review",
+  value: 42000,
+  probability: 40,
+  expected_close_at: null,
+  owner_id: null,
+  onboarding_customer_id: null,
+  created_at: new Date().toISOString(),
+};
+
+const SECURITY_REVIEW_FIXTURE: SecurityReview = {
+  id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  opportunity_id: OPPORTUNITY_FIXTURE.id,
+  questionnaire_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+  approval_id: null,
+  trust_package_file_id: null,
+  status: "in_progress",
+  is_deal_blocker: true,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -169,6 +195,8 @@ function mockRoutes(overrides: {
   audits?: Audit[];
   trustCenterItems?: TrustCenterItem[];
   evidenceRequests?: EvidenceRequest[];
+  securityReviews?: SecurityReview[];
+  opportunities?: SalesOpportunity[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -201,6 +229,11 @@ function mockRoutes(overrides: {
     }
     if (path === "/api/v1/trust-center/items") return overrides.trustCenterItems ?? [];
     if (path === "/api/v1/trust-center/evidence-requests") return overrides.evidenceRequests ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/security-reviews") {
+      return { ...SECURITY_REVIEW_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/security-reviews") return overrides.securityReviews ?? [];
+    if (path === "/api/v1/sales/opportunities") return overrides.opportunities ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -464,6 +497,48 @@ describe("CompliancePage — Trust Center section", () => {
         `/api/v1/trust-center/evidence-requests/${EVIDENCE_REQUEST_FIXTURE.id}/status`,
         { method: "PATCH", body: { status: "fulfilled" } },
       ),
+    );
+  });
+});
+
+describe("CompliancePage — Security Reviews section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders security reviews with the opportunity title, status, and deal-blocker note", async () => {
+    mockRoutes({
+      securityReviews: [SECURITY_REVIEW_FIXTURE],
+      opportunities: [OPPORTUNITY_FIXTURE],
+    });
+    renderPage();
+
+    // The opportunity title also appears in the "Select opportunity…"
+    // dropdown, so there's more than one match.
+    expect(
+      (await screen.findAllByText("Security Review Corp — Platform deal")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Deal blocker")).toBeInTheDocument();
+    expect(screen.getByText("in progress")).toBeInTheDocument();
+  });
+
+  it("starts a security review for the selected opportunity", async () => {
+    mockRoutes({ opportunities: [OPPORTUNITY_FIXTURE] });
+    renderPage();
+    const user = userEvent.setup();
+
+    await screen.findAllByText(OPPORTUNITY_FIXTURE.title);
+    await user.selectOptions(
+      screen.getByDisplayValue("Select opportunity…"),
+      OPPORTUNITY_FIXTURE.id,
+    );
+    await user.click(screen.getByRole("button", { name: "Start review" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/security-reviews", {
+        method: "POST",
+        body: { opportunity_id: OPPORTUNITY_FIXTURE.id, questionnaire_id: null },
+      }),
     );
   });
 });

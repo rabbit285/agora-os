@@ -433,6 +433,31 @@ export type TrustCenterPublic = {
   items: TrustCenterPublicItem[];
 };
 
+export type SecurityReviewStatus = "in_progress" | "blocked" | "cleared";
+
+export type SecurityReview = {
+  id: string;
+  opportunity_id: string;
+  questionnaire_id: string;
+  approval_id: string | null;
+  trust_package_file_id: string | null;
+  status: SecurityReviewStatus;
+  is_deal_blocker: boolean;
+  created_at: string;
+};
+
+export type SecurityReviewDetail = SecurityReview & {
+  opportunity_title: string;
+  approval_status: string | null;
+  gap_count: number;
+  questionnaire: QuestionnaireDetail;
+};
+
+export type SecurityReviewSyncResult = {
+  review: SecurityReviewDetail;
+  tasks_created: number;
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {
@@ -533,6 +558,7 @@ export type OpportunityStage =
   | "prospecting"
   | "qualification"
   | "proposal"
+  | "security_review"
   | "negotiation"
   | "closed_won"
   | "closed_lost";

@@ -460,3 +460,41 @@ class AuditFindingOut(BaseModel):
 
 class AuditDetailOut(AuditOut):
     findings: list[AuditFindingOut]
+
+
+class SecurityReviewCreate(BaseModel):
+    opportunity_id: uuid.UUID
+    # If set, imports this existing Questionnaire (setting its
+    # opportunity_id) instead of creating a new one.
+    questionnaire_id: uuid.UUID | None = None
+
+
+class SecurityReviewStatusUpdate(BaseModel):
+    # "cleared" is deliberately excluded — that gated transition only
+    # happens via POST /security-reviews/{id}/clear.
+    status: str = Field(pattern="^(in_progress|blocked)$")
+
+
+class SecurityReviewOut(BaseModel):
+    id: uuid.UUID
+    opportunity_id: uuid.UUID
+    questionnaire_id: uuid.UUID
+    approval_id: uuid.UUID | None
+    trust_package_file_id: uuid.UUID | None
+    status: str
+    is_deal_blocker: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SecurityReviewDetailOut(SecurityReviewOut):
+    opportunity_title: str
+    approval_status: str | None
+    gap_count: int
+    questionnaire: QuestionnaireDetailOut
+
+
+class SecurityReviewSyncResult(BaseModel):
+    review: SecurityReviewDetailOut
+    tasks_created: int

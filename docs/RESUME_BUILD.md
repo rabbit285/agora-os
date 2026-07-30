@@ -9,9 +9,10 @@ kept current at the end of every work session per the execution contract's
 Phase 1 (platform foundation) and Phase 2 (Knowledge & AI Infrastructure)
 are complete. All five primary product modules — Compliance, Security,
 Sales, Support, and Automation (Phases 3-7) — have a real, tested
-backbone. Phase 8 (Cross-Module Intelligence) has three of spec §69's
-five named scenarios fully implemented, plus a partial fourth ("New AI
-Tool Adoption") with two of its steps done. Phase 9 (Integrations) has a
+backbone. Phase 8 (Cross-Module Intelligence) now has four of spec §69's
+five named scenarios fully implemented (as of this session's Enterprise
+Sales Security Review slice), plus a partial fifth ("New AI Tool
+Adoption") with two of its steps done. Phase 9 (Integrations) has a
 Webhook connector and a provider-neutral OAuth2 framework with six real
 (credential-gated) adapters.
 
@@ -107,36 +108,68 @@ form. Seed data: 3 public items (one linked to a real published Policy,
 one still `planned`), 1 private item, 1 open evidence request with its
 linked task.
 
-All checks pass: **189 backend tests** (was 164 before Questionnaires,
-171, then 179 after Audits), ruff + mypy --strict clean; frontend eslint
-+ tsc + production build clean; **19 frontend tests** (was 12, then 14,
-16, now 19), all passing. Live Docker smoke test for Trust Center:
-confirmed the public endpoint returns real data with **zero cookies
-sent** (a fresh `AsyncClient`/`curl` with no session at all — not just
-an RBAC-permissive authenticated call); confirmed a 404 for an unknown
-org slug; confirmed the public/private item split and the
-published-vs-draft Policy surfacing rule; submitted a public evidence
-request with no auth and confirmed a real linked Task via
-`/api/v1/tasks`; confirmed the authenticated list/fulfill management
-endpoints; confirmed the full `trust_center.*` audit trail in Postgres,
-including anonymous (`actor_user_id IS NULL`) rows for the
-unauthenticated evidence-request creations; confirmed both `/compliance`
-and `/trust/acme-ai-technologies` return HTTP 200 (again required a
-`docker restart` of the `web` container — now confirmed on four separate
+**Enterprise Sales Security Review** (`SecurityReview`,
+`app/compliance/models.py`, ADR-0035) — the payoff for
+`Questionnaire.opportunity_id` having existed since ADR-0032 with no
+caller: this is that caller, and the fourth of spec §69's five named
+cross-module scenarios to reach full implementation. One
+`SecurityReview` row per Sales Opportunity (unique constraint; the
+router returns 409 on a second attempt rather than a raw DB error).
+`start_security_review` creates or imports a `Questionnaire` against the
+opportunity, moves `Opportunity.stage` to a new `security_review` value,
+sets `is_deal_blocker=True` immediately, and — for an opportunity at or
+above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` (50,000, a documented
+judgment call) — opens a real `core.Approval` gating the eventual clear,
+reusing the same primitive `register_ai_system`/`create_dpia` already
+gate on. `sync_security_review` reuses `suggest_questionnaire_answer`
+for every still-`missing` question, attaches the most relevant
+`Evidence` for any answer whose `control_id` has none yet, and opens a
+deduplicated remediation `core.Task` per remaining gap (a sixth reuse of
+this build's "creates a tracked consequence" hook shape). A "gap" is any
+answer not yet `approved`, or an approved one referencing a Control with
+still no Evidence. `clear_security_review` refuses (422) while gaps or
+the Approval remain, then compiles every approved Q&A + Evidence titles
+into a real trust-package `core.File` and notifies the opportunity
+owner. RBAC: `compliance.security_reviews.manage` added to the existing
+`COMPLIANCE_PERMISSIONS` bundle. Frontend: a Security Reviews section on
+`/compliance` (start-review form with opportunity + optional
+questionnaire-import selects, list) + `/compliance/security-reviews/[id]`
+detail (gap count, approval status, sync/clear actions, linked
+questionnaire card) + a deal-blocker indicator on the Sales account
+detail page's opportunity cards. Seed data: 1 in-progress review for the
+seeded Nordwind Robotics opportunity, importing its existing
+questionnaire (from the Questionnaires slice), with 1 remediation task
+from the sync (its one question honestly still `draft` after the AI
+Copilot's demo-mode fallback, not fabricated as `approved`).
+
+All checks pass: **198 backend tests** (was 164 before Questionnaires,
+171, 179, 189 after Trust Center), ruff + mypy --strict clean; frontend
+eslint + tsc + production build clean; **21 frontend tests** (was 12,
+14, 16, 19), all passing. Live Docker smoke test for Enterprise Sales
+Security Review: confirmed the seeded review's imported questionnaire;
+created a high-value (150,000) opportunity and confirmed a real Approval
+opened automatically on start; added a question, synced, and confirmed
+a real AI-Copilot-suggested draft answer plus a linked remediation Task;
+confirmed clearing was refused (422) with the gap open, refused again
+(422) after manually approving the answer but before the Approval was
+granted, then succeeded once the Approval was granted via
+`/api/v1/approvals/{id}/decide` — generating a real trust-package File;
+confirmed the full `compliance.security_review.*` audit trail in
+Postgres; confirmed `/compliance`, `/compliance/security-reviews/[id]`,
+and `/sales/accounts/[id]` all return HTTP 200 (again required a `docker
+restart` of the `web` container — now confirmed on five separate
 slices; see "Machine-specific note" below).
 
-**Remaining in this sequence, in order**: Enterprise Sales Security
-Review, Data Transfers. See "Next highest-priority task" below for the
-concrete plan for each, established before starting so the whole
-sequence stays internally consistent (e.g. Questionnaires had to exist
-before the Sales Security Review can create/import one — it now does).
+**Remaining in this sequence**: Data Transfers (item 6 of 6, the last
+one). See "Next highest-priority task" below for the concrete plan.
 
 ## Branch and commit
 
 Branch: `main`. Nineteen substantive commits through the Vendor Risk
 slice (Phase 1 through the AI Incidents slice, then that one), plus the
-Security Questionnaires commit, the Audits commit, and now this
-session's Trust Center commit on top. See `git log` for exact SHAs.
+Security Questionnaires commit, the Audits commit, the Trust Center
+commit, and now this session's Enterprise Sales Security Review commit
+on top. See `git log` for exact SHAs.
 
 ## Machine-specific note
 
@@ -159,13 +192,13 @@ separate Docker images** — a new Python dependency needs
 
 The `web` container's bind-mounted Next.js dev server (Turbopack) has not
 reliably picked up brand-new route directories (`app/(app)/.../[id]/page.tsx`,
-and now a brand-new top-level `app/trust/[org_slug]/page.tsx`) created
-while it was already running — now confirmed on four separate slices
-(Vendor Risk, Security Questionnaires, Audits, Trust Center), each time a
-new route 404'd until `docker restart agora-origin-web-1`. Treat this as
-routine: after adding any new dynamic route, restart the `web` container
-before running its live smoke test, rather than debugging the route
-itself when it 404s.
+and a brand-new top-level `app/trust/[org_slug]/page.tsx`) created
+while it was already running — now confirmed on five separate slices
+(Vendor Risk, Security Questionnaires, Audits, Trust Center, Enterprise
+Sales Security Review), each time a new route 404'd until `docker
+restart agora-origin-web-1`. Treat this as routine: after adding any new
+dynamic route, restart the `web` container before running its live smoke
+test, rather than debugging the route itself when it 404s.
 
 A new top-level module needs a manual registration step beyond just
 writing the model file: `app/db/register_all_models.py` side-effect-
@@ -179,69 +212,72 @@ contains `op.create_table(...)` before formatting/applying it, especially
 for a slice that introduces a genuinely new `app/<module>/` package
 rather than extending an existing one.
 
-## Exact commands already run (this session, Trust Center slice)
+## Exact commands already run (this session, Enterprise Sales Security Review slice)
 
 ```bash
-# app/db/register_all_models.py needed a new line for app.trust_center
-# BEFORE the migration would detect anything (see note above)
+# SecurityReview lives in app.compliance.models (already registered in
+# register_all_models.py), so no new registration step was needed this
+# time — unlike Trust Center's brand-new app.trust_center module.
 
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add trust center tables"
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add security review tables"
 docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
 docker compose run --rm api alembic check   # confirms no drift
 
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 189 passed
+# -> 198 passed
 
-docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 5x total across sessions
+docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 6x total across sessions
 
 cd apps/web
 npx tsc --noEmit
 npx eslint .
-npx vitest run   # -> 19 passed
+npx vitest run   # -> 21 passed
 npm run build
 
-docker restart agora-origin-web-1   # pick up /trust/[org_slug] and the new /compliance section
+docker restart agora-origin-web-1   # pick up /compliance/security-reviews/[id]
 
-# live smoke test — the critical assertion is zero cookies on the public calls
-curl -s http://localhost:8000/api/v1/trust-center/public/acme-ai-technologies   # no -b, no cookie jar at all
-curl -s -X POST http://localhost:8000/api/v1/trust-center/public/acme-ai-technologies/evidence-requests -d '{...}'   # also no cookie jar
-docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action, actor_user_id IS NULL AS anonymous FROM audit_events WHERE action LIKE 'trust_center%';"
+# live smoke test — full 10-step flow against a fresh high-value opportunity
+curl -s -b cookies.txt -X POST .../sales/accounts -d '{"name":"Smoke Test Enterprises"}'
+curl -s -b cookies.txt -X POST .../sales/opportunities -d '{"account_id":"...","title":"...","value":150000}'
+curl -s -b cookies.txt -X POST .../compliance/security-reviews -d '{"opportunity_id":"..."}'   # opens a real Approval (value >= 50,000)
+curl -s -b cookies.txt -X POST .../compliance/questionnaires/{qid}/questions -d '{...}'
+curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/sync   # suggests an answer, opens a remediation Task
+curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 422: gap still open
+curl -s -b cookies.txt -X PATCH .../compliance/questionnaires/{qid}/questions/{qqid}/answer -d '{"status":"approved",...}'
+curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 422: Approval still pending
+curl -s -b cookies.txt -X POST .../approvals/{approval_id}/decide -d '{"approve":true}'
+curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 200: cleared, trust package generated
+docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action FROM audit_events WHERE action LIKE 'compliance.security_review%';"
 ```
 
-## Next highest-priority task: Enterprise Sales Security Review (item 5 of 6)
-
-- **Enterprise Sales Security Review**: the big one. `SecurityReview`
-  (opportunity_id FK sales_opportunities, questionnaire_id nullable,
-  trust_package_file_id nullable FK files, status: in_progress|blocked|
-  cleared, is_deal_blocker). Add a `security_review` stage to
-  `Opportunity.stage` (between `proposal` and `negotiation`). Orchestrates
-  the full spec §69 flow: create/import a Questionnaire → auto-suggest
-  answers (reuse the Questionnaires slice's answer-library + AI Copilot
-  logic) → auto-attach Evidence for answers referencing a Control →
-  compute missing items → create a remediation Task per missing item →
-  require an Approval before clearing when `Opportunity.value` is above a
-  materiality threshold (a judgment call to document in the ADR, mirroring
-  how every other high-stakes gate in this build uses Approval) → generate
-  a real trust package (a compiled document of approved Q&A + evidence
-  titles, stored as a File) → notify `Opportunity.owner_id` → keep
-  `is_deal_blocker=true` until cleared, surfaced on the Sales account/
-  opportunity detail page.
-
-## Then: Data Transfers (item 6 of 6, last in this sequence)
+## Next highest-priority task: Data Transfers (item 6 of 6, last in this sequence)
 
 - **Data Transfers**: `DataTransfer` (processing_activity_id nullable,
   destination_country, transfer_mechanism: adequacy_decision|sccs|bcrs|
   derogation, safeguards_description, status), extending Privacy exactly
-  like ProcessingActivity/DPIA/DSAR did (ADR-0029's pattern).
+  like ProcessingActivity/DPIA/DSAR did (ADR-0029's pattern) — lives in
+  `app/compliance/models.py` alongside the rest of Privacy, not a new
+  module (unlike Trust Center's special case: Data Transfers has no
+  public/unauthenticated surface).
+- RBAC: likely `compliance.privacy.manage` already covers it (the
+  existing Privacy permission bundle), rather than minting a new
+  permission — Data Transfers is a Privacy sub-feature per spec §12, the
+  same reasoning ProcessingActivity/DPIA/DSAR already established.
+- Router endpoints on the existing `/api/v1/compliance` router; frontend:
+  a Data Transfers section on `/compliance` (create form, list) — a
+  detail page is optional given the shape's simplicity (no nested
+  child entities the way Questionnaire/Audit/SecurityReview have).
+- Full test/seed/smoke-test/doc/commit cycle, matching every prior slice
+  this session. This is the last of the six items — after it, do a final
+  full-sequence documentation pass (confirm `docs/IMPLEMENTATION_STATUS.md`'s
+  "5/6 done" framing becomes "6/6 done" and update the top-level summary
+  in every doc that still lists Data Transfers as remaining).
 
-Each slice gets its own migration, full test coverage, seed data, a live
-Docker smoke test, a full documentation-set update, and its own commit —
-matching every slice completed this session. No AWS resources are to be
-created without explicit approval; only prepare infra-as-code where it
-naturally fits (none of these six slices inherently need new AWS
-infrastructure, so this constraint is unlikely to come up before Phase 10
-work begins).
+No AWS resources are to be created without explicit approval; only
+prepare infra-as-code where it naturally fits (Data Transfers doesn't
+inherently need new AWS infrastructure, so this constraint is unlikely
+to come up).
 
 ## Command to resume
 
@@ -250,6 +286,6 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (189 passed)
-cd ../../apps/web && npx vitest run   # confirm still green (19 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (198 passed)
+cd ../../apps/web && npx vitest run   # confirm still green (21 passed)
 ```

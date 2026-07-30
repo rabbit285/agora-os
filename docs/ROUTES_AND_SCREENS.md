@@ -48,11 +48,12 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + Trust Center management + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
+| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + Trust Center management + security reviews + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/vendors/[id]` | [x] detail: status workflow, risk assessment form, assessment history, evidence list |
 | `/compliance/questionnaires/[id]` | [x] detail: status workflow, missing-answer count banner, add-question form, per-question suggest-answer/save-draft/approve actions |
 | `/compliance/audits/[id]` | [x] detail: status workflow, add-finding form, findings list with severity/status badges, mark-remediated action |
+| `/compliance/security-reviews/[id]` | [x] detail: gap count, approval status, sync/clear actions, linked questionnaire card |
 | `/compliance/ai-systems/[id]` | [x] detail: status workflow, linked approval banner, assessments |
 | `/compliance/ai-incidents/[id]` | [x] detail: status workflow, linked risk banner, linked response task banner, link to the AI system |
 | `/compliance/dpias/[id]` | [x] detail: status workflow, linked approval banner (high-risk only), findings, link to a linked AI system |
@@ -82,7 +83,7 @@ Cause/Lessons Learned tab structure spec §19 describes.
 | Route | Status |
 |---|---|
 | `/sales` | [x] accounts + pipeline overview |
-| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won) |
+| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won, and a deal-blocker link to `/compliance/security-reviews/[id]` once a security review exists) |
 
 Not yet built (spec §67 lists these under Sales): ICP Builder, Lead
 Finder, Lead Detail, Contact Detail (standalone), Sequences/Sequence

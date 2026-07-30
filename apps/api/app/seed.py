@@ -32,6 +32,7 @@ from app.compliance.models import (
     QuestionnaireAnswer,
     Requirement,
     Risk,
+    SecurityReview,
     Vendor,
 )
 from app.compliance.service import (
@@ -43,6 +44,8 @@ from app.compliance.service import (
     record_audit_finding,
     record_vendor_assessment,
     register_ai_system,
+    start_security_review,
+    sync_security_review,
     update_audit_finding_status,
     update_dsar_status,
     update_questionnaire_answer,
@@ -304,6 +307,41 @@ async def seed() -> None:
                 )
             )
         ).scalar_one_or_none()
+
+        existing_security_reviews = (
+            (
+                await db.execute(
+                    select(SecurityReview).where(SecurityReview.organization_id == organization.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_security_reviews and nordwind_account is not None:
+            nordwind_opportunity = (
+                await db.execute(
+                    select(Opportunity).where(
+                        Opportunity.organization_id == organization.id,
+                        Opportunity.account_id == nordwind_account.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            nordwind_questionnaire = (
+                await db.execute(
+                    select(Questionnaire).where(
+                        Questionnaire.organization_id == organization.id,
+                        Questionnaire.title == "Nordwind Robotics vendor security questionnaire",
+                    )
+                )
+            ).scalar_one_or_none()
+            if nordwind_opportunity is not None:
+                await _seed_demo_security_review_data(
+                    db,
+                    organization_id=organization.id,
+                    admin_id=admin.id,
+                    opportunity=nordwind_opportunity,
+                    questionnaire_id=nordwind_questionnaire.id if nordwind_questionnaire else None,
+                )
 
         existing_customers = (
             (await db.execute(select(Customer).where(Customer.organization_id == organization.id)))
@@ -1095,6 +1133,43 @@ async def _seed_demo_sales_data(
     logger.info(
         "Seeded demo sales data (1 account, 2 contacts, 1 opportunity, "
         "2 outreach attempts: 1 sent, 1 blocked by suppression)"
+    )
+
+
+async def _seed_demo_security_review_data(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    admin_id: uuid.UUID,
+    opportunity: Opportunity,
+    questionnaire_id: uuid.UUID | None,
+) -> None:
+    """Starts and syncs a security review for the seeded Nordwind Robotics
+    opportunity, importing its existing questionnaire rather than creating
+    a blank one — connecting three slices seeded earlier this session
+    (Sales, Security Questionnaires) exactly the way spec §69's flow
+    intends. Deliberately left in-progress (one question is still
+    `missing`, so a real gap remains) rather than calling `clear` — this
+    demo org's opportunity value is below the materiality threshold, but
+    an honestly incomplete review is worth more than a fabricated
+    "cleared" one (spec §82)."""
+    review = await start_security_review(
+        db,
+        organization_id=organization_id,
+        opportunity=opportunity,
+        questionnaire_id=questionnaire_id,
+        actor_user_id=admin_id,
+    )
+    await db.commit()
+    await db.refresh(review)
+
+    _, tasks_created = await sync_security_review(db, review=review, actor_user_id=admin_id)
+    await db.commit()
+    logger.info(
+        "Seeded demo security review data (1 in-progress review for %s, imported its "
+        "existing questionnaire, %d remediation task(s) created from the sync)",
+        opportunity.title,
+        tasks_created,
     )
 
 

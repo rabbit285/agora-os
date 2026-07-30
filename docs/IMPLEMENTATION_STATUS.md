@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents), Privacy (RoPA/DPIA/DSAR), and Vendor Risk Compliance extensions that together give a fourth Phase 8 scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires done, Audits done, Trust Center done, Enterprise Sales Security Review/Data Transfers next)
+Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's five named cross-module scenarios all now implemented — Support Upsell Signal, Security Incident chain, New Customer, a partial New AI Tool Adoption, and now Enterprise Sales Security Review in full; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires done, Audits done, Trust Center done, Enterprise Sales Security Review done, Data Transfers next)
 
 ## Platform
 
@@ -96,6 +96,13 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Authenticated management routes — `/api/v1/trust-center/items` (upsert, one row per category)/`evidence-requests` (list + fulfill); RBAC via `compliance.trust_center.manage` (added to the `COMPLIANCE_PERMISSIONS` bundle)
 - [x] Frontend: authenticated Trust Center management section on `/compliance` (upsert form, items list, evidence-request list with fulfill action) + a genuinely public `/trust/[org_slug]` page (outside the authenticated `(app)` route group) with an evidence-request submission form
 - [x] Seed script: 3 public items (1 linked to a published Policy), 1 private item, 1 open evidence request + linked task
+- [x] Enterprise Sales Security Review: `SecurityReview` model + migration — one row per Sales Opportunity (unique, 409 on a second attempt); starting a review creates/imports a `Questionnaire` and moves `Opportunity.stage` to `security_review`, setting `is_deal_blocker=True` (the payoff for `Questionnaire.opportunity_id` existing since ADR-0032)
+- [x] Materiality-threshold gate: an Opportunity at/above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` (50,000) opens a real `core.Approval` at start; clearing is refused until it's granted, reusing the same primitive the AI System Inventory/DPIA gates use (tested, ADR-0035)
+- [x] Sync: reuses `suggest_questionnaire_answer` for every still-missing question, attaches the most relevant `Evidence` for any Control-referencing answer with none yet, and opens one deduplicated remediation `core.Task` per remaining gap — a sixth reuse of the "creates a tracked consequence" hook shape (tested, ADR-0035)
+- [x] Clear: refused while gaps or a pending Approval remain (422); once clear, compiles every approved Q&A + Evidence titles into a real trust-package `core.File` and notifies the opportunity owner
+- [x] `/api/v1/compliance/security-reviews` routes — create/list/detail (nested Questionnaire + gap count + approval status)/status/sync/clear; tenant-isolated, RBAC via `compliance.security_reviews.manage` (added to the `COMPLIANCE_PERMISSIONS` bundle)
+- [x] Frontend: Security Reviews section on `/compliance` (start-review form with opportunity + optional questionnaire-import selects, list) + `/compliance/security-reviews/[id]` detail (gap count, approval status, sync/clear actions, linked questionnaire card) + a deal-blocker indicator on the Sales account detail page's opportunity cards
+- [x] Seed script: 1 in-progress review for the seeded Nordwind Robotics opportunity, importing its existing questionnaire, with 1 remediation task from the sync
 - [ ] Framework/evidence versioning — not modeled
 - [ ] Regulatory intelligence feed — not started
 - [ ] Data transfers (the remaining Privacy sub-feature) — not started
@@ -173,11 +180,19 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] "New AI Tool Adoption" (spec §69) partial: registering a
       high/unacceptable-risk AI system creates a real `core.Approval` and
       gates the `approved` status transition on it (tested, ADR-0027,
-      counted in Compliance above) — the rest of the chain (vendor
-      security questionnaire, Privacy/DPA review, approved-use policy
-      publication) is not implemented
-- [ ] Remaining spec §69 scenario ("Enterprise Sales Security Review") —
-      not started, needs customer questionnaires, which don't exist yet
+      counted in Compliance above) — the rest of the chain (Privacy/DPA
+      review as distinct steps, approved-use policy publication) is not
+      implemented
+- [x] Slice 5: "Enterprise Sales Security Review" (spec §69, full 10-step
+      flow) — `SecurityReview` creates/imports a Questionnaire against a
+      Sales Opportunity, moves it into a `security_review` stage, and
+      sets `is_deal_blocker=True`; syncing reuses the Questionnaires
+      slice's answer-library + AI Copilot logic, attaches Evidence for
+      any Control-referencing answer that has none, and opens a
+      remediation Task per gap; clearing is gated on zero gaps plus (for
+      opportunities at/above a materiality threshold) a real `Approval`,
+      then generates a real trust-package File and notifies the
+      opportunity owner (tested, ADR-0035) — counted in Compliance above
 - [ ] AI daily briefing, business process discovery, AI recommendation
       engine, organization memory — not started
 - [ ] Cross-module intent router for the AI Copilot — not started
@@ -217,7 +232,7 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Auth flow tests (8 tests, passing)
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
-- [x] Compliance tests (60 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests, 12 Privacy tests, 8 AI Incident tests, 7 Vendor Risk tests, 7 Security Questionnaire tests — see prior entries for detail — plus 8 Audit tests: RBAC denial for `employee`, the `auditor` role's grant, the critical-finding-creates-remediation-task hook, the negative case for low severity, a finding attaching to a Control, the audit and finding status lifecycles (including `completed_at`), tenant isolation, and rejection of a foreign `framework_id`)
+- [x] Compliance tests (69 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests, 12 Privacy tests, 8 AI Incident tests, 7 Vendor Risk tests, 7 Security Questionnaire tests, 8 Audit tests — see prior entries for detail — plus 9 Enterprise Sales Security Review tests: RBAC denial for `employee`, starting a review by creating a new questionnaire and by importing an existing one, a 409 on a second review for the same opportunity, the sync→gap→task cycle with re-sync proven non-duplicating and clearing refused with open gaps, a low-value review clearing without any Approval, a high-value review refused for gaps then for a pending Approval before succeeding once granted, and tenant isolation)
 - [x] Trust Center tests (10 tests, `tests/test_trust_center.py`: RBAC denial for `employee`, upserting and re-upserting the same category proving update-not-duplicate, the public endpoint returning only `is_public` items, the published-vs-draft Policy surfacing rule, 404 for an unknown org slug, a genuinely unauthenticated evidence-request submission that creates a real Task, the evidence-request fulfillment lifecycle, RBAC denial for fulfilling a request, rejecting an unknown category (422), and rejecting a Policy from another org (404))
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
@@ -225,8 +240,8 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (50 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1; OAuth provider-catalog honesty across all six providers with scope previews, RBAC denial, full start→callback→connected round trip against the mock adapter (proven generic via a second, non-HubSpot provider), expired/unknown-state/unknown-provider rejection, refresh/health/sync/disconnect lifecycle with the durable-sync split (`create_sync_run`/`execute_sync_run`) exercised directly including its failure path, an audit-trail assertion across the full OAuth lifecycle, tenant isolation; plus pure adapter unit tests for every provider's authorization-URL construction, scope preview, mock-fallback labeling, and the two no-refresh providers' explicit errors — no network, no live credentials needed)
-- [x] 189/189 total backend, ruff+mypy strict clean
-- [x] Frontend: 19 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, 2 for Vendors (rendering with risk tier/status, adding a new vendor), 2 for Questionnaires (rendering with source/status, creating a new questionnaire), 2 for Audits (rendering with auditor name/status, creating a new audit), and 3 for Trust Center (rendering items/evidence requests, saving an item, fulfilling an evidence request)
+- [x] 198/198 total backend, ruff+mypy strict clean
+- [x] Frontend: 21 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, 2 for Vendors (rendering with risk tier/status, adding a new vendor), 2 for Questionnaires (rendering with source/status, creating a new questionnaire), 2 for Audits (rendering with auditor name/status, creating a new audit), 3 for Trust Center (rendering items/evidence requests, saving an item, fulfilling an evidence request), and 2 for Security Reviews (rendering with opportunity title/status/deal-blocker note, starting a review)
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 
@@ -250,14 +265,14 @@ explicitly multi-phase build. As of this writing, Phase 1 (platform
 foundation) and Phase 2 (Knowledge & AI Infrastructure) are complete;
 Phases 3–7 (Compliance, Security, Sales, Support, Automation) have their
 core backbones (see their sections above) but not their larger
-sub-features (audits, data transfers (Privacy's remaining sub-feature),
-security questionnaires, Trust Center, identity/cloud provider
-integrations, incident playbooks, sequences/campaigns, SLA/QA scoring,
-the full workflow step vocabulary and most non-manual triggers). Phase 8
-(Cross-Module Intelligence) has three full scenarios implemented (Support
-Upsell Signal, Security Incident chain, New Customer) plus a partial
-fourth (New AI Tool Adoption, now with both its register→Approval gate
-and its Privacy-assessment DPIA step) out of spec §69's five named
+sub-features (data transfers — Privacy's remaining sub-feature —
+identity/cloud provider integrations, incident playbooks,
+sequences/campaigns, SLA/QA scoring, the full workflow step vocabulary
+and most non-manual triggers). Phase 8 (Cross-Module Intelligence) has
+four full scenarios implemented (Support Upsell Signal, Security
+Incident chain, New Customer, Enterprise Sales Security Review) plus a
+partial fifth (New AI Tool Adoption, now with both its register→Approval
+gate and its Privacy-assessment DPIA step) out of spec §69's five named
 scenarios, plus its open-ended AI features (daily briefing, recommendation
 engine, organization memory) — none of that larger scope has started. Phase 9
 (Integrations) has two connector shapes implemented — a generic inbound

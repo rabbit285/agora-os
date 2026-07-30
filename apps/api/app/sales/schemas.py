@@ -85,7 +85,7 @@ class OpportunityCreate(BaseModel):
 
 class OpportunityUpdate(BaseModel):
     stage: str = Field(
-        pattern="^(prospecting|qualification|proposal|negotiation|closed_won|closed_lost)$"
+        pattern="^(prospecting|qualification|proposal|security_review|negotiation|closed_won|closed_lost)$"
     )
 
 

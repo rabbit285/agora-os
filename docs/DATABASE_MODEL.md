@@ -553,6 +553,35 @@ always creates a linked `core.tasks` row, via
 this build (spec §80), here with `actor_user_id=None` since there is no
 authenticated actor (ADR-0034).
 
+```text
+security_reviews           -- spec §69 "Enterprise Sales Security Review"
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  opportunity_id UUID FK sales_opportunities NOT NULL UNIQUE
+  questionnaire_id UUID FK questionnaires NOT NULL
+  approval_id UUID FK approvals NULL   -- set when Opportunity.value >= materiality threshold
+  trust_package_file_id UUID FK files NULL   -- set once cleared
+  status TEXT NOT NULL DEFAULT 'in_progress'   -- in_progress|blocked|cleared
+  is_deal_blocker BOOLEAN NOT NULL DEFAULT true
+  created_at, updated_at
+```
+
+Starting a review (`app/compliance/service.py::start_security_review`)
+creates or imports a `questionnaires` row against the Opportunity, moves
+`sales_opportunities.stage` to `'security_review'`, and — for an
+Opportunity at or above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` (50,000,
+a documented judgment call) — opens a real `approvals` row gating the
+eventual clear, the same primitive `ai_systems`/`dpias` already gate on.
+`sync_security_review` reuses `suggest_questionnaire_answer` for every
+still-`missing` question, attaches the most relevant `evidence` row for
+any answer whose `control_id` has none yet, and opens one remediation
+`core.tasks` row per remaining gap (deduplicated by title on re-sync) — a
+sixth reuse of the "creates a tracked consequence" hook shape (spec
+§80). `clear_security_review` refuses while gaps or a pending Approval
+remain and, once both are satisfied, compiles every `approved` Q&A plus
+Evidence titles into a real `files` row (the trust package) and notifies
+`Opportunity.owner_id` (ADR-0035).
+
 ## Tables (Phase 4 — Security)
 
 Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`

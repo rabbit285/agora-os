@@ -56,6 +56,23 @@ same Task-creating half of the shape `ControlAssessment` itself uses (not
 the Risk-creating half `VendorAssessment`/`AIIncident` reuse), since an
 audit finding is a remediation checklist item, not an ongoing risk. See
 docs/DECISIONS.md ADR-0033.
+
+`start_security_review` / `sync_security_review` / `clear_security_review`
+ship spec §69's "Enterprise Sales Security Review" — the payoff for
+`Questionnaire.opportunity_id` having existed since ADR-0032 without a
+caller. Starting a review creates or imports a Questionnaire against a
+`sales.Opportunity`, moves it into the `security_review` stage, and — for
+an opportunity at or above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` — opens
+a real `core.Approval` gating the eventual clear (the same primitive
+`register_ai_system`/`create_dpia` already use for their own gates).
+Syncing reuses `suggest_questionnaire_answer` for every still-`missing`
+question, attaches the most relevant `Evidence` for any answer whose
+`control_id` has none yet, and opens a remediation `core.Task` per
+remaining gap — a sixth reuse of the "creates a tracked consequence" hook
+shape (spec §80), producing many Tasks per review rather than one.
+Clearing is refused while gaps or a pending Approval remain (mirroring
+`decide_ai_system_status`'s gate, ADR-0027) and generates a real trust
+package `core.File`. See docs/DECISIONS.md ADR-0035.
 """
 
 from __future__ import annotations
@@ -76,20 +93,28 @@ from app.compliance.models import (
     AuditFinding,
     Control,
     ControlAssessment,
+    Evidence,
     Questionnaire,
     QuestionnaireAnswer,
     QuestionnaireQuestion,
     Risk,
+    SecurityReview,
     Vendor,
     VendorAssessment,
 )
-from app.core.models import Approval, Notification, Task
+from app.core.models import Approval, File, Notification, Task
+from app.core.storage import ensure_bucket, upload_object
 from app.db.base import utcnow
+from app.sales.models import Opportunity
 
 _HIGH_RISK_TIERS = {"high", "unacceptable"}
 _HIGH_VENDOR_RISK_TIERS = {"high", "critical"}
 _HIGH_FINDING_SEVERITIES = {"high", "critical"}
 DSAR_RESPONSE_WINDOW_DAYS = 30
+# A judgment call (documented in ADR-0035): an opportunity at or above
+# this value is material enough that clearing its security review
+# requires a real Approval, not just "no open gaps."
+SECURITY_REVIEW_MATERIALITY_THRESHOLD = 50_000
 
 
 async def record_assessment(
@@ -760,3 +785,310 @@ async def update_audit_finding_status(
         after_state={"status": new_status},
     )
     return finding
+
+
+async def start_security_review(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    opportunity: Opportunity,
+    questionnaire_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID | None,
+) -> SecurityReview:
+    """Spec §69 step 1: "Sales opportunity reaches Security Review stage."
+    Creates or imports a Questionnaire, moves the opportunity into the
+    `security_review` stage, and marks it a deal blocker. A high-value
+    opportunity also gets a real Approval gating the eventual clear."""
+    if questionnaire_id is not None:
+        questionnaire = await db.get(Questionnaire, questionnaire_id)
+        if questionnaire is None or questionnaire.organization_id != organization_id:
+            raise ValueError("Questionnaire not found")
+        questionnaire.opportunity_id = opportunity.id
+    else:
+        questionnaire = Questionnaire(
+            organization_id=organization_id,
+            title=f"Security review questionnaire — {opportunity.title}",
+            source="internal_template",
+            status="in_progress",
+            opportunity_id=opportunity.id,
+            owner_id=opportunity.owner_id,
+        )
+        db.add(questionnaire)
+    await db.flush()
+
+    opportunity.stage = "security_review"
+
+    approval = None
+    if opportunity.value is not None and opportunity.value >= SECURITY_REVIEW_MATERIALITY_THRESHOLD:
+        approval = Approval(
+            organization_id=organization_id,
+            action_type=f"Clear security review: {opportunity.title}",
+            risk_class="high",
+            requested_by=actor_user_id,
+        )
+        db.add(approval)
+        await db.flush()
+
+    review = SecurityReview(
+        organization_id=organization_id,
+        opportunity_id=opportunity.id,
+        questionnaire_id=questionnaire.id,
+        approval_id=approval.id if approval else None,
+        status="in_progress",
+        is_deal_blocker=True,
+    )
+    db.add(review)
+    await db.flush()
+
+    if opportunity.owner_id is not None:
+        db.add(
+            Notification(
+                organization_id=organization_id,
+                user_id=opportunity.owner_id,
+                title="Security review started",
+                body=f'"{opportunity.title}" has entered security review and is now '
+                "tracked as a deal blocker.",
+                link="/compliance",
+            )
+        )
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.security_review.started",
+        object_type="security_review",
+        object_id=str(review.id),
+        after_state={
+            "opportunity_id": str(opportunity.id),
+            "questionnaire_id": str(questionnaire.id),
+            "approval_id": str(approval.id) if approval else None,
+        },
+    )
+    return review
+
+
+async def list_security_review_gaps(
+    db: AsyncSession, *, questionnaire_id: uuid.UUID
+) -> list[tuple[QuestionnaireQuestion, QuestionnaireAnswer]]:
+    """Spec §69 step 6: "Detects missing answers." A gap is a question
+    whose answer isn't yet `approved`, or one that references a Control
+    but has no Evidence attached — a customer-facing security review
+    shouldn't rely on an unapproved draft or an unsupported claim."""
+    questions_result = await db.execute(
+        select(QuestionnaireQuestion)
+        .where(QuestionnaireQuestion.questionnaire_id == questionnaire_id)
+        .order_by(QuestionnaireQuestion.order_index)
+    )
+    gaps: list[tuple[QuestionnaireQuestion, QuestionnaireAnswer]] = []
+    for question in questions_result.scalars().all():
+        answer = (
+            await db.execute(
+                select(QuestionnaireAnswer).where(QuestionnaireAnswer.question_id == question.id)
+            )
+        ).scalar_one()
+        if answer.status != "approved" or (
+            answer.control_id is not None and answer.evidence_id is None
+        ):
+            gaps.append((question, answer))
+    return gaps
+
+
+async def sync_security_review(
+    db: AsyncSession,
+    *,
+    review: SecurityReview,
+    actor_user_id: uuid.UUID | None,
+) -> tuple[SecurityReview, int]:
+    """Spec §69 steps 3-7: retrieve approved answers (reusing the
+    Questionnaires slice's own answer-library + AI Copilot logic),
+    attach relevant Evidence, detect remaining gaps, and create a
+    remediation Task per gap. Safe to call repeatedly — already-open
+    remediation Tasks are not duplicated."""
+    questions_result = await db.execute(
+        select(QuestionnaireQuestion)
+        .where(QuestionnaireQuestion.questionnaire_id == review.questionnaire_id)
+        .order_by(QuestionnaireQuestion.order_index)
+    )
+    for question in questions_result.scalars().all():
+        answer = (
+            await db.execute(
+                select(QuestionnaireAnswer).where(QuestionnaireAnswer.question_id == question.id)
+            )
+        ).scalar_one()
+
+        if answer.status == "missing":
+            answer = await suggest_questionnaire_answer(
+                db,
+                organization_id=review.organization_id,
+                question=question,
+                answer=answer,
+                actor_user_id=actor_user_id,
+            )
+
+        if answer.control_id is not None and answer.evidence_id is None:
+            evidence = (
+                (
+                    await db.execute(
+                        select(Evidence)
+                        .where(Evidence.control_id == answer.control_id)
+                        .order_by(Evidence.created_at.desc())
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if evidence is not None:
+                answer.evidence_id = evidence.id
+
+    gaps = await list_security_review_gaps(db, questionnaire_id=review.questionnaire_id)
+
+    opportunity = await db.get(Opportunity, review.opportunity_id)
+    tasks_created = 0
+    for question, _answer in gaps:
+        title = f"Resolve security review gap: {question.text}"
+        existing = (
+            await db.execute(
+                select(Task).where(
+                    Task.organization_id == review.organization_id,
+                    Task.module == "compliance",
+                    Task.title == title,
+                    Task.status == "open",
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            continue
+        db.add(
+            Task(
+                organization_id=review.organization_id,
+                title=title,
+                description=f"Blocking the security review for "
+                f"{opportunity.title if opportunity else 'this opportunity'}.",
+                module="compliance",
+                priority="high",
+                assignee_id=opportunity.owner_id if opportunity else None,
+            )
+        )
+        tasks_created += 1
+
+    await record_event(
+        db,
+        organization_id=review.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.security_review.synced",
+        object_type="security_review",
+        object_id=str(review.id),
+        after_state={"gap_count": len(gaps), "tasks_created": tasks_created},
+    )
+    return review, tasks_created
+
+
+async def clear_security_review(
+    db: AsyncSession,
+    *,
+    review: SecurityReview,
+    actor_user_id: uuid.UUID,
+) -> SecurityReview:
+    """Spec §69 step 8: "Generates customer trust package." Refuses to
+    clear while gaps remain or a required Approval is still pending —
+    mirroring `decide_ai_system_status`'s gate (ADR-0027), not a new
+    pattern."""
+    gaps = await list_security_review_gaps(db, questionnaire_id=review.questionnaire_id)
+    if gaps:
+        raise ValueError(f"Cannot clear: {len(gaps)} unresolved question(s) remain")
+
+    if review.approval_id is not None:
+        approval = await db.get(Approval, review.approval_id)
+        if approval is None or approval.status != "approved":
+            raise ValueError(
+                "This security review requires its pending approval to be granted "
+                "before it can be cleared"
+            )
+
+    questionnaire = await db.get(Questionnaire, review.questionnaire_id)
+    assert questionnaire is not None
+    answers_result = await db.execute(
+        select(QuestionnaireQuestion, QuestionnaireAnswer)
+        .join(QuestionnaireAnswer, QuestionnaireAnswer.question_id == QuestionnaireQuestion.id)
+        .where(
+            QuestionnaireQuestion.questionnaire_id == review.questionnaire_id,
+            QuestionnaireAnswer.status == "approved",
+        )
+        .order_by(QuestionnaireQuestion.order_index)
+    )
+    lines = [f"Trust Package — {questionnaire.title}", ""]
+    for question, answer in answers_result.all():
+        lines.append(f"Q: {question.text}")
+        lines.append(f"A: {answer.answer_text}")
+        if answer.evidence_id is not None:
+            evidence = await db.get(Evidence, answer.evidence_id)
+            if evidence is not None:
+                lines.append(f"Evidence: {evidence.title}")
+        lines.append("")
+    content = "\n".join(lines)
+
+    ensure_bucket()
+    data = content.encode("utf-8")
+    storage_key = f"org/{review.organization_id}/security-reviews/{review.id}/trust-package.txt"
+    upload_object(storage_key, data, "text/plain")
+    file_record = File(
+        organization_id=review.organization_id,
+        storage_key=storage_key,
+        original_filename="trust-package.txt",
+        content_type="text/plain",
+        size_bytes=len(data),
+        uploaded_by=actor_user_id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    review.trust_package_file_id = file_record.id
+    review.status = "cleared"
+    review.is_deal_blocker = False
+
+    opportunity = await db.get(Opportunity, review.opportunity_id)
+    if opportunity is not None and opportunity.owner_id is not None:
+        db.add(
+            Notification(
+                organization_id=review.organization_id,
+                user_id=opportunity.owner_id,
+                title="Security review cleared",
+                body=f'"{opportunity.title}" security review is cleared — the trust '
+                "package is ready.",
+                link="/compliance",
+            )
+        )
+
+    await record_event(
+        db,
+        organization_id=review.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.security_review.cleared",
+        object_type="security_review",
+        object_id=str(review.id),
+        after_state={"trust_package_file_id": str(file_record.id)},
+    )
+    return review
+
+
+async def update_security_review_status(
+    db: AsyncSession,
+    *,
+    review: SecurityReview,
+    new_status: str,
+    actor_user_id: uuid.UUID | None,
+) -> SecurityReview:
+    before_status = review.status
+    review.status = new_status
+    await record_event(
+        db,
+        organization_id=review.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.security_review.status_changed",
+        object_type="security_review",
+        object_id=str(review.id),
+        before_state={"status": before_status},
+        after_state={"status": new_status},
+    )
+    return review

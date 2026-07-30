@@ -110,10 +110,23 @@ from every other tenant-scoped Compliance sub-feature (ADR-0034).
 "downloadable approved documents" rather than a new document table; a
 public `EvidenceRequest` submission always creates a linked Task.
 
-Remaining: data transfers (Privacy's remaining sub-feature), Enterprise
-Sales Security Review, regulatory intelligence feed. Each is a
-substantial feature attaching to the backbone above, not a blocker to
-it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
+Also done: Enterprise Sales Security Review (`SecurityReview`, spec
+§69's full 10-step flow), the payoff for `Questionnaire.opportunity_id`
+having existed since ADR-0032 with no caller. Starting a review creates
+or imports a Questionnaire against a Sales Opportunity, moves it to a
+new `security_review` stage, and — for an opportunity at or above a
+documented materiality threshold — opens a real Approval gating the
+clear. Syncing reuses the Questionnaires slice's own answer-library + AI
+Copilot logic, attaches Evidence for any Control-referencing answer with
+none yet, and opens a remediation Task per gap. Clearing is refused
+while gaps or the Approval remain, and generates a real trust-package
+File (ADR-0035) — this is the scenario every other slice in this
+sequence was quietly built to support.
+
+Remaining: data transfers (Privacy's remaining sub-feature), regulatory
+intelligence feed. Each is a substantial feature attaching to the
+backbone above, not a blocker to it — see `docs/RESUME_BUILD.md` for
+suggested next-slice ordering.
 
 ## Phase 4 — Security (backbone in progress)
 
@@ -186,7 +199,7 @@ email, webhook, CRM stage change, schedule — spec §38, need Phase 9
 connectors), a real visual drag-and-drop builder (React Flow), workflow
 templates, run history filtering/search, automation analytics (spec §43).
 
-## Phase 8 — Cross-Module Intelligence (three slices in progress)
+## Phase 8 — Cross-Module Intelligence (four of five named scenarios done)
 
 Spec §69 names five cross-module scenarios. Rather than stub all five,
 this phase ships them as real, tested verticals one at a time — the same
@@ -208,14 +221,22 @@ discipline as every prior phase. Done:
   spec §69's nine-step chain into two existing primitives; idempotent on
   reopen/re-win, and honestly skipped (not faked) if the account has no
   Contact yet to source an email from (ADR-0025).
+- "Enterprise Sales Security Review" — the full 10-step flow.
+  `app/compliance/service.py::start_security_review` creates/imports a
+  Questionnaire against a Sales Opportunity and moves it into a
+  `security_review` stage; `sync_security_review` retrieves approved
+  answers and Evidence and opens a remediation Task per gap;
+  `clear_security_review` is gated on zero gaps plus (above a
+  materiality threshold) a real Approval, then generates a trust-package
+  File and notifies the opportunity owner (ADR-0035).
 
-Remaining: the other two named scenarios (Enterprise Sales Security
-Review, New AI Tool Adoption), plus the phase's more open-ended AI
+Remaining: "New AI Tool Adoption" is still partial (its register→
+Approval gate and Privacy-assessment DPIA step exist, ADR-0027/ADR-0029,
+but not EU AI Act applicability/DPA review as distinct steps or
+approved-use policy publication), plus the phase's more open-ended AI
 features — shared knowledge graph queries across modules, AI daily
 briefing, business process discovery, AI recommendation engine,
-organization memory. Both remaining named scenarios need modules or data
-that don't exist yet (customer questionnaires, an AI system inventory) —
-see `docs/RESUME_BUILD.md` for suggested ordering.
+organization memory.
 
 ## Phase 9 — Integrations (two connector shapes; OAuth framework complete for six providers)
 

@@ -79,6 +79,27 @@ not the Risk-creating half `VendorAssessment`/`AIIncident` use, since an
 audit finding is a remediation checklist item, not an ongoing risk to
 track. See app.compliance.service.record_audit_finding and
 docs/DECISIONS.md ADR-0033.
+
+`SecurityReview` adds spec §69's "Enterprise Sales Security Review"
+cross-module scenario — the payoff for `Questionnaire.opportunity_id`
+having been forward-looking since ADR-0032. Starting a review creates or
+imports a `Questionnaire` against the `sales.Opportunity`, moves the
+opportunity into a `security_review` stage, and sets
+`is_deal_blocker=True`; a materiality threshold on `Opportunity.value`
+decides whether clearing the review requires a real `core.Approval`
+first (the same primitive every other high-stakes gate in this build
+uses). Syncing a review reuses `suggest_questionnaire_answer` for every
+still-`missing` question (retrieving the org's approved answer library or
+drafting via AI Copilot), attaches the most relevant `Evidence` for any
+answer whose `control_id` has none yet, and creates a remediation
+`core.Task` per remaining gap — a sixth reuse of this build's "creates a
+tracked consequence" hook shape (spec §80), here producing many Tasks
+per review rather than one. Clearing a review is refused while gaps or a
+pending Approval remain, and generates a real trust package `core.File`
+(a compiled document of approved Q&A + evidence titles) rather than a
+placeholder. See app.compliance.service.start_security_review /
+sync_security_review / clear_security_review and docs/DECISIONS.md
+ADR-0035.
 """
 
 from __future__ import annotations
@@ -592,3 +613,36 @@ class AuditFinding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     related_task_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
     )
+
+
+class SecurityReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Spec §69's "Enterprise Sales Security Review" — one per Sales
+    Opportunity (a second review would be a new row after the first is
+    superseded, not modeled here; see docs/KNOWN_LIMITATIONS.md). See
+    app.compliance.service.start_security_review / sync_security_review /
+    clear_security_review and docs/DECISIONS.md ADR-0035."""
+
+    __tablename__ = "security_reviews"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_opportunities.id"), nullable=False, unique=True
+    )
+    questionnaire_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("questionnaires.id"), nullable=False
+    )
+    # Cross-module hook: set when Opportunity.value is at/above the
+    # materiality threshold — clearing then requires this Approval granted.
+    approval_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("approvals.id"), nullable=True
+    )
+    # Set once cleared: a compiled trust package (approved Q&A + evidence
+    # titles) reusing the Phase 1 File primitive, not a new document path.
+    trust_package_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # in_progress | blocked | cleared
+    status: Mapped[str] = mapped_column(String(20), default="in_progress")
+    is_deal_blocker: Mapped[bool] = mapped_column(default=True)

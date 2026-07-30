@@ -1304,3 +1304,214 @@ async def test_audit_from_other_org_returns_not_found(client: AsyncClient) -> No
     )
     assert response.status_code == 404
     await other_client.aclose()
+
+
+# --- Enterprise Sales Security Review ---
+
+
+async def _create_opportunity(client: AsyncClient, *, value: float | None = None) -> str:
+    account = await client.post("/api/v1/sales/accounts", json={"name": "Security Review Corp"})
+    assert account.status_code == 201, account.text
+    opportunity = await client.post(
+        "/api/v1/sales/opportunities",
+        json={
+            "account_id": account.json()["id"],
+            "title": "Security Review Corp — Platform deal",
+            "value": value,
+        },
+    )
+    assert opportunity.status_code == 201, opportunity.text
+    return opportunity.json()["id"]  # type: ignore[no-any-return]
+
+
+async def test_employee_role_cannot_start_security_review(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "review-emp1@example.com", "Review Employee Org")
+    opportunity_id = await _create_opportunity(client)
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-review@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    assert response.status_code == 403
+
+
+async def test_starting_review_creates_questionnaire_and_moves_stage(client: AsyncClient) -> None:
+    await _signup(client, "review1@example.com", "Review Org 1")
+    opportunity_id = await _create_opportunity(client, value=10000)
+
+    response = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "in_progress"
+    assert body["is_deal_blocker"] is True
+    assert body["approval_id"] is None
+    assert body["questionnaire"]["questions"] == []
+
+    opportunities = await client.get("/api/v1/sales/opportunities")
+    matching = next(o for o in opportunities.json() if o["id"] == opportunity_id)
+    assert matching["stage"] == "security_review"
+
+
+async def test_starting_review_imports_existing_questionnaire(client: AsyncClient) -> None:
+    await _signup(client, "review2@example.com", "Review Org 2")
+    opportunity_id = await _create_opportunity(client)
+    standalone_questionnaire_id = await _create_questionnaire(client, "Standalone questionnaire")
+
+    response = await client.post(
+        "/api/v1/compliance/security-reviews",
+        json={"opportunity_id": opportunity_id, "questionnaire_id": standalone_questionnaire_id},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["questionnaire_id"] == standalone_questionnaire_id
+
+    questionnaire = await client.get(
+        f"/api/v1/compliance/questionnaires/{standalone_questionnaire_id}"
+    )
+    assert questionnaire.json()["opportunity_id"] == opportunity_id
+
+
+async def test_starting_a_second_review_for_the_same_opportunity_conflicts(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "review3@example.com", "Review Org 3")
+    opportunity_id = await _create_opportunity(client)
+
+    first = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    assert first.status_code == 201
+
+    second = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    assert second.status_code == 409
+
+
+async def test_sync_creates_remediation_task_and_clear_fails_with_open_gaps(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "review4@example.com", "Review Org 4")
+    opportunity_id = await _create_opportunity(client, value=10000)
+
+    created = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    review_id = created.json()["id"]
+    questionnaire_id = created.json()["questionnaire_id"]
+
+    await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions",
+        json={"text": "Do you encrypt data at rest?", "category": "security"},
+    )
+
+    synced = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/sync")
+    assert synced.status_code == 200, synced.text
+    assert synced.json()["tasks_created"] == 1
+    assert synced.json()["review"]["gap_count"] == 1
+
+    tasks = await client.get("/api/v1/tasks")
+    gap_tasks = [t for t in tasks.json() if "encrypt data at rest" in t["title"]]
+    assert len(gap_tasks) == 1
+
+    resynced = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/sync")
+    assert resynced.json()["tasks_created"] == 0
+
+    cleared = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/clear")
+    assert cleared.status_code == 422
+
+
+async def test_clearing_a_low_value_review_generates_a_trust_package(client: AsyncClient) -> None:
+    await _signup(client, "review5@example.com", "Review Org 5")
+    opportunity_id = await _create_opportunity(client, value=10000)
+
+    created = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    review_id = created.json()["id"]
+    questionnaire_id = created.json()["questionnaire_id"]
+
+    question = await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions",
+        json={"text": "Do you have a SOC 2 report?", "category": "security"},
+    )
+    question_id = question.json()["id"]
+
+    await client.patch(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions/{question_id}/answer",
+        json={"answer_text": "Yes, available on request.", "status": "approved"},
+    )
+
+    cleared = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/clear")
+    assert cleared.status_code == 200, cleared.text
+    body = cleared.json()
+    assert body["status"] == "cleared"
+    assert body["is_deal_blocker"] is False
+    assert body["trust_package_file_id"] is not None
+
+
+async def test_high_value_review_requires_approval_before_clearing(client: AsyncClient) -> None:
+    await _signup(client, "review6@example.com", "Review Org 6")
+    opportunity_id = await _create_opportunity(client, value=100000)
+
+    created = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    review_id = created.json()["id"]
+    approval_id = created.json()["approval_id"]
+    assert approval_id is not None
+    questionnaire_id = created.json()["questionnaire_id"]
+
+    question = await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions",
+        json={"text": "Where is data hosted?", "category": "compliance"},
+    )
+    question_id = question.json()["id"]
+    await client.patch(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions/{question_id}/answer",
+        json={"answer_text": "EU region only.", "status": "approved"},
+    )
+
+    denied = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/clear")
+    assert denied.status_code == 422
+
+    decided = await client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": True})
+    assert decided.status_code == 200, decided.text
+
+    cleared = await client.post(f"/api/v1/compliance/security-reviews/{review_id}/clear")
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["status"] == "cleared"
+
+
+async def test_security_review_rejects_opportunity_from_another_org(client: AsyncClient) -> None:
+    await _signup(client, "review7@example.com", "Review Org 7")
+    response = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": str(uuid.uuid4())}
+    )
+    assert response.status_code == 404
+
+
+async def test_security_review_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-review1@example.com", "Cross Review Org 1")
+    opportunity_id = await _create_opportunity(client)
+    created = await client.post(
+        "/api/v1/compliance/security-reviews", json={"opportunity_id": opportunity_id}
+    )
+    review_id = created.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-review2@example.com", "Cross Review Org 2")
+
+    response = await other_client.get(
+        f"/api/v1/compliance/security-reviews/{review_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

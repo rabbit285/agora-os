@@ -58,8 +58,16 @@ implied to work.
   There is no rich Markdown/rich-text editor for item `content` (plain
   text only), no email notification when an evidence request is
   submitted (the org must check its Task queue), and no per-item revision
-  history — updating a category's content overwrites it in place. Still
-  missing: data transfers (the remaining Privacy sub-feature).
+  history — updating a category's content overwrites it in place.
+  Enterprise Sales Security Review (`SecurityReview`) also now exists —
+  starting one creates/imports a Questionnaire against a Sales
+  Opportunity, gates clearing on a materiality threshold + real Approval,
+  and generates a real trust-package File (ADR-0035). One review per
+  opportunity only — a deal that needs a second review after the first
+  clears would need a new row type this build doesn't have (a real
+  re-review workflow), and the trust package is a plain-text compilation
+  with no PDF formatting, letterhead, or e-signature. Still missing: data
+  transfers (the remaining Privacy sub-feature).
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —
@@ -93,21 +101,20 @@ implied to work.
   notifies the linked account's owner (or the flagging agent if there's no
   linked Sales Account or no account owner), but does not auto-create an
   Opportunity — that conversion is left to a human sales rep (ADR-0022).
-- **Cross-Module Intelligence (Phase 8)**: three of spec §69's five
-  named cross-module scenarios are fully implemented ("Support Upsell
-  Signal", the "Security Incident" chain, and "New Customer"), plus a
-  partial fourth: "New AI Tool Adoption" now has its register→Approval
-  gate hook (ADR-0027) and its Privacy-assessment step (an auto-created
-  DPIA, ADR-0029, both counted under Compliance above), but not the rest
-  of that scenario's chain — vendor security questionnaire, EU AI Act
+- **Cross-Module Intelligence (Phase 8)**: four of spec §69's five named
+  cross-module scenarios are now fully implemented ("Support Upsell
+  Signal", the "Security Incident" chain, "New Customer", and now
+  "Enterprise Sales Security Review" — `SecurityReview`, ADR-0035),
+  plus a partial fifth: "New AI Tool Adoption" now has its
+  register→Approval gate hook (ADR-0027) and its Privacy-assessment step
+  (an auto-created DPIA, ADR-0029, both counted under Compliance above),
+  but not the rest of that scenario's chain — EU AI Act
   applicability/DPA review as distinct steps, approved-use policy
-  publication. The remaining scenario
-  (Enterprise Sales Security Review) is not started — it needs customer
-  questionnaires, which don't exist yet. No AI daily briefing, business
-  process discovery, AI recommendation engine, or organization memory
-  exist either. The Security Incident chain's Task/Notification are only
-  created for `critical`-severity incidents, same gate as the
-  pre-existing Risk link — there's no separate configurable threshold.
+  publication. No AI daily briefing, business process discovery, AI
+  recommendation engine, or organization memory exist either. The
+  Security Incident chain's Task/Notification are only created for
+  `critical`-severity incidents, same gate as the pre-existing Risk
+  link — there's no separate configurable threshold.
 - **Automation**: only three step types actually execute
   (`create_task`, `send_notification`, `human_approval`) out of spec §37's
   much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,
@@ -228,7 +235,12 @@ implied to work.
   exist and are wired into the Tasks/Approvals UI (and now exercised by
   Automation's `human_approval` step, ADR-0021) so the pattern is ready
   for the first real outbound connector.
-- **No Trust Center page.** Reserved for the Compliance module (Phase 3).
+- **Trust Center now exists** (`app.trust_center`, ADR-0034) — a
+  genuinely public `/trust/[org_slug]` page and public evidence-request
+  workflow, outside the progressive trust model above (that model
+  governs *outbound* connectors reading third-party data; Trust Center
+  is an *inbound*-facing public page, a different concern spec B4
+  describes separately).
 
 ## Security
 

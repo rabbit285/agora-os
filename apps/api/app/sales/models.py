@@ -88,7 +88,9 @@ class Opportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("sales_accounts.id"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    # prospecting|qualification|proposal|negotiation|closed_won|closed_lost
+    # prospecting|qualification|proposal|security_review|negotiation|closed_won|closed_lost
+    # security_review is set by app.compliance.service.start_security_review,
+    # not chosen freehand — see docs/DECISIONS.md ADR-0035.
     stage: Mapped[str] = mapped_column(String(20), default="prospecting")
     value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     probability: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)

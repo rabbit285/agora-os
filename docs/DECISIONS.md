@@ -966,3 +966,75 @@ unauthenticated evidence-request submission that creates a real Task
 (verified via `/api/v1/tasks`), the evidence-request fulfillment
 lifecycle, RBAC denial for fulfilling a request, rejecting an unknown
 category (422), and rejecting a Policy from another organization (404).
+
+## ADR-0035 — Enterprise Sales Security Review orchestrates five prior slices; a materiality threshold decides whether clearing needs a real Approval
+
+**Decision**: `SecurityReview` (`app/compliance/models.py`, spec §69's
+"Enterprise Sales Security Review") is the payoff for
+`Questionnaire.opportunity_id` having existed since ADR-0032 with no
+caller — this is that caller. One `SecurityReview` row per
+`sales.Opportunity` (enforced by a unique constraint; the router returns
+409 on a second attempt rather than a raw integrity error) links an
+opportunity to a `Questionnaire` (created fresh, or an existing
+standalone one *imported* by setting its `opportunity_id`), optionally a
+gating `core.Approval`, and eventually a trust-package `core.File`.
+
+`start_security_review` moves the opportunity into a new
+`security_review` stage (added to `Opportunity.stage`'s vocabulary) and
+sets `is_deal_blocker=True` immediately — spec §69 step 1 and step 10
+("tracks deal blocker") happen atomically, not as separate steps, since
+a review that exists but isn't yet blocking the deal would misrepresent
+its own purpose. Whether clearing later requires a real Approval is
+decided once, at start, by `SECURITY_REVIEW_MATERIALITY_THRESHOLD`
+(50,000, a judgment call): below it, "no open gaps" is sufficient;
+at/above it, a granted Approval is also required — reusing the same
+Approval primitive `register_ai_system`/`create_dpia` already gate on,
+not a new "big deal" concept.
+
+`sync_security_review` is deliberately idempotent and re-runnable: it
+calls `suggest_questionnaire_answer` for every still-`missing` question
+(spec §69 steps 3-4, "AI Compliance/Security answers ... questions" —
+reusing the Questionnaires slice's own answer-library-then-AI-Copilot
+logic rather than a second AI pipeline), then for any answer whose
+`control_id` is set but has no `evidence_id`, attaches the most recently
+created `Evidence` for that Control (step 5, "retrieves approved
+evidence" — a genuinely new capability this slice adds, since
+`suggest_questionnaire_answer` alone only carries evidence through when
+*reusing* a library answer that already had it). A "gap" (step 6) is any
+answer not yet `approved`, or an `approved` answer referencing a Control
+with still no Evidence — a customer-facing review shouldn't rely on an
+unvetted draft or an unsupported claim. Each gap opens exactly one
+remediation `core.Task` (step 7), deduplicated by exact title so
+re-syncing never creates duplicates — a sixth reuse of this build's
+"creates a tracked consequence" hook shape (spec §80), the first to
+produce many Tasks from one call instead of one.
+
+`clear_security_review` refuses while gaps remain or the Approval is
+still pending (mirroring `decide_ai_system_status`'s gate, ADR-0027,
+returning 422 like it does) and, only once both conditions are
+satisfied, compiles every `approved` Q&A plus its Evidence title into a
+real text file uploaded through the Phase 1 File/storage primitive —
+step 8, a genuine trust package, not a placeholder flag. Clearing sets
+`is_deal_blocker=False` and notifies `Opportunity.owner_id` (step 9,
+alongside a notification when the review starts) — both real
+`core.Notification` rows, not a TODO.
+
+**Why**: This slice is the reason the previous four in this sequence
+were built with forward-looking hooks (`Questionnaire.opportunity_id`,
+the answer library, Evidence/Control linking, the Task-creation
+pattern) rather than in isolation — spec §80's "do not build
+disconnected modules" applied at the scale of an entire six-slice
+program, not just within one. The materiality threshold is a genuine
+judgment call (documented here, not left implicit) because spec §69
+doesn't specify one; reusing Approval rather than inventing a
+review-specific sign-off concept keeps this build's discipline that
+"gate a risky transition" always means the same primitive. Tested in
+`tests/test_compliance.py`: RBAC denial for `employee`, starting a
+review both by creating a new questionnaire and by importing an
+existing one (confirming its `opportunity_id` gets set), a 409 on a
+second review for the same opportunity, the opportunity's stage
+transition, a full sync→gap→task cycle with re-sync proven
+non-duplicating, a low-value review clearing without any Approval, a
+high-value review refused twice (once for gaps, once for the still-
+pending Approval after the gap is resolved) and then succeeding once the
+Approval is granted, and tenant isolation.

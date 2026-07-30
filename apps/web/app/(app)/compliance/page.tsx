@@ -29,6 +29,8 @@ import type {
   Questionnaire,
   QuestionnaireSource,
   Risk,
+  SalesOpportunity,
+  SecurityReview,
   Severity,
   TrustCenterCategory,
   TrustCenterItem,
@@ -518,6 +520,111 @@ function TrustCenterSection() {
               </div>
             </CardContent>
           </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SecurityReviewsSection() {
+  const queryClient = useQueryClient();
+  const [opportunityId, setOpportunityId] = useState("");
+  const [importQuestionnaireId, setImportQuestionnaireId] = useState("");
+
+  const { data: reviews } = useQuery<SecurityReview[]>({
+    queryKey: ["compliance", "security-reviews"],
+    queryFn: () => apiFetch<SecurityReview[]>("/api/v1/compliance/security-reviews"),
+  });
+
+  const { data: opportunities } = useQuery<SalesOpportunity[]>({
+    queryKey: ["sales", "opportunities"],
+    queryFn: () => apiFetch<SalesOpportunity[]>("/api/v1/sales/opportunities"),
+  });
+
+  const { data: questionnaires } = useQuery<Questionnaire[]>({
+    queryKey: ["compliance", "questionnaires"],
+    queryFn: () => apiFetch<Questionnaire[]>("/api/v1/compliance/questionnaires"),
+  });
+
+  const startReview = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/v1/compliance/security-reviews", {
+        method: "POST",
+        body: {
+          opportunity_id: opportunityId,
+          questionnaire_id: importQuestionnaireId || null,
+        },
+      }),
+    onSuccess: () => {
+      setOpportunityId("");
+      setImportQuestionnaireId("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "security-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["sales", "opportunities"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Enterprise Sales Security Reviews
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <select
+            className={selectClassName}
+            value={opportunityId}
+            onChange={(e) => setOpportunityId(e.target.value)}
+          >
+            <option value="">Select opportunity…</option>
+            {opportunities?.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.title}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClassName}
+            value={importQuestionnaireId}
+            onChange={(e) => setImportQuestionnaireId(e.target.value)}
+          >
+            <option value="">Create new questionnaire</option>
+            {questionnaires
+              ?.filter((q) => !q.opportunity_id)
+              .map((q) => (
+                <option key={q.id} value={q.id}>
+                  Import: {q.title}
+                </option>
+              ))}
+          </select>
+          <Button
+            disabled={!opportunityId || startReview.isPending}
+            onClick={() => startReview.mutate()}
+          >
+            Start review
+          </Button>
+        </CardContent>
+      </Card>
+      {reviews?.length === 0 && (
+        <p className="text-sm text-neutral-500">No security reviews started yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {reviews?.map((review) => (
+          <Link key={review.id} href={`/compliance/security-reviews/${review.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">
+                    {opportunities?.find((o) => o.id === review.opportunity_id)?.title ??
+                      review.opportunity_id}
+                  </div>
+                  {review.is_deal_blocker && (
+                    <div className="text-xs text-red-600">Deal blocker</div>
+                  )}
+                </div>
+                <StatusBadge status={review.status} />
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>
@@ -1049,6 +1156,7 @@ export default function CompliancePage() {
       <QuestionnairesSection />
       <AuditsSection />
       <TrustCenterSection />
+      <SecurityReviewsSection />
       <AISystemsSection />
       <AIIncidentsSection />
       <ProcessingActivitiesSection />

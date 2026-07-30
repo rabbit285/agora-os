@@ -93,6 +93,8 @@ const STATUS_VARIANTS: Record<
   remediated: "success",
   independently_assessed: "secondary",
   certified: "success",
+  cleared: "success",
+  security_review: "warning",
 };
 
 export function StatusBadge({ status }: { status: string }) {

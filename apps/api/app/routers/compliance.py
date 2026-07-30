@@ -27,6 +27,7 @@ from app.compliance.models import (
     QuestionnaireQuestion,
     Requirement,
     Risk,
+    SecurityReview,
     Vendor,
     VendorAssessment,
 )
@@ -78,6 +79,11 @@ from app.compliance.schemas import (
     RiskCreate,
     RiskOut,
     RiskUpdate,
+    SecurityReviewCreate,
+    SecurityReviewDetailOut,
+    SecurityReviewOut,
+    SecurityReviewStatusUpdate,
+    SecurityReviewSyncResult,
     VendorAssessmentCreate,
     VendorAssessmentOut,
     VendorCreate,
@@ -87,25 +93,31 @@ from app.compliance.schemas import (
 )
 from app.compliance.service import (
     add_questionnaire_question,
+    clear_security_review,
     create_ai_incident,
     create_dpia,
     create_dsar,
     decide_ai_system_status,
     decide_dpia_status,
+    list_security_review_gaps,
     record_assessment,
     record_audit_finding,
     record_vendor_assessment,
     register_ai_system,
+    start_security_review,
     suggest_questionnaire_answer,
+    sync_security_review,
     update_ai_incident_status,
     update_audit_finding_status,
     update_dsar_status,
     update_questionnaire_answer,
+    update_security_review_status,
 )
-from app.core.models import File
+from app.core.models import Approval, File
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
+from app.sales.models import Opportunity
 
 router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])
 
@@ -951,13 +963,9 @@ async def _get_org_questionnaire(
     return questionnaire
 
 
-@router.get("/questionnaires/{questionnaire_id}", response_model=QuestionnaireDetailOut)
-async def get_questionnaire(
-    questionnaire_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
+async def _build_questionnaire_detail(
+    db: AsyncSession, questionnaire: Questionnaire
 ) -> QuestionnaireDetailOut:
-    questionnaire = await _get_org_questionnaire(db, questionnaire_id, context.organization_id)
     questions_result = await db.execute(
         select(QuestionnaireQuestion)
         .where(QuestionnaireQuestion.questionnaire_id == questionnaire.id)
@@ -982,6 +990,16 @@ async def get_questionnaire(
         **QuestionnaireOut.model_validate(questionnaire).model_dump(),
         questions=question_details,
     )
+
+
+@router.get("/questionnaires/{questionnaire_id}", response_model=QuestionnaireDetailOut)
+async def get_questionnaire(
+    questionnaire_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> QuestionnaireDetailOut:
+    questionnaire = await _get_org_questionnaire(db, questionnaire_id, context.organization_id)
+    return await _build_questionnaire_detail(db, questionnaire)
 
 
 @router.patch("/questionnaires/{questionnaire_id}/status", response_model=QuestionnaireOut)
@@ -1260,3 +1278,143 @@ async def update_finding_status(
     await db.commit()
     await db.refresh(finding)
     return finding
+
+
+async def _get_org_security_review(
+    db: AsyncSession, review_id: uuid.UUID, organization_id: uuid.UUID
+) -> SecurityReview:
+    review = await db.get(SecurityReview, review_id)
+    if review is None or review.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Security review not found"
+        )
+    return review
+
+
+async def _build_security_review_detail(
+    db: AsyncSession, review: SecurityReview
+) -> SecurityReviewDetailOut:
+    opportunity = await db.get(Opportunity, review.opportunity_id)
+    questionnaire = await db.get(Questionnaire, review.questionnaire_id)
+    assert opportunity is not None
+    assert questionnaire is not None
+    gaps = await list_security_review_gaps(db, questionnaire_id=review.questionnaire_id)
+    approval_status = None
+    if review.approval_id is not None:
+        approval = await db.get(Approval, review.approval_id)
+        approval_status = approval.status if approval else None
+    return SecurityReviewDetailOut(
+        **SecurityReviewOut.model_validate(review).model_dump(),
+        opportunity_title=opportunity.title,
+        approval_status=approval_status,
+        gap_count=len(gaps),
+        questionnaire=await _build_questionnaire_detail(db, questionnaire),
+    )
+
+
+@router.get("/security-reviews", response_model=list[SecurityReviewOut])
+async def list_security_reviews(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[SecurityReview]:
+    result = await db.execute(
+        select(SecurityReview)
+        .where(SecurityReview.organization_id == context.organization_id)
+        .order_by(SecurityReview.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/security-reviews", response_model=SecurityReviewDetailOut, status_code=status.HTTP_201_CREATED
+)
+async def create_security_review(
+    payload: SecurityReviewCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.security_reviews.manage")),
+) -> SecurityReviewDetailOut:
+    opportunity = await db.get(Opportunity, payload.opportunity_id)
+    if opportunity is None or opportunity.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity not found")
+    existing = (
+        await db.execute(
+            select(SecurityReview).where(SecurityReview.opportunity_id == opportunity.id)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A security review already exists for this opportunity",
+        )
+    try:
+        review = await start_security_review(
+            db,
+            organization_id=context.organization_id,
+            opportunity=opportunity,
+            questionnaire_id=payload.questionnaire_id,
+            actor_user_id=context.user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    await db.commit()
+    await db.refresh(review)
+    return await _build_security_review_detail(db, review)
+
+
+@router.get("/security-reviews/{review_id}", response_model=SecurityReviewDetailOut)
+async def get_security_review(
+    review_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> SecurityReviewDetailOut:
+    review = await _get_org_security_review(db, review_id, context.organization_id)
+    return await _build_security_review_detail(db, review)
+
+
+@router.patch("/security-reviews/{review_id}/status", response_model=SecurityReviewOut)
+async def update_security_review_status_route(
+    review_id: uuid.UUID,
+    payload: SecurityReviewStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.security_reviews.manage")),
+) -> SecurityReview:
+    review = await _get_org_security_review(db, review_id, context.organization_id)
+    review = await update_security_review_status(
+        db, review=review, new_status=payload.status, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(review)
+    return review
+
+
+@router.post("/security-reviews/{review_id}/sync", response_model=SecurityReviewSyncResult)
+async def sync_security_review_route(
+    review_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.security_reviews.manage")),
+) -> SecurityReviewSyncResult:
+    review = await _get_org_security_review(db, review_id, context.organization_id)
+    review, tasks_created = await sync_security_review(
+        db, review=review, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(review)
+    detail = await _build_security_review_detail(db, review)
+    return SecurityReviewSyncResult(review=detail, tasks_created=tasks_created)
+
+
+@router.post("/security-reviews/{review_id}/clear", response_model=SecurityReviewDetailOut)
+async def clear_security_review_route(
+    review_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.security_reviews.manage")),
+) -> SecurityReviewDetailOut:
+    review = await _get_org_security_review(db, review_id, context.organization_id)
+    try:
+        review = await clear_security_review(db, review=review, actor_user_id=context.user.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(review)
+    return await _build_security_review_detail(db, review)

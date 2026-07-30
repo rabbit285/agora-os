@@ -240,6 +240,27 @@ A deliberately separate module (`app.trust_center`, not
   already used by the Phase 9 webhook receiver and OAuth callback
   (ADR-0024).
 
+## Phase 3 extension entities (implemented — Enterprise Sales Security Review)
+
+- **SecurityReview** — spec §69's "Enterprise Sales Security Review," one
+  row per **Sales Opportunity**. Starting a review creates or imports a
+  **Questionnaire** against the opportunity (the payoff for
+  `Questionnaire.opportunity_id` having existed since ADR-0032), moves
+  the opportunity into a new `security_review` stage, and sets
+  `is_deal_blocker=True` immediately. An opportunity at or above a
+  documented materiality threshold also gets a gating **Approval** —
+  reusing the same primitive the AI System Inventory and DPIA gates
+  already use, not a new sign-off concept. Syncing a review reuses the
+  Questionnaires slice's own answer-library + AI Copilot logic for every
+  still-missing question, attaches the most relevant **Evidence** for
+  any answer referencing a **Control** with none yet, and opens one
+  remediation **Task** per remaining gap — a sixth reuse of this build's
+  "creates a tracked consequence" hook shape (spec §80). Clearing is
+  refused while gaps or a pending Approval remain, and — once both are
+  satisfied — compiles every approved Q&A plus Evidence titles into a
+  real trust-package **File**, then notifies the opportunity's owner
+  (ADR-0035).
+
 ## Phase 4 entities (implemented — Security backbone)
 
 ```mermaid

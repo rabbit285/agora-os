@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { OutreachMessage, SalesAccountDetail } from "@/lib/types";
+import type { OutreachMessage, SalesAccountDetail, SecurityReview } from "@/lib/types";
 
 export default function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -27,6 +27,11 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
   const { data: outreach } = useQuery<OutreachMessage[]>({
     queryKey: ["sales", "outreach"],
     queryFn: () => apiFetch<OutreachMessage[]>("/api/v1/sales/outreach"),
+  });
+
+  const { data: securityReviews } = useQuery<SecurityReview[]>({
+    queryKey: ["compliance", "security-reviews"],
+    queryFn: () => apiFetch<SecurityReview[]>("/api/v1/compliance/security-reviews"),
   });
 
   const toggleSuppression = useMutation({
@@ -140,21 +145,32 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
           <p className="text-sm text-neutral-500">No opportunities yet.</p>
         )}
         <div className="flex flex-col gap-2">
-          {account.opportunities.map((opportunity) => (
-            <Card key={opportunity.id}>
-              <CardContent className="flex items-center justify-between pt-6">
-                <div>
-                  <div className="font-medium text-neutral-900">{opportunity.title}</div>
-                  {opportunity.onboarding_customer_id && (
-                    <Link href="/support" className="text-xs text-neutral-500 hover:underline">
-                      Onboarded as a Support customer →
-                    </Link>
-                  )}
-                </div>
-                <StatusBadge status={opportunity.stage} />
-              </CardContent>
-            </Card>
-          ))}
+          {account.opportunities.map((opportunity) => {
+            const review = securityReviews?.find((r) => r.opportunity_id === opportunity.id);
+            return (
+              <Card key={opportunity.id}>
+                <CardContent className="flex items-center justify-between pt-6">
+                  <div>
+                    <div className="font-medium text-neutral-900">{opportunity.title}</div>
+                    {opportunity.onboarding_customer_id && (
+                      <Link href="/support" className="text-xs text-neutral-500 hover:underline">
+                        Onboarded as a Support customer →
+                      </Link>
+                    )}
+                    {review && (
+                      <Link
+                        href={`/compliance/security-reviews/${review.id}`}
+                        className="block text-xs text-neutral-500 hover:underline"
+                      >
+                        {review.is_deal_blocker ? "Deal blocked by security review →" : "Security review →"}
+                      </Link>
+                    )}
+                  </div>
+                  <StatusBadge status={opportunity.stage} />
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
 
