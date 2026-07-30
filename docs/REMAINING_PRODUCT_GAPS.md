@@ -6,7 +6,12 @@ requirement that is not VERIFIED, with the exact missing work. AWS-excluded item
 listed in their own section at the end for completeness, not because they need action now.
 
 Audit date: 2026-07-30. Verified against commit `e5fa62d` (working tree clean, no product
-code changed by this audit).
+code changed by this audit). **Update 2026-07-30**: finding A1 below has been fixed,
+tested, and live-verified — see the "FIXED" note inline. All counts elsewhere in this
+document and in `SPEC_TRACEABILITY_MATRIX.md`/`PRODUCT_COMPLETENESS_AUDIT.md` have been
+updated to reflect PLAT-08 moving from PARTIAL to VERIFIED; the finding is kept here,
+marked resolved, rather than deleted, so the record of what was wrong and how it was
+caught remains available.
 
 ---
 
@@ -15,7 +20,7 @@ code changed by this audit).
 These are not single-module gaps; they affect how to read every other finding in this
 document.
 
-### A1. Audit-event `object_id` is written as the literal string `"None"` for ~8 of ~17 "created" event types
+### A1. [FIXED — 2026-07-30] Audit-event `object_id` was written as the literal string `"None"` for 8 of ~17 "created" event types
 
 **Confirmed live** during this audit (not merely inferred from code reading). Root cause:
 `UUIDPrimaryKeyMixin.id` (`apps/api/app/db/base.py:34`) uses a Python-side
@@ -52,10 +57,24 @@ asserts that an `AuditEvent` row was created with the right `action`/`organizati
 but does not assert the correctness of `object_id`'s value — exactly the "tests asserting
 only status codes / shallow fields" pattern this audit was instructed to look for.
 
-**Exact missing work**: add `await db.flush()` before every `record_event(...,
-object_id=str(newly_added_object.id))` call for the 8 confirmed-broken action types above;
-add a regression test asserting `object_id` is a well-formed UUID (not the string
-`"None"`) for each "created" audit action.
+**Fix applied (2026-07-30)**: added `await db.flush()` before each of the 8 confirmed
+call sites listed above, in `apps/api/app/routers/{sales,security,support,compliance}.py`.
+Additionally hardened `app/audit/service.py`'s `record_event()` itself with a permanent
+guard — it now raises `ValueError` if ever called with `object_id == "None"` — so any
+future regression of this exact bug class fails loudly in tests/dev rather than silently
+writing a broken audit trail row. Added
+`apps/api/tests/test_audit_event_object_ids.py`: one regression test per fixed entity
+(sales account, sales opportunity, security asset, security finding, support customer,
+compliance risk, compliance policy, compliance evidence) asserting
+`audit_events.object_id` equals the real created resource's UUID and is never `"None"`,
+plus a direct unit test of the `record_event()` guard and a cross-module sweep test. Full
+backend suite (216 tests, up from 206), lint, format, and mypy all pass; frontend
+eslint/tsc/vitest/build all pass (no frontend files were touched, run for completeness).
+Live-verified against the running Docker stack post-restart: created a fresh disposable
+organization, exercised all 8 previously-broken endpoints, and confirmed via direct
+`audit_events` query that every `object_id` now matches the real resource UUID (evidence
+run and disposable org fully cleaned up afterward — dev database restored to its
+pre-verification state).
 
 **Impact**: does not affect security (the row IS written, tenant-scoped correctly,
 append-only) — but breaks the ability to correlate an audit-log entry back to the specific

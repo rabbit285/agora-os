@@ -24,6 +24,14 @@ async def record_event(
     correlation_id: uuid.UUID | None = None,
 ) -> AuditEvent:
     """Write one append-only audit event. Never update or delete these rows."""
+    if object_id == "None":
+        raise ValueError(
+            "record_event() received the literal string 'None' as object_id — this "
+            "means the referenced object was passed before being flushed "
+            "(SQLAlchemy only assigns a Python-side UUID default at flush time). "
+            "Call `await db.flush()` after `db.add(obj)` before passing "
+            "`str(obj.id)` here."
+        )
     event = AuditEvent(
         organization_id=organization_id,
         actor_user_id=actor_user_id,

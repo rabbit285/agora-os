@@ -51,6 +51,7 @@ async def create_account(
 ) -> Account:
     account = Account(organization_id=context.organization_id, **payload.model_dump())
     db.add(account)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -211,6 +212,7 @@ async def create_opportunity(
     await _get_org_account(db, payload.account_id, context.organization_id)
     opportunity = Opportunity(organization_id=context.organization_id, **payload.model_dump())
     db.add(opportunity)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,

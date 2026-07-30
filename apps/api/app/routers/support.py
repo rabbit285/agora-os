@@ -51,6 +51,7 @@ async def create_customer(
 ) -> Customer:
     customer = Customer(organization_id=context.organization_id, **payload.model_dump())
     db.add(customer)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,

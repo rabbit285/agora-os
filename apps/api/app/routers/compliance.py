@@ -312,6 +312,7 @@ async def create_evidence(
         created_by=context.user.id,
     )
     db.add(evidence)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -349,6 +350,7 @@ async def create_risk(
 
     risk = Risk(organization_id=context.organization_id, **payload.model_dump())
     db.add(risk)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -415,6 +417,7 @@ async def create_policy(
 
     policy = Policy(organization_id=context.organization_id, **payload.model_dump())
     db.add(policy)
+    await db.flush()
     await record_event(
         db,
         organization_id=context.organization_id,

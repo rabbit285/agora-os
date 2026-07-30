@@ -3,9 +3,17 @@
 **Audit date**: 2026-07-30
 **Commit audited**: `e5fa62d` ("Add Data Transfers, completing Privacy and the full
 Compliance/Trust program")
-**Auditor constraint honored**: no product code was modified during this audit. `git
-status` is clean at the time of writing; only the 5 documents listed below were added,
-in a separate commit from all prior feature work.
+**Auditor constraint honored**: no product code was modified during this first audit pass.
+`git status` was clean at the time of writing; only the 5 documents listed below were
+added, in a separate commit from all prior feature work.
+
+**Update 2026-07-30 (post-audit fix)**: the one concrete code defect this audit found
+live — the audit-event `object_id="None"` bug (PLAT-08) — has since been fixed, tested,
+and live-reverified, per explicit follow-up instruction to treat this audit as the
+implementation backlog. See `REMAINING_PRODUCT_GAPS.md` §A1 for the fix detail. All
+counts below reflect PLAT-08 now VERIFIED (44 VERIFIED / 19 PARTIAL, previously
+43/20). This is the only status change so far; the verdict remains B pending the rest of
+the backlog.
 
 This is an audit, not a status report. Every VERIFIED claim in the companion
 `SPEC_TRACEABILITY_MATRIX.md` is backed by at least one of: a file:line code citation, a
@@ -58,7 +66,7 @@ their data.
 | 6 | Backend lint passes | ✅ `ruff check .` → "All checks passed!" |
 | 6b | Backend format check | ✅ `ruff format --check .` → 131 files already formatted |
 | 7 | Strict backend type checking | ✅ `mypy app` → "Success: no issues found in 94 source files" |
-| 8 | All backend tests pass | ✅ fresh run, this audit: **206 passed, 0 failed**, 4 deprecation warnings only, 386.69s |
+| 8 | All backend tests pass | ✅ fresh run, this audit: **206 passed, 0 failed**, 4 deprecation warnings only, 386.69s (post-fix rerun: **216 passed, 0 failed**, including 10 new audit-event regression tests) |
 | 9 | Frontend lint passes | ✅ `npx eslint .` → clean, zero output |
 | 10 | Frontend type checking | ✅ `npx tsc --noEmit` → clean, zero output |
 | 11 | Frontend unit tests | ✅ `npx vitest run` → 2 test files, 23 tests, all passed |
@@ -69,14 +77,13 @@ their data.
 | 16 | Unconfigured providers marked "Not configured" | ✅ confirmed in Integrations settings UI copy and code (`apps/web/.../settings/integrations/page.tsx:434`) |
 | 17 | Tenant isolation, ≥2 orgs | ✅ fresh live proof, 3 techniques (list-scoping, direct-ID-guess 404, header-spoof 403) — see `ACCEPTANCE_TEST_EVIDENCE.md` #21 |
 | 18 | RBAC denial, restricted user | ✅ fresh live proof — `read_only` role: 403 on write, 200 on read — see `ACCEPTANCE_TEST_EVIDENCE.md` #22 |
-| 19 | Audit events for critical actions | 🟡 **partially proven** — events ARE emitted for the actions tested, but a real, previously-undetected bug was found live: `object_id` is stored as the literal string `"None"` for ~8 of ~17 "created" event types (missing `db.flush()` before capturing the new row's ID) — see `REMAINING_PRODUCT_GAPS.md` §A1 |
+| 19 | Audit events for critical actions | ✅ **fixed 2026-07-30** — a real bug was found live during the audit (`object_id` stored as the literal string `"None"` for 8 of ~17 "created" event types, missing `db.flush()` before capturing the new row's ID); fixed at all 8 call sites plus a permanent guard added to `record_event()`, covered by 10 new regression tests, and live-reverified against the running stack — see `REMAINING_PRODUCT_GAPS.md` §A1 |
 | 20 | Duplicate/idempotency protection | ✅ fresh live proof — `close_opportunity_won` called twice on the same opportunity produced byte-identical responses and exactly one `Customer` row, not two |
 
-**Item 13 and item 19 are the two checklist items that did not fully pass.** Item 13 is a
-straightforward MISSING (no E2E suite exists at all). Item 19 is PARTIAL: the audit
-mechanism is real and does write tenant-scoped, append-only rows for the correct action
-names — the defect is narrower (broken resource-ID linkage on a known subset of actions)
-but real and reproducible.
+**Item 13 is the one checklist item that did not fully pass**: no E2E suite exists at
+all (tracked separately as a backlog item). Item 19 originally found a real, reproducible
+defect (see above) but has since been fixed and re-verified live — see the 2026-07-30
+update note at the top of this document.
 
 ## 3. Requirement counts
 
@@ -87,15 +94,17 @@ scenarios, the Business Intelligence layer, and AWS-excluded items).
 
 | Status | Count |
 |---|---|
-| **VERIFIED** | 43 |
+| **VERIFIED** | 44 |
 | **IMPLEMENTED_NOT_LIVE_VERIFIED** | 1 |
-| **PARTIAL** | 20 |
+| **PARTIAL** | 19 |
 | **MISSING** | 42 |
 | **AWS_EXCLUDED** | 4 |
 | **Total** | 110 |
 
-Of the 106 non-AWS-excluded requirements, 62 (20 PARTIAL + 42 MISSING) are not fully
-verified — 58% of in-scope requirements.
+Of the 106 non-AWS-excluded requirements, 61 (19 PARTIAL + 42 MISSING) are not fully
+verified — 58% of in-scope requirements. (PLAT-08 moved from PARTIAL to VERIFIED on
+2026-07-30 after the audit-event `object_id` fix described in §4 below and
+`REMAINING_PRODUCT_GAPS.md` §A1.)
 
 Of the 25 required end-to-end scenarios (`ACCEPTANCE_TEST_EVIDENCE.md`): **14 VERIFIED,
 8 PARTIAL, 2 MISSING** (data export/deletion execution; global search).
@@ -105,9 +114,11 @@ Of the 25 required end-to-end scenarios (`ACCEPTANCE_TEST_EVIDENCE.md`): **14 VE
 In rough priority order — see `REMAINING_PRODUCT_GAPS.md` for the full list and exact
 missing work per item:
 
-1. **Audit-event `object_id="None"` bug** — undermines the audit trail's core promise
-   (link an event to the resource it concerns) for ~8 action types; small, mechanical fix
-   (`await db.flush()` before capturing `.id`) but currently live in the running system.
+1. ~~**Audit-event `object_id="None"` bug**~~ — **FIXED 2026-07-30.** Undermined the
+   audit trail's core promise (link an event to the resource it concerns) for 8 action
+   types; fixed with `await db.flush()` at all 8 call sites plus a permanent guard in
+   `record_event()`, covered by 10 new regression tests, and live-reverified against the
+   running stack. See `REMAINING_PRODUCT_GAPS.md` §A1.
 2. **No E2E test suite** — zero Playwright/Cypress coverage; all UI-level correctness
    evidence in this audit came from manual live smoke-testing plus the backend test
    suite, not automated browser tests.
@@ -139,12 +150,12 @@ missing work per item:
 ## 5. Final Verdict
 
 Per the audit's own rule — verdict A requires **zero** PARTIAL and **zero** MISSING
-requirements outside AWS-excluded scope — and given 20 PARTIAL + 42 MISSING non-AWS
+requirements outside AWS-excluded scope — and given 19 PARTIAL + 42 MISSING non-AWS
 requirements documented above with concrete evidence:
 
 # B. PRODUCT NOT YET COMPLETE
 
-This verdict is not a comment on the quality of what has been built: the 43 VERIFIED
+This verdict is not a comment on the quality of what has been built: the 44 VERIFIED
 requirements include a genuinely real AI gateway with honest demo fallback, a real
 evidence-grounded RAG pipeline, a large and genuinely tested Compliance/Trust program (14
 of 18 requirements VERIFIED), real tenant isolation and RBAC enforcement (proven live in
@@ -169,12 +180,12 @@ deployment items.
 
 ## 6. Recommendation
 
-Prioritize, in this order: (1) the audit-event `object_id` fix (small, mechanical, fixes
-a real defect in a completed feature — highest value-per-effort); (2) correcting
-`docs/KNOWN_LIMITATIONS.md`'s scenario-completeness claim so the codebase's documentation
-matches its own honesty discipline everywhere; (3) standing up even a minimal Playwright
-suite covering the 25 acceptance scenarios in `ACCEPTANCE_TEST_EVIDENCE.md`, since none
-exists today; then (4) work through `REMAINING_PRODUCT_GAPS.md` module-by-module,
-treating the Business Intelligence layer and the non-CRUD halves of Sales/Security/
-Automation/Integrations as the largest remaining bodies of net-new work, separate from
-the Phase-10 enterprise items the spec itself already defers.
+Prioritize, in this order: (1) ~~the audit-event `object_id` fix~~ — **done 2026-07-30**;
+(2) correcting `docs/KNOWN_LIMITATIONS.md`'s scenario-completeness claim so the
+codebase's documentation matches its own honesty discipline everywhere; (3) standing up
+even a minimal Playwright suite covering the 25 acceptance scenarios in
+`ACCEPTANCE_TEST_EVIDENCE.md`, since none exists today; then (4) work through
+`REMAINING_PRODUCT_GAPS.md` module-by-module, treating the Business Intelligence layer
+and the non-CRUD halves of Sales/Security/Automation/Integrations as the largest
+remaining bodies of net-new work, separate from the Phase-10 enterprise items the spec
+itself already defers.
