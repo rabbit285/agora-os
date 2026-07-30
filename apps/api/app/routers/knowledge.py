@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_event
 from app.core.models import File
 from app.db.session import get_db
-from app.dependencies import OrgContext, get_org_context
+from app.dependencies import OrgContext, get_org_context, require_permission
 from app.knowledge.models import Document, DocumentChunk, KnowledgeBase
 from app.knowledge.schemas import (
     DocumentChunkOut,
@@ -45,7 +45,7 @@ async def list_knowledge_bases(
 async def create_knowledge_base(
     payload: KnowledgeBaseCreate,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
+    context: OrgContext = Depends(require_permission("knowledge.documents.manage")),
 ) -> KnowledgeBase:
     knowledge_base = KnowledgeBase(organization_id=context.organization_id, **payload.model_dump())
     db.add(knowledge_base)
@@ -70,7 +70,7 @@ async def list_documents(
 async def create_document(
     payload: DocumentCreate,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
+    context: OrgContext = Depends(require_permission("knowledge.documents.manage")),
     start_ingestion: IngestionStarter = Depends(get_ingestion_starter),
 ) -> Document:
     file_record = await db.get(File, payload.file_id)

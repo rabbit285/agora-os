@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.copilot import ask_copilot
 from app.ai.schemas import CitationOut, CopilotAskRequest, CopilotAskResponse
 from app.db.session import get_db
-from app.dependencies import OrgContext, get_org_context
+from app.dependencies import OrgContext, require_permission
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 async def copilot_ask(
     payload: CopilotAskRequest,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
+    context: OrgContext = Depends(require_permission("ai.copilot.ask")),
 ) -> CopilotAskResponse:
     """Retrieval-grounded Copilot (spec section 9): embeds the question,
     searches the organization's own document chunks, and answers using

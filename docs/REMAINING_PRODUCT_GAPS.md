@@ -238,15 +238,15 @@ claim a protection that isn't there.
 - **MISSING**: invitation flow (`/invite/[token]` has no page or API), email verification
   flow (`/verify-email/[token]` has no page or API — and is never triggered anywhere in
   the backend), MFA (schema-only: no challenge screen, no TOTP/WebAuthn enrollment code).
-- **PARTIAL/INERT**: 4 of 16 seeded system roles (`executive`, `operations_manager`,
-  `employee`, `read_only`) have zero permission grants in
-  `ROLE_PERMISSION_GRANTS` — they exist and can be assigned, but carry no capability
-  beyond whatever RBAC's default-deny leaves them (confirmed live in this audit:
-  `read_only` correctly gets 403 on writes and 200 on reads, so the *enforcement*
-  mechanism works — the gap is that most business roles have never had scoped
-  permissions written for them beyond the modules already granting them).
-  Zero `knowledge.*` / `copilot.*` / `ai.*` permission keys exist in `PERMISSIONS` at all
-  — Knowledge and Copilot access is not RBAC-gated, only tenant-membership-gated.
+- **[FIXED 2026-07-30]** ~~4 of 16 seeded system roles had zero permission grants; zero
+  `knowledge.*`/`copilot.*`/`ai.*` permission keys existed~~ — `executive`,
+  `operations_manager`, and `employee` now carry scoped grants (approvals/tasks/
+  automation as appropriate), `knowledge.documents.manage` and `ai.copilot.ask` were
+  added and wired via `require_permission()` into the Knowledge and Copilot routers, and
+  every role except `read_only` (deliberately zero-grant by design) was granted both.
+  Live-verified: an `employee` can create tasks/knowledge bases/ask Copilot but gets 403
+  on Sales; a `read_only` user gets 403 on both new permissions. See
+  `SPEC_TRACEABILITY_MATRIX.md` PLAT-05/PLAT-06.
 - **MISSING**: `LegalEntity` and `Team` models exist with zero CRUD endpoints (no
   multi-entity support beyond the bare tables) — consistent with spec §53's own "Future:"
   marker and §79's "Phase 10" placement, i.e. not yet attempted, not attempted-and-broken.

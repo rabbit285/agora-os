@@ -1,9 +1,9 @@
 """System role/permission seeding (spec section 54).
 
 Roles are shared across organizations (organization_id is NULL — "system"
-roles). Only the permission keys relevant to Phase 1 primitives are granted
-today; each later module adds its own keys to PERMISSIONS and wires them
-onto the roles that should hold them when that module ships.
+roles). Every module grants its own keys in PERMISSIONS and wires them onto
+the roles that should hold them; `read_only` is the sole role deliberately
+seeded with zero grants (see docs/ACCEPTANCE_TEST_EVIDENCE.md #22).
 """
 
 from __future__ import annotations
@@ -63,6 +63,8 @@ PERMISSIONS: dict[str, str] = {
     "automation.workflows.manage": "Create, edit, and publish automation workflows",
     "automation.runs.manage": "Trigger and resume workflow runs",
     "integrations.connections.manage": "Create, edit, and link integration connections",
+    "knowledge.documents.manage": "Upload documents and manage knowledge bases",
+    "ai.copilot.ask": "Ask the AI Copilot questions grounded in organizational knowledge",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -113,23 +115,53 @@ INTEGRATIONS_PERMISSIONS = [
     "integrations.connections.manage",
 ]
 
+# Knowledge and the AI Copilot are cross-cutting capabilities (spec §7-11,
+# §55-58) used by every specialized role, not owned by one business
+# function the way Sales/Security/etc. are — so every role below except
+# `read_only` gets both, in addition to its own module's permissions.
+KNOWLEDGE_PERMISSIONS = [
+    "knowledge.documents.manage",
+]
+AI_PERMISSIONS = [
+    "ai.copilot.ask",
+]
+_CROSS_CUTTING_PERMISSIONS = KNOWLEDGE_PERMISSIONS + AI_PERMISSIONS
+
 # Only org_admin gets the full Phase 1 permission set; module-specific
-# roles get only their own module's permissions. Every other role is
-# seeded with zero permissions until its owning module defines what it
-# should hold.
+# roles get only their own module's permissions plus the cross-cutting
+# Knowledge/Copilot permissions above. `read_only` is deliberately seeded
+# with zero permissions (verified RBAC-denial behavior, see
+# docs/ACCEPTANCE_TEST_EVIDENCE.md #22) until its owning module defines
+# what it should hold.
 ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "org_admin": list(PERMISSIONS.keys()),
-    "compliance_manager": COMPLIANCE_PERMISSIONS,
-    "dpo": COMPLIANCE_PERMISSIONS + AI_GOVERNANCE_PERMISSIONS + PRIVACY_PERMISSIONS,
-    "ai_governance_manager": AI_GOVERNANCE_PERMISSIONS,
-    "legal": PRIVACY_PERMISSIONS,
-    "security_manager": SECURITY_PERMISSIONS,
-    "sales_manager": SALES_PERMISSIONS,
-    "sales_representative": SALES_PERMISSIONS,
-    "support_manager": SUPPORT_PERMISSIONS,
-    "support_agent": SUPPORT_PERMISSIONS,
-    "automation_manager": AUTOMATION_PERMISSIONS + INTEGRATIONS_PERMISSIONS,
-    "auditor": ["compliance.audits.manage"],
+    "executive": ["core.approvals.decide", *_CROSS_CUTTING_PERMISSIONS],
+    "operations_manager": [
+        "core.tasks.manage",
+        "core.approvals.decide",
+        *AUTOMATION_PERMISSIONS,
+        *INTEGRATIONS_PERMISSIONS,
+        *_CROSS_CUTTING_PERMISSIONS,
+    ],
+    "compliance_manager": COMPLIANCE_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "dpo": (
+        COMPLIANCE_PERMISSIONS
+        + AI_GOVERNANCE_PERMISSIONS
+        + PRIVACY_PERMISSIONS
+        + _CROSS_CUTTING_PERMISSIONS
+    ),
+    "security_manager": SECURITY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "ai_governance_manager": AI_GOVERNANCE_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "sales_manager": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "sales_representative": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "support_manager": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "support_agent": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "automation_manager": (
+        AUTOMATION_PERMISSIONS + INTEGRATIONS_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+    ),
+    "legal": PRIVACY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "auditor": ["compliance.audits.manage", *_CROSS_CUTTING_PERMISSIONS],
+    "employee": ["core.tasks.manage", *_CROSS_CUTTING_PERMISSIONS],
 }
 
 
