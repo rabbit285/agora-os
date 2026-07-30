@@ -8,10 +8,11 @@ everything an organization actually does — Control, ControlAssessment,
 Evidence, Risk, Policy — is tenant-scoped.
 
 Deliberately not modeled yet (see docs/KNOWN_LIMITATIONS.md): framework
-versioning, evidence versioning, audits (auditor portal), regulatory
-updates (external intelligence feed), data transfers, vendor risk,
-questionnaires, Trust Center. Each is a substantial feature in its own
-right; this slice ships the backbone they would all attach to.
+versioning, evidence versioning, regulatory updates (external
+intelligence feed), data transfers. Each is a substantial feature in its
+own right; this slice ships the backbone they would all attach to.
+(Trust Center lives in `app.trust_center`, not here — see that module's
+docstring for why.)
 
 `AISystem` / `AIAssessment` add the spec §12 "AI System Inventory" / "AI
 Risk Assessment" screens (EU AI Act governance). `AISystem.approval_id`

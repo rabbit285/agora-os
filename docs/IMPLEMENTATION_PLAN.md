@@ -100,11 +100,20 @@ shape from the single-judgement `ControlAssessment`/`VendorAssessment`/
 (ADR-0033); the pre-seeded but previously-unused `auditor` system role
 got its first real permission.
 
-Remaining: data transfers (Privacy's remaining sub-feature), Trust
-Center, Enterprise Sales Security Review, regulatory intelligence feed.
-Each is a substantial feature attaching to the backbone above, not a
-blocker to it — see `docs/RESUME_BUILD.md` for suggested next-slice
-ordering.
+Also done: Trust Center (spec B4), in a new `app.trust_center` module
+rather than `app.compliance` — its `GET /api/v1/trust-center/public/
+{org_slug}` route is genuinely unauthenticated (no session dependency
+at all), the same pattern already used by the Phase 9 webhook receiver
+and OAuth callback (ADR-0024), a fundamentally different security model
+from every other tenant-scoped Compliance sub-feature (ADR-0034).
+`TrustCenterItem.policy_id` reuses the existing `Policy` for
+"downloadable approved documents" rather than a new document table; a
+public `EvidenceRequest` submission always creates a linked Task.
+
+Remaining: data transfers (Privacy's remaining sub-feature), Enterprise
+Sales Security Review, regulatory intelligence feed. Each is a
+substantial feature attaching to the backbone above, not a blocker to
+it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
 ## Phase 4 — Security (backbone in progress)
 

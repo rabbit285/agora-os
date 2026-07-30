@@ -48,7 +48,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
+| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + Trust Center management + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/vendors/[id]` | [x] detail: status workflow, risk assessment form, assessment history, evidence list |
 | `/compliance/questionnaires/[id]` | [x] detail: status workflow, missing-answer count banner, add-question form, per-question suggest-answer/save-draft/approve actions |
@@ -57,12 +57,12 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/compliance/ai-incidents/[id]` | [x] detail: status workflow, linked risk banner, linked response task banner, link to the AI system |
 | `/compliance/dpias/[id]` | [x] detail: status workflow, linked approval banner (high-risk only), findings, link to a linked AI system |
 | `/compliance/dsars/[id]` | [x] detail: status workflow, due date (overdue indicator), fulfilled date, notes |
+| `/trust/[org_slug]` | [x] **genuinely public, no auth** — spec B4 Trust Center page: published categories, downloadable-document links, evidence-request submission form |
 
 Not yet built (spec §67 lists these under Compliance): Framework-specific
 dashboards (GDPR/EU AI Act individual views), Evidence Library standalone
 page, a standalone Data Inventory/RoPA detail view (list-only today),
-Policies list page (API exists, no UI yet), Trust Center, Regulatory
-Intelligence.
+Policies list page (API exists, no UI yet), Regulatory Intelligence.
 
 ## SECURITY
 

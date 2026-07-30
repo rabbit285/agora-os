@@ -29,3 +29,4 @@ from app.knowledge import models as _knowledge_models  # noqa: F401
 from app.sales import models as _sales_models  # noqa: F401
 from app.secops import models as _secops_models  # noqa: F401
 from app.support import models as _support_models  # noqa: F401
+from app.trust_center import models as _trust_center_models  # noqa: F401

@@ -9,8 +9,10 @@ import type {
   Audit,
   DPIA,
   DSAR,
+  EvidenceRequest,
   ProcessingActivity,
   Questionnaire,
+  TrustCenterItem,
   Vendor,
 } from "@/lib/types";
 
@@ -124,6 +126,29 @@ const AUDIT_FIXTURE: Audit = {
   created_at: new Date().toISOString(),
 };
 
+const TRUST_CENTER_ITEM_FIXTURE: TrustCenterItem = {
+  id: "55555555-6666-7777-8888-999999999999",
+  category: "security_overview",
+  title: "Security Overview",
+  content: "We encrypt data at rest and in transit.",
+  status: "implemented",
+  is_public: true,
+  policy_id: null,
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
+const EVIDENCE_REQUEST_FIXTURE: EvidenceRequest = {
+  id: "66666666-7777-8888-9999-aaaaaaaaaaaa",
+  requester_name: "Priya Nandakumar",
+  requester_email: "priya@prospect.example",
+  company_name: "Prospect Robotics",
+  message: "Please share your latest SOC 2 report.",
+  status: "open",
+  related_task_id: "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -142,6 +167,8 @@ function mockRoutes(overrides: {
   vendors?: Vendor[];
   questionnaires?: Questionnaire[];
   audits?: Audit[];
+  trustCenterItems?: TrustCenterItem[];
+  evidenceRequests?: EvidenceRequest[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -169,6 +196,11 @@ function mockRoutes(overrides: {
       return { ...AUDIT_FIXTURE };
     }
     if (path === "/api/v1/compliance/audits") return overrides.audits ?? [];
+    if (options?.method === "POST" && path === "/api/v1/trust-center/items") {
+      return { ...TRUST_CENTER_ITEM_FIXTURE };
+    }
+    if (path === "/api/v1/trust-center/items") return overrides.trustCenterItems ?? [];
+    if (path === "/api/v1/trust-center/evidence-requests") return overrides.evidenceRequests ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -376,6 +408,62 @@ describe("CompliancePage — Audits section", () => {
         method: "POST",
         body: { title: "New Compliance Audit", auditor_name: "Big Four LLP" },
       }),
+    );
+  });
+});
+
+describe("CompliancePage — Trust Center section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders trust center items and evidence requests", async () => {
+    mockRoutes({
+      trustCenterItems: [TRUST_CENTER_ITEM_FIXTURE],
+      evidenceRequests: [EVIDENCE_REQUEST_FIXTURE],
+    });
+    renderPage();
+
+    expect(await screen.findByText("Security Overview")).toBeInTheDocument();
+    expect(screen.getByText("public")).toBeInTheDocument();
+    expect(screen.getByText("implemented")).toBeInTheDocument();
+    expect(screen.getByText("Priya Nandakumar (Prospect Robotics)")).toBeInTheDocument();
+  });
+
+  it("saves a trust center item with the entered title and category", async () => {
+    mockRoutes({});
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByPlaceholderText("Title"), "Security Overview");
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/trust-center/items", {
+        method: "POST",
+        body: {
+          category: "security_overview",
+          title: "Security Overview",
+          content: null,
+          status: "planned",
+          is_public: false,
+        },
+      }),
+    );
+  });
+
+  it("fulfills an open evidence request", async () => {
+    mockRoutes({ evidenceRequests: [EVIDENCE_REQUEST_FIXTURE] });
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Mark fulfilled" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith(
+        `/api/v1/trust-center/evidence-requests/${EVIDENCE_REQUEST_FIXTURE.id}/status`,
+        { method: "PATCH", body: { status: "fulfilled" } },
+      ),
     );
   });
 });

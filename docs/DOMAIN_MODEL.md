@@ -211,9 +211,34 @@ erDiagram
   permission here.
 
 Not modeled yet: framework/evidence versioning, data transfers (the
-remaining Privacy sub-feature), Trust Center — each a substantial
-feature attaching to this backbone, not blocking it. See
-`docs/KNOWN_LIMITATIONS.md`.
+remaining Privacy sub-feature) — each a substantial feature attaching to
+this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
+
+## Phase 3 extension entities (implemented — Trust Center)
+
+A deliberately separate module (`app.trust_center`, not
+`app.compliance`) — see ADR-0034 for why.
+
+- **TrustCenterItem** — spec B4's public Trust Center, one row per
+  organization per fixed category (security overview, privacy overview,
+  subprocessors, data locations, encryption practices, availability,
+  vulnerability reporting, compliance roadmap, DPA availability, incident
+  communication, responsible AI, AI provider disclosures, retention/
+  deletion, business continuity). `status` follows spec B4's own
+  five-value vocabulary (never auto-advanced — spec B4: "Do not falsely
+  claim certifications that have not been earned"). `policy_id`
+  optionally links an existing **Policy** for "downloadable approved
+  documents" rather than a new document table; the public endpoint only
+  surfaces it when that Policy is `published`, even if the item itself
+  is `is_public`.
+- **EvidenceRequest** — spec B4's "evidence request workflow": a public,
+  unauthenticated submission that always creates a linked **Task**, the
+  same "creates a tracked consequence" hook shape used throughout this
+  build, here with no authenticated actor.
+- `GET /api/v1/trust-center/public/{org_slug}` is genuinely
+  unauthenticated — no session dependency at all — the same pattern
+  already used by the Phase 9 webhook receiver and OAuth callback
+  (ADR-0024).
 
 ## Phase 4 entities (implemented — Security backbone)
 

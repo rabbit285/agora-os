@@ -91,6 +91,8 @@ const STATUS_VARIANTS: Record<
   missing: "destructive",
   planned: "outline",
   remediated: "success",
+  independently_assessed: "secondary",
+  certified: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {

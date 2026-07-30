@@ -367,6 +367,72 @@ export type AuditDetail = Audit & {
   findings: AuditFinding[];
 };
 
+export type TrustCenterCategory =
+  | "security_overview"
+  | "privacy_overview"
+  | "subprocessors"
+  | "data_locations"
+  | "encryption_practices"
+  | "availability"
+  | "vulnerability_reporting"
+  | "compliance_roadmap"
+  | "dpa_availability"
+  | "incident_communication"
+  | "responsible_ai"
+  | "ai_provider_disclosures"
+  | "retention_deletion"
+  | "business_continuity";
+
+export type TrustCenterItemStatus =
+  | "planned"
+  | "in_progress"
+  | "implemented"
+  | "independently_assessed"
+  | "certified";
+
+export type TrustCenterItem = {
+  id: string;
+  category: TrustCenterCategory;
+  title: string;
+  content: string | null;
+  status: TrustCenterItemStatus;
+  is_public: boolean;
+  policy_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type EvidenceRequestStatus = "open" | "fulfilled";
+
+export type EvidenceRequest = {
+  id: string;
+  requester_name: string;
+  requester_email: string;
+  company_name: string | null;
+  message: string | null;
+  status: EvidenceRequestStatus;
+  related_task_id: string | null;
+  created_at: string;
+};
+
+export type TrustCenterPublicPolicy = {
+  id: string;
+  title: string;
+};
+
+export type TrustCenterPublicItem = {
+  category: TrustCenterCategory;
+  title: string;
+  content: string | null;
+  status: TrustCenterItemStatus;
+  policy: TrustCenterPublicPolicy | null;
+};
+
+export type TrustCenterPublic = {
+  organization_name: string;
+  items: TrustCenterPublicItem[];
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

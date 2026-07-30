@@ -22,6 +22,7 @@ import type {
   DPIARiskLevel,
   DSAR,
   DSARRequestType,
+  EvidenceRequest,
   Framework,
   LegalBasis,
   ProcessingActivity,
@@ -29,6 +30,9 @@ import type {
   QuestionnaireSource,
   Risk,
   Severity,
+  TrustCenterCategory,
+  TrustCenterItem,
+  TrustCenterItemStatus,
   Vendor,
 } from "@/lib/types";
 
@@ -332,6 +336,188 @@ function AuditsSection() {
               </CardContent>
             </Card>
           </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TRUST_CENTER_CATEGORIES: TrustCenterCategory[] = [
+  "security_overview",
+  "privacy_overview",
+  "subprocessors",
+  "data_locations",
+  "encryption_practices",
+  "availability",
+  "vulnerability_reporting",
+  "compliance_roadmap",
+  "dpa_availability",
+  "incident_communication",
+  "responsible_ai",
+  "ai_provider_disclosures",
+  "retention_deletion",
+  "business_continuity",
+];
+
+function TrustCenterSection() {
+  const queryClient = useQueryClient();
+  const [category, setCategory] = useState<TrustCenterCategory>("security_overview");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [itemStatus, setItemStatus] = useState<TrustCenterItemStatus>("planned");
+  const [isPublic, setIsPublic] = useState(false);
+
+  const { data: items } = useQuery<TrustCenterItem[]>({
+    queryKey: ["compliance", "trust-center-items"],
+    queryFn: () => apiFetch<TrustCenterItem[]>("/api/v1/trust-center/items"),
+  });
+
+  const { data: evidenceRequests } = useQuery<EvidenceRequest[]>({
+    queryKey: ["compliance", "trust-center-evidence-requests"],
+    queryFn: () => apiFetch<EvidenceRequest[]>("/api/v1/trust-center/evidence-requests"),
+  });
+
+  const saveItem = useMutation({
+    mutationFn: () =>
+      apiFetch<TrustCenterItem>("/api/v1/trust-center/items", {
+        method: "POST",
+        body: { category, title, content: content.trim() || null, status: itemStatus, is_public: isPublic },
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setContent("");
+      setItemStatus("planned");
+      setIsPublic(false);
+      queryClient.invalidateQueries({ queryKey: ["compliance", "trust-center-items"] });
+    },
+  });
+
+  const fulfillRequest = useMutation({
+    mutationFn: (requestId: string) =>
+      apiFetch(`/api/v1/trust-center/evidence-requests/${requestId}/status`, {
+        method: "PATCH",
+        body: { status: "fulfilled" },
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["compliance", "trust-center-evidence-requests"] }),
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Trust Center
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-col gap-2 pt-6">
+          <div className="flex flex-wrap gap-2">
+            <select
+              className={selectClassName}
+              value={category}
+              onChange={(e) => setCategory(e.target.value as TrustCenterCategory)}
+            >
+              {TRUST_CENTER_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+            <Input
+              placeholder="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="min-w-[200px] flex-1"
+            />
+            <select
+              className={selectClassName}
+              value={itemStatus}
+              onChange={(e) => setItemStatus(e.target.value as TrustCenterItemStatus)}
+            >
+              <option value="planned">Planned</option>
+              <option value="in_progress">In progress</option>
+              <option value="implemented">Implemented</option>
+              <option value="independently_assessed">Independently assessed</option>
+              <option value="certified">Certified</option>
+            </select>
+          </div>
+          <Input
+            placeholder="Content (public-facing description)"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm text-neutral-600">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+            />
+            Publish on public Trust Center page
+          </label>
+          <Button
+            disabled={!title.trim() || saveItem.isPending}
+            onClick={() => saveItem.mutate()}
+            className="w-fit"
+          >
+            Save item
+          </Button>
+        </CardContent>
+      </Card>
+      {items?.length === 0 && (
+        <p className="mb-4 text-sm text-neutral-500">No Trust Center items configured yet.</p>
+      )}
+      <div className="mb-6 flex flex-col gap-2">
+        {items?.map((item) => (
+          <Card key={item.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <div className="font-medium text-neutral-900">{item.title}</div>
+                <div className="text-xs text-neutral-400">{item.category.replace(/_/g, " ")}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={item.is_public ? "success" : "outline"}>
+                  {item.is_public ? "public" : "private"}
+                </Badge>
+                <StatusBadge status={item.status} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        Evidence Requests
+      </h3>
+      {evidenceRequests?.length === 0 && (
+        <p className="text-sm text-neutral-500">No evidence requests yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {evidenceRequests?.map((request) => (
+          <Card key={request.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <div className="font-medium text-neutral-900">
+                  {request.requester_name}
+                  {request.company_name ? ` (${request.company_name})` : ""}
+                </div>
+                <div className="text-xs text-neutral-400">{request.requester_email}</div>
+                {request.message && (
+                  <div className="text-sm text-neutral-700">{request.message}</div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={request.status} />
+                {request.status === "open" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={fulfillRequest.isPending}
+                    onClick={() => fulfillRequest.mutate(request.id)}
+                  >
+                    Mark fulfilled
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>
@@ -862,6 +1048,7 @@ export default function CompliancePage() {
       <VendorsSection />
       <QuestionnairesSection />
       <AuditsSection />
+      <TrustCenterSection />
       <AISystemsSection />
       <AIIncidentsSection />
       <ProcessingActivitiesSection />

@@ -26,6 +26,7 @@ from app.compliance.models import (
     ControlMapping,
     Evidence,
     Framework,
+    Policy,
     ProcessingActivity,
     Questionnaire,
     QuestionnaireAnswer,
@@ -62,6 +63,8 @@ from app.secops.service import create_incident
 from app.security import hash_password
 from app.support.models import CSATResponse, Customer, KnowledgeArticle, TicketMessage
 from app.support.service import create_ticket, flag_upsell_signal
+from app.trust_center.models import TrustCenterItem
+from app.trust_center.service import create_evidence_request, upsert_trust_center_item
 
 logger = logging.getLogger("agora.seed")
 logging.basicConfig(level=logging.INFO)
@@ -256,6 +259,22 @@ async def seed() -> None:
         )
         if not existing_audits:
             await _seed_demo_audit_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_trust_center_items = (
+            (
+                await db.execute(
+                    select(TrustCenterItem).where(
+                        TrustCenterItem.organization_id == organization.id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_trust_center_items:
+            await _seed_demo_trust_center_data(
+                db, organization_id=organization.id, admin_id=admin.id
+            )
 
         existing_assets = (
             (
@@ -839,6 +858,89 @@ async def _seed_demo_audit_data(
     logger.info(
         "Seeded demo audit data (1 in-progress audit, 1 critical finding + linked remediation "
         "task, 1 remediated low-severity finding)"
+    )
+
+
+async def _seed_demo_trust_center_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds a handful of Trust Center items — some public, one deliberately
+    kept private so the demo org shows both states honestly, one linked to
+    a real published Policy (exercising the "only a published Policy is
+    ever surfaced" rule) — plus one open evidence request submitted through
+    the public, unauthenticated flow."""
+    published_policy = Policy(
+        organization_id=organization_id,
+        title="Data Processing Agreement (template)",
+        status="published",
+        owner_id=admin_id,
+    )
+    db.add(published_policy)
+    await db.flush()
+
+    await upsert_trust_center_item(
+        db,
+        organization_id=organization_id,
+        category="security_overview",
+        title="Security Overview",
+        content="We encrypt data at rest and in transit, enforce MFA for all staff, and run "
+        "quarterly access reviews.",
+        status="implemented",
+        is_public=True,
+        policy_id=None,
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+    await upsert_trust_center_item(
+        db,
+        organization_id=organization_id,
+        category="dpa_availability",
+        title="Data Processing Agreement",
+        content="A signed DPA is available on request and as a downloadable template below.",
+        status="implemented",
+        is_public=True,
+        policy_id=published_policy.id,
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+    await upsert_trust_center_item(
+        db,
+        organization_id=organization_id,
+        category="compliance_roadmap",
+        title="Compliance Roadmap",
+        content="SOC 2 Type II audit planned for next fiscal year.",
+        status="planned",
+        is_public=True,
+        policy_id=None,
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+    await upsert_trust_center_item(
+        db,
+        organization_id=organization_id,
+        category="business_continuity",
+        title="Business Continuity",
+        content="Internal draft — not yet ready to publish.",
+        status="in_progress",
+        is_public=False,
+        policy_id=None,
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    await create_evidence_request(
+        db,
+        organization_id=organization_id,
+        requester_name="Jonas Berg",
+        requester_email="jonas.berg@nordwind-robotics.example",
+        company_name="Nordwind Robotics GmbH",
+        message="Could you share your latest penetration test summary?",
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo Trust Center data (3 public items incl. 1 linked to a published Policy, "
+        "1 private item, 1 open evidence request + linked task)"
     )
 
 

@@ -29,6 +29,7 @@ from app.routers import (
     security,
     support,
     tasks,
+    trust_center,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -107,3 +108,4 @@ app.include_router(sales.router)
 app.include_router(support.router)
 app.include_router(automation.router)
 app.include_router(integrations.router)
+app.include_router(trust_center.router)

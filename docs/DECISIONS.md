@@ -909,3 +909,60 @@ pattern), the negative case for low severity, a finding attaching to a
 Control, the audit and finding status lifecycles (including
 `completed_at` being set), tenant isolation, and rejection of a
 `framework_id` from another org.
+
+## ADR-0034 — Trust Center gets its own module for a genuinely public, unauthenticated surface; a Policy link, not a new document table, backs "downloadable documents"
+
+**Decision**: Unlike Vendor Risk, Security Questionnaires, and Audits —
+all added directly into `app.compliance.models`/`service`/`routers` —
+Trust Center lives in a new `app.trust_center` module
+(`models.py`/`schemas.py`/`service.py`) with its own `app/routers/
+trust_center.py`. `TrustCenterItem` (one row per organization per
+spec B4 category, enforced by `uq_trust_center_item_org_category`) and
+`EvidenceRequest` are the two entities. The defining reason for the
+split: `GET /api/v1/trust-center/public/{org_slug}` is genuinely public
+— no `OrgContext`/session dependency at all, only `Depends(get_db)` —
+the same "no session, a different capability boundary" pattern the
+Phase 9 webhook receiver and OAuth callback already established
+(ADR-0024), here reused for a third kind of unauthenticated endpoint.
+Every other Compliance sub-feature this build has added is tenant-scoped
+behind a session; Trust Center's public page is not, so it does not
+belong inside a module whose defining trait is "authenticated by
+default."
+
+`TrustCenterItem.policy_id` is an optional link to an existing
+`compliance.Policy` rather than a new document/attachment table — spec
+B4's "downloadable approved documents" is the same File-backed artifact
+concept Policy already models (spec §80). The public endpoint only ever
+surfaces a linked Policy if it is `status="published"`, even when the
+`TrustCenterItem` itself is `is_public=True` — an org marking a Trust
+Center category public should never accidentally leak a still-draft
+policy document through a stale link.
+
+`EvidenceRequest` backs spec B4's "evidence request workflow": a public,
+unauthenticated POST that always creates a linked `core.Task` — this
+build's now-familiar "creates a tracked consequence" hook shape (spec
+§80), here applied with `actor_user_id=None` since there is no
+authenticated actor, the same way the webhook/OAuth flows record audit
+events without one.
+
+RBAC for the authenticated management side adds
+`compliance.trust_center.manage` to the existing
+`COMPLIANCE_PERMISSIONS` bundle; the public routes have no RBAC by
+design.
+
+**Why**: A module boundary should reflect a real difference in security
+model, not just a difference in spec section — Trust Center's public
+surface is categorically different from every tenant-scoped Compliance
+screen, so giving it its own module keeps `app.compliance`'s invariant
+("everything here requires a session") honest rather than special-casing
+one router function inside it. Reusing Policy for downloadable documents
+avoids a second file-attachment/versioning path for artifacts that are
+semantically identical to what Policy already stores. Tested in
+`tests/test_trust_center.py`: RBAC denial for `employee`, upserting and
+re-upserting the same category (proving update-not-duplicate), the
+public endpoint returning only `is_public` items, the published-vs-draft
+Policy surfacing rule, a 404 for an unknown org slug, a genuinely
+unauthenticated evidence-request submission that creates a real Task
+(verified via `/api/v1/tasks`), the evidence-request fulfillment
+lifecycle, RBAC denial for fulfilling a request, rejecting an unknown
+category (422), and rejecting a Policy from another organization (404).

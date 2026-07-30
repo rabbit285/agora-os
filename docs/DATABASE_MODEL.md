@@ -507,6 +507,52 @@ shape for a fifth entity type, specifically the Task-creating half a
 `VendorAssessment`/`AIIncident` use — an audit finding is a scoped
 remediation item, not an ongoing risk) (ADR-0033).
 
+## Tables (Phase 3 extension — Trust Center)
+
+Code lives in `app/trust_center/`, a separate module from
+`app/compliance/` — its public, unauthenticated surface is a
+fundamentally different security model from the rest of Compliance
+(ADR-0034).
+
+```text
+trust_center_items         -- spec B4's public/customer-facing Trust Center
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  category TEXT NOT NULL   -- one of spec B4's 14 fixed categories
+  title TEXT NOT NULL
+  content TEXT NULL
+  status TEXT NOT NULL DEFAULT 'planned'   -- planned|in_progress|implemented|independently_assessed|certified
+  is_public BOOLEAN NOT NULL DEFAULT false
+  policy_id UUID FK policies NULL   -- "downloadable approved documents"
+  owner_id UUID FK users NULL
+  created_at, updated_at
+  UNIQUE (organization_id, category)
+
+trust_center_evidence_requests   -- spec B4's "evidence request workflow"
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  requester_name TEXT NOT NULL
+  requester_email TEXT NOT NULL
+  company_name TEXT NULL
+  message TEXT NULL
+  status TEXT NOT NULL DEFAULT 'open'   -- open|fulfilled
+  related_task_id UUID FK tasks NULL   -- cross-module hook, see below
+  created_at, updated_at
+```
+
+`GET /api/v1/trust-center/public/{org_slug}` is genuinely unauthenticated
+(no `OrgContext` dependency, only `Depends(get_db)`) — the same pattern
+already used by the Phase 9 webhook receiver and OAuth callback
+(ADR-0024). It returns only `is_public=true` items, and only surfaces a
+linked `policy_id` when that Policy's own `status='published'` — an
+`is_public` item with a still-draft linked Policy never leaks it.
+Submitting a `trust_center_evidence_requests` row (also unauthenticated)
+always creates a linked `core.tasks` row, via
+`app/trust_center/service.py::create_evidence_request` — the same
+"submission creates a tracked consequence" hook shape used throughout
+this build (spec §80), here with `actor_user_id=None` since there is no
+authenticated actor (ADR-0034).
+
 ## Tables (Phase 4 — Security)
 
 Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`

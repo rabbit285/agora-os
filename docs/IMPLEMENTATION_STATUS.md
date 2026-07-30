@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents), Privacy (RoPA/DPIA/DSAR), and Vendor Risk Compliance extensions that together give a fourth Phase 8 scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires done, Audits done, Trust Center/Enterprise Sales Security Review/Data Transfers next)
+Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents), Privacy (RoPA/DPIA/DSAR), and Vendor Risk Compliance extensions that together give a fourth Phase 8 scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires done, Audits done, Trust Center done, Enterprise Sales Security Review/Data Transfers next)
 
 ## Platform
 
@@ -91,10 +91,14 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] `/api/v1/compliance/audits` routes — create/list/detail (with findings)/status/findings/finding-status; tenant-isolated, RBAC-gated via `compliance.audits.manage` (added to the existing `COMPLIANCE_PERMISSIONS` bundle, and granted to the pre-seeded but previously-unused `auditor` system role)
 - [x] Frontend: Audits section on `/compliance` (create form, list) + `/compliance/audits/[id]` detail (status dropdown, add-finding form, findings list with severity/status badges, mark-remediated action)
 - [x] Seed script: 1 in-progress audit with 1 critical finding + linked remediation task, 1 remediated low-severity finding
+- [x] Trust Center: new `app.trust_center` module (separate from `app.compliance` — its public surface is a fundamentally different security model, ADR-0034); `TrustCenterItem` (one row per org per spec B4 category, `policy_id` optionally linking an existing `Policy`) + `EvidenceRequest` models + migration
+- [x] Genuinely public, unauthenticated `GET /api/v1/trust-center/public/{org_slug}` (no `OrgContext` dependency at all) — returns only `is_public` items, and only surfaces a linked Policy when it is `published`; public `POST .../evidence-requests` always creates a linked `core.Task` (tested, ADR-0034)
+- [x] Authenticated management routes — `/api/v1/trust-center/items` (upsert, one row per category)/`evidence-requests` (list + fulfill); RBAC via `compliance.trust_center.manage` (added to the `COMPLIANCE_PERMISSIONS` bundle)
+- [x] Frontend: authenticated Trust Center management section on `/compliance` (upsert form, items list, evidence-request list with fulfill action) + a genuinely public `/trust/[org_slug]` page (outside the authenticated `(app)` route group) with an evidence-request submission form
+- [x] Seed script: 3 public items (1 linked to a published Policy), 1 private item, 1 open evidence request + linked task
 - [ ] Framework/evidence versioning — not modeled
 - [ ] Regulatory intelligence feed — not started
 - [ ] Data transfers (the remaining Privacy sub-feature) — not started
-- [ ] Trust Center — not started
 
 ## Security
 
@@ -214,14 +218,15 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
 - [x] Compliance tests (60 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests, 12 Privacy tests, 8 AI Incident tests, 7 Vendor Risk tests, 7 Security Questionnaire tests — see prior entries for detail — plus 8 Audit tests: RBAC denial for `employee`, the `auditor` role's grant, the critical-finding-creates-remediation-task hook, the negative case for low severity, a finding attaching to a Control, the audit and finding status lifecycles (including `completed_at`), tenant isolation, and rejection of a foreign `framework_id`)
+- [x] Trust Center tests (10 tests, `tests/test_trust_center.py`: RBAC denial for `employee`, upserting and re-upserting the same category proving update-not-duplicate, the public endpoint returning only `is_public` items, the published-vs-draft Policy surfacing rule, 404 for an unknown org slug, a genuinely unauthenticated evidence-request submission that creates a real Task, the evidence-request fulfillment lifecycle, RBAC denial for fulfilling a request, rejecting an unknown category (422), and rejecting a Policy from another org (404))
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (50 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1; OAuth provider-catalog honesty across all six providers with scope previews, RBAC denial, full start→callback→connected round trip against the mock adapter (proven generic via a second, non-HubSpot provider), expired/unknown-state/unknown-provider rejection, refresh/health/sync/disconnect lifecycle with the durable-sync split (`create_sync_run`/`execute_sync_run`) exercised directly including its failure path, an audit-trail assertion across the full OAuth lifecycle, tenant isolation; plus pure adapter unit tests for every provider's authorization-URL construction, scope preview, mock-fallback labeling, and the two no-refresh providers' explicit errors — no network, no live credentials needed)
-- [x] 179/179 total backend, ruff+mypy strict clean
-- [x] Frontend: 16 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, 2 for Vendors (rendering with risk tier/status, adding a new vendor), 2 for Questionnaires (rendering with source/status, creating a new questionnaire), and 2 for Audits (rendering with auditor name/status, creating a new audit)
+- [x] 189/189 total backend, ruff+mypy strict clean
+- [x] Frontend: 19 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, 2 for Vendors (rendering with risk tier/status, adding a new vendor), 2 for Questionnaires (rendering with source/status, creating a new questionnaire), 2 for Audits (rendering with auditor name/status, creating a new audit), and 3 for Trust Center (rendering items/evidence requests, saving an item, fulfilling an evidence request)
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 

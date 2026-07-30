@@ -48,6 +48,7 @@ PERMISSIONS: dict[str, str] = {
     "compliance.vendors.manage": "Create vendors and record vendor risk assessments",
     "compliance.questionnaires.manage": "Create questionnaires, questions, and answers",
     "compliance.audits.manage": "Create audits and record audit findings",
+    "compliance.trust_center.manage": "Manage Trust Center content and evidence requests",
     "security.assets.manage": "Create and update the security asset inventory",
     "security.findings.manage": "Create and update security findings",
     "security.alerts.manage": "Triage and update security alerts",
@@ -71,6 +72,7 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.vendors.manage",
     "compliance.questionnaires.manage",
     "compliance.audits.manage",
+    "compliance.trust_center.manage",
 ]
 
 AI_GOVERNANCE_PERMISSIONS = [

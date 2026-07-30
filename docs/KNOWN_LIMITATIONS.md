@@ -51,8 +51,15 @@ implied to work.
   separate auditor-facing login/experience, evidence request workflow
   scoped to an audit, or read-only external-auditor access; the
   `auditor` role currently gets the same full manage permission an
-  internal user would. Still missing: data transfers (the remaining
-  Privacy sub-feature) and Trust Center.
+  internal user would. Trust Center (`app.trust_center`, `TrustCenterItem`/
+  `EvidenceRequest`) also now exists — a genuinely public, unauthenticated
+  `GET /api/v1/trust-center/public/{org_slug}` page (spec B4) plus a
+  public evidence-request submission that auto-creates a Task (ADR-0034).
+  There is no rich Markdown/rich-text editor for item `content` (plain
+  text only), no email notification when an evidence request is
+  submitted (the org must check its Task queue), and no per-item revision
+  history — updating a category's content overwrites it in place. Still
+  missing: data transfers (the remaining Privacy sub-feature).
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —

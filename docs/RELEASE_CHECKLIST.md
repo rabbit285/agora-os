@@ -208,6 +208,16 @@ Automation) now have a real, tested backbone.
 - [x] Frontend tests: 2 new Vitest tests (16 total) covering the Audits section rendering and creating a new audit
 - [x] Live Docker smoke test: created a critical finding and confirmed a real linked remediation Task (title/module/priority verified via `/api/v1/tasks`); confirmed a low-severity finding creates no task; marked a finding remediated and completed the audit (`completed_at` set); confirmed the full `compliance.audit*` audit trail in Postgres; confirmed both `/compliance` (Audits section) and `/compliance/audits/[id]` return HTTP 200
 
+## Phase 3 extension (Trust Center) — added after the Audits slice
+
+- [x] New `app.trust_center` module (not `app.compliance`) — `TrustCenterItem` (one row per org per spec B4 category, `policy_id` optionally linking an existing `Policy`) + `EvidenceRequest` models + migration; separate module because its public surface is a fundamentally different security model from the rest of Compliance (ADR-0034)
+- [x] Genuinely public, unauthenticated `GET /api/v1/trust-center/public/{org_slug}` (only `Depends(get_db)`, no `OrgContext` — same pattern as the Phase 9 webhook receiver/OAuth callback, ADR-0024) — returns only `is_public` items, and only surfaces a linked Policy when it's `published`; public `POST .../evidence-requests` always creates a linked `core.Task` (tested)
+- [x] Authenticated management routes (`/api/v1/trust-center/items` upsert, `/evidence-requests` list + fulfill) — RBAC via `compliance.trust_center.manage`, added to the `COMPLIANCE_PERMISSIONS` bundle, + frontend (Trust Center management section on `/compliance`, genuinely public `/trust/[org_slug]` page outside the authenticated `(app)` route group with an evidence-request submission form)
+- [x] Seed script: 3 public items (1 linked to a published Policy), 1 private item, 1 open evidence request + linked task
+- [x] Backend tests: 189 passing total; ruff/mypy clean
+- [x] Frontend tests: 3 new Vitest tests (19 total) covering Trust Center item rendering, saving an item, and fulfilling an evidence request
+- [x] Live Docker smoke test: confirmed the public endpoint returns real data with **zero cookies sent**; confirmed a 404 for an unknown org slug; submitted a public evidence request with no auth and confirmed a real linked Task via `/api/v1/tasks`; confirmed authenticated management list/fulfill endpoints; confirmed the full `trust_center.*` audit trail in Postgres including anonymous (`actor_user_id IS NULL`) rows; confirmed both `/compliance` and `/trust/acme-ai-technologies` return HTTP 200
+
 See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
