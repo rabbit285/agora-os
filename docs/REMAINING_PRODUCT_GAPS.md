@@ -201,19 +201,27 @@ claim a protection that isn't there.
   (`apps/api/app/routers/trust_center.py`) genuinely has no `OrgContext` dependency —
   correctly, deliberately unauthenticated per spec B4.
 
-### Security
+### Security (resolved 2026-07-30 — see SEC-03/05/06/07/08/09 in the traceability matrix)
 
-- **MISSING**: Cloud Security (spec §15) and Identity Security (spec §16) — entirely
-  unbuilt beyond a free-text category tag on `SecurityFinding`.
-- **MISSING (frontend)**: Security Overview dashboard (spec §13) — actual frontend is 4
-  flat CRUD lists, not the dashboard described.
-- **PARTIAL**: `SecurityIncident` has no Timeline / Affected-Assets / Evidence /
-  Communication / Root-Cause / Lessons-Learned fields — just a status enum plus 2 FK
-  links (to a Risk and a Task).
-- **MISSING (tests + audit)**: `SecurityAlert` create/update have zero audit events and
-  zero test coverage.
-- **MISSING (frontend)**: standalone Asset Detail page, Alert Detail page, Security
-  Policies page.
+- **RESOLVED**: Cloud Security (spec §15) and Identity Security (spec §16) are now real
+  `boto3`-backed scans (`app.secops.cloud_scanner`) gated on real AWS credentials, writing
+  ordinary `SecurityFinding` rows via the existing category discriminator. Only 2 of the
+  spec's ~11 example checks are implemented (S3 public-access-block, IAM users without
+  MFA) and only AWS is wired (not Azure/GCP) — disclosed scope, see
+  `docs/KNOWN_LIMITATIONS.md`. Real-AWS-account scanning is untested (`AWS` column = Yes);
+  the uncredentialed `configured=False` path is live-verified.
+- **RESOLVED**: Security Overview dashboard (spec §13) now exists at `GET
+  /security/overview` + a dashboard section on the Security page — 9 live-computed
+  metrics, no placeholders.
+- **RESOLVED**: `SecurityIncident` now has a full incident workspace: Timeline +
+  Communication (one chronological log, discriminated by `entry_type`), Affected Assets
+  (idempotent linking), Root-Cause/Lessons-Learned, and Evidence (via
+  `Evidence.incident_id`, reusing the existing evidence library rather than a new table).
+- **RESOLVED**: `SecurityAlert` create/update now emit audit events and have test
+  coverage.
+- **RESOLVED (frontend)**: Asset Detail page, Alert Detail page, and a Security Policies
+  page all exist. Security Policies deliberately reuses `GET /compliance/policies`
+  read-only rather than inventing a second policy store (spec §80).
 
 ### Sales
 

@@ -372,11 +372,18 @@ async def create_evidence(
         await _get_org_control(db, payload.control_id, context.organization_id)
     if payload.vendor_id is not None:
         await _get_org_vendor(db, payload.vendor_id, context.organization_id)
+    if payload.incident_id is not None:
+        from app.secops.models import SecurityIncident
+
+        incident = await db.get(SecurityIncident, payload.incident_id)
+        if incident is None or incident.organization_id != context.organization_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
 
     evidence = Evidence(
         organization_id=context.organization_id,
         control_id=payload.control_id,
         vendor_id=payload.vendor_id,
+        incident_id=payload.incident_id,
         file_id=payload.file_id,
         title=payload.title,
         valid_until=payload.valid_until,

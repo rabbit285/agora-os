@@ -73,14 +73,24 @@ implied to work.
   items of the Compliance/Trust program requested this session — see
   `docs/RESUME_BUILD.md` for the full sequence and what (if anything) is
   next.
-- **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
-  provider connectors (Okta/Entra/Google Workspace), no vulnerability
-  scanner ingestion, no incident timeline/evidence/playbook sub-objects —
-  the incident *workspace* has a status workflow, but not the richer
-  structure spec §19 describes (Timeline, Affected Assets, Evidence,
-  Communication, Root Cause, Lessons Learned tabs). These realistically
-  need the connector SDK (Phase 9) to do properly rather than one-off
-  per-provider integrations.
+- **Security**: the incident workspace now has the full structure spec §19
+  describes (Timeline + Communication as one chronological log
+  discriminated by `entry_type`, Affected Assets linking, Evidence via
+  `Evidence.incident_id`, Root Cause/Lessons Learned). Cloud Security
+  (spec §15) and Identity Security (spec §16) now run real `boto3` checks
+  against a real AWS account (`app.secops.cloud_scanner`), gated on
+  `AWS_SECURITY_SCAN_ACCESS_KEY_ID`/`AWS_SECURITY_SCAN_SECRET_ACCESS_KEY`
+  — absent credentials return `configured=False` and create nothing,
+  never a fabricated scan result. Remaining gaps: only AWS is wired, not
+  Azure/GCP; only 2 of the spec's ~11 example checks are implemented (S3
+  public-access-block, IAM users without MFA) — no encryption, logging,
+  security-group, unused-credential, key-rotation, or root-account
+  checks yet; no third-party vulnerability-scanner ingestion (Qualys,
+  Tenable, Snyk, etc.); no identity-provider connectors (Okta/Entra/
+  Google Workspace) — Identity Security only reads AWS IAM. Real-AWS-
+  account scanning has not been live-verified (no AWS account available
+  in this environment) — only the uncredentialed path and the two check
+  functions (against fake client stubs) have been.
 - **Sales**: outreach "sending" doesn't call a real email/LinkedIn
   provider — it only transitions the message's own status (`sent` or
   `blocked`), gated by a genuine compliance check

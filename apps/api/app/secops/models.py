@@ -27,7 +27,7 @@ from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime, Uuid
 
-from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utcnow
 
 
 class SecurityAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -122,3 +122,49 @@ class SecurityIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Incident workspace fields (spec §19): Root Cause and Lessons Learned
+    # are free text, written once the incident reaches postmortem/closed;
+    # Timeline, Affected Assets, and Communication are separate tables
+    # below (a chronological log and a many-to-many join respectively).
+    root_cause: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    lessons_learned: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+
+
+class SecurityIncidentTimelineEntry(UUIDPrimaryKeyMixin, Base):
+    """One chronological entry in an incident's workspace (spec §19
+    Timeline / Communication) — `entry_type` distinguishes an internal
+    status update from a stakeholder-facing communication, but both are
+    the same append-only log rather than two separate tables, since spec
+    §19 lists them as two views over one incident's activity, not two
+    different kinds of record."""
+
+    __tablename__ = "security_incident_timeline_entries"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_incidents.id"), nullable=False, index=True
+    )
+    # update | communication
+    entry_type: Mapped[str] = mapped_column(String(20), default="update")
+    body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SecurityIncidentAsset(Base):
+    """Affected Assets (spec §19) — many-to-many, an incident can affect
+    several assets and an asset can appear in several incidents over
+    time."""
+
+    __tablename__ = "security_incident_assets"
+
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_incidents.id"), primary_key=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_assets.id"), primary_key=True
+    )

@@ -115,6 +115,68 @@ class IncidentOut(BaseModel):
     related_task_id: uuid.UUID | None
     owner_id: uuid.UUID | None
     closed_at: datetime | None
+    root_cause: str | None
+    lessons_learned: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class IncidentPostmortemUpdate(BaseModel):
+    root_cause: str | None = Field(default=None, max_length=4000)
+    lessons_learned: str | None = Field(default=None, max_length=4000)
+
+
+class TimelineEntryCreate(BaseModel):
+    entry_type: str = Field(default="update", pattern="^(update|communication)$")
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class TimelineEntryOut(BaseModel):
+    id: uuid.UUID
+    entry_type: str
+    body: str
+    author_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AffectedAssetLink(BaseModel):
+    asset_id: uuid.UUID
+
+
+class IncidentDetailOut(IncidentOut):
+    timeline: list[TimelineEntryOut]
+    affected_assets: list[AssetOut]
+
+
+class AssetDetailOut(AssetOut):
+    findings: list[FindingOut]
+    incidents: list[IncidentOut]
+
+
+class AlertDetailOut(AlertOut):
+    finding: FindingOut | None
+
+
+class CloudScanResultOut(BaseModel):
+    configured: bool
+    checks_run: list[str]
+    findings_created: int
+
+
+class SecurityOverviewOut(BaseModel):
+    """Security Overview dashboard (spec §13) — every field is a real,
+    computed aggregate over this org's own data, never a placeholder
+    number."""
+
+    security_score: int
+    critical_alerts: int
+    high_risks: int
+    assets_monitored: int
+    vulnerabilities_open: int
+    identity_issues_open: int
+    cloud_misconfigurations_open: int
+    open_incidents: int
+    evidence_coverage_percent: float

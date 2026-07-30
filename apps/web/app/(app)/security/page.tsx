@@ -13,11 +13,80 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import type {
+  CloudScanResult,
   SecurityAlert,
   SecurityAsset,
   SecurityFinding,
   SecurityIncident,
+  SecurityOverview,
 } from "@/lib/types";
+
+function OverviewSection() {
+  const { data: overview, isLoading } = useQuery<SecurityOverview>({
+    queryKey: ["security", "overview"],
+    queryFn: () => apiFetch<SecurityOverview>("/api/v1/security/overview"),
+  });
+
+  const queryClient = useQueryClient();
+  const runScan = useMutation({
+    mutationFn: () => apiFetch<CloudScanResult>("/api/v1/security/cloud-scan", { method: "POST" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["security"] });
+    },
+  });
+
+  if (isLoading) {
+    return <p className="mb-8 text-sm text-neutral-500">Loading security overview…</p>;
+  }
+  if (!overview) return null;
+
+  const metrics: Array<{ label: string; value: number | string }> = [
+    { label: "Security Score", value: overview.security_score },
+    { label: "Critical Alerts", value: overview.critical_alerts },
+    { label: "High Risks", value: overview.high_risks },
+    { label: "Assets Monitored", value: overview.assets_monitored },
+    { label: "Vulnerabilities", value: overview.vulnerabilities_open },
+    { label: "Identity Issues", value: overview.identity_issues_open },
+    { label: "Cloud Misconfigurations", value: overview.cloud_misconfigurations_open },
+    { label: "Open Incidents", value: overview.open_incidents },
+    { label: "Evidence Coverage", value: `${overview.evidence_coverage_percent}%` },
+  ];
+
+  return (
+    <div className="mb-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          Security Overview
+        </h2>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={runScan.isPending}
+          onClick={() => runScan.mutate()}
+        >
+          {runScan.isPending ? "Scanning…" : "Run cloud scan"}
+        </Button>
+      </div>
+      {runScan.data && (
+        <p className="mb-3 text-xs text-neutral-500">
+          {runScan.data.configured
+            ? `Scan complete: ${runScan.data.checks_run.length} checks run, ${runScan.data.findings_created} finding(s) created.`
+            : "AWS credentials are not configured for this organization — cloud scanning is unavailable until AWS_SECURITY_SCAN_ACCESS_KEY_ID/SECRET are set."}
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {metrics.map((metric) => (
+          <Card key={metric.label}>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-semibold text-neutral-900">{metric.value}</div>
+              <div className="text-xs text-neutral-500">{metric.label}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function AssetsSection() {
   const { data: assets } = useQuery<SecurityAsset[]>({
@@ -33,21 +102,23 @@ function AssetsSection() {
       {assets?.length === 0 && <p className="text-sm text-neutral-500">No assets tracked yet.</p>}
       <div className="flex flex-col gap-2">
         {assets?.map((asset) => (
-          <Card key={asset.id}>
-            <CardContent className="flex items-center justify-between pt-6">
-              <div>
-                <div className="font-medium text-neutral-900">{asset.name}</div>
-                <div className="text-xs text-neutral-400">
-                  {asset.asset_type} {asset.provider ? `· ${asset.provider}` : ""}
-                  {asset.internet_exposed ? " · internet-exposed" : ""}
+          <Link key={asset.id} href={`/security/assets/${asset.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{asset.name}</div>
+                  <div className="text-xs text-neutral-400">
+                    {asset.asset_type} {asset.provider ? `· ${asset.provider}` : ""}
+                    {asset.internet_exposed ? " · internet-exposed" : ""}
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <SeverityBadge severity={asset.criticality} />
-                <StatusBadge status={asset.status} />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex gap-2">
+                  <SeverityBadge severity={asset.criticality} />
+                  <StatusBadge status={asset.status} />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>
@@ -100,15 +171,17 @@ function AlertsSection() {
       {alerts?.length === 0 && <p className="text-sm text-neutral-500">No alerts.</p>}
       <div className="flex flex-col gap-2">
         {alerts?.map((alert) => (
-          <Card key={alert.id}>
-            <CardContent className="flex items-center justify-between pt-6">
-              <div className="font-medium text-neutral-900">{alert.title}</div>
-              <div className="flex gap-2">
-                <SeverityBadge severity={alert.severity} />
-                <StatusBadge status={alert.status} />
-              </div>
-            </CardContent>
-          </Card>
+          <Link key={alert.id} href={`/security/alerts/${alert.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div className="font-medium text-neutral-900">{alert.title}</div>
+                <div className="flex gap-2">
+                  <SeverityBadge severity={alert.severity} />
+                  <StatusBadge status={alert.status} />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
     </div>
@@ -193,7 +266,15 @@ export default function SecurityPage() {
       <PageHeader
         title="Security"
         description="Asset inventory, findings, alerts, and incident response — spec sections 13-19."
+        actions={
+          <Link href="/security/policies">
+            <Button variant="outline" size="sm">
+              Security Policies
+            </Button>
+          </Link>
+        }
       />
+      <OverviewSection />
       <AssetsSection />
       <FindingsSection />
       <AlertsSection />

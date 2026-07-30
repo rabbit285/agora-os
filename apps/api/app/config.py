@@ -70,6 +70,19 @@ class Settings(BaseSettings):
     smtp_password: str | None = Field(default=None, alias="SMTP_PASSWORD")
     ses_region: str | None = Field(default=None, alias="SES_REGION")
 
+    # Cloud Security scanning (spec §15) — optional; absence means Cloud
+    # Security / Identity Security report "Not configured" rather than a
+    # fake scan result. Deliberately separate from S3_* above, which point
+    # at this app's own MinIO/S3 object storage, not a customer AWS
+    # account to scan.
+    aws_security_scan_access_key_id: str | None = Field(
+        default=None, alias="AWS_SECURITY_SCAN_ACCESS_KEY_ID"
+    )
+    aws_security_scan_secret_access_key: str | None = Field(
+        default=None, alias="AWS_SECURITY_SCAN_SECRET_ACCESS_KEY"
+    )
+    aws_security_scan_region: str = Field(default="eu-central-1", alias="AWS_SECURITY_SCAN_REGION")
+
     # Billing — optional
     stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
@@ -127,6 +140,7 @@ def _diagnose(settings: Settings) -> None:
         "GITHUB_CLIENT_ID": settings.github_client_id,
         "SLACK_CLIENT_ID": settings.slack_client_id,
         "SALESFORCE_CLIENT_ID": settings.salesforce_client_id,
+        "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:

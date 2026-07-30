@@ -2,9 +2,12 @@
 
 Audit date: 2026-07-30, updated same day after the Platform-foundation auth completion
 work (PLAT-13/14/15), the Knowledge-module completeness work (XLSX/HTML extraction,
-reranking, Knowledge Graph, Global Search — KNOW-03/06/07/08, PLAT-21), and the
+reranking, Knowledge Graph, Global Search — KNOW-03/06/07/08, PLAT-21), the
 Compliance completeness work (Policy publish, Evidence Library, Framework Dashboard,
-Compliance-as-Governance-Layer — COMP-05/17/18). Frontend routes taken from a fresh
+Compliance-as-Governance-Layer — COMP-05/17/18), and the Security-module completeness
+work (audited alerts, full incident workspace, Cloud/Identity Security scanning,
+Security Overview dashboard, Asset/Alert Detail + Security Policies pages —
+SEC-03/05/06/07/08/09). Frontend routes taken from a fresh
 `npm run build` (Next.js 16.2, Turbopack) — not from `docs/ROUTES_AND_SCREENS.md`, which
 was found to contain stale entries claiming placeholder pages that did not exist in the
 build at audit time (see `REMAINING_PRODUCT_GAPS.md` §A3; the ones that were genuinely
@@ -12,7 +15,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (40 total, from `npm run build` output)
+## Frontend routes (44 total, from `npm run build` output)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -46,8 +49,11 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/compliance/dsars/[id]` | ƒ | — |
 | `/compliance/frameworks/[id]` | ƒ | Per-framework compliance dashboard — requirements, mapped controls, coverage % |
 | `/trust/[org_slug]` | ƒ | Genuinely public, no auth dependency |
-| `/security` | ○ | Assets + findings + alerts + incidents — 4 flat lists, not a dashboard |
-| `/security/incidents/[id]` | ƒ | — |
+| `/security` | ○ | Security Overview dashboard (9 live metrics, "Run cloud scan" button) + assets + findings + alerts + incidents |
+| `/security/assets/[id]` | ƒ | Findings on this asset, incidents referencing this asset |
+| `/security/alerts/[id]` | ƒ | Status workflow, related finding |
+| `/security/incidents/[id]` | ƒ | Full incident workspace: status workflow, timeline/communication log, affected-assets linker, root-cause/lessons-learned editor, linked compliance risk, linked response task |
+| `/security/policies` | ○ | Reuses `GET /compliance/policies` read-only |
 | `/sales` | ○ | Accounts + pipeline overview |
 | `/sales/accounts/[id]` | ƒ | Contacts, outreach, opportunities, deal-blocker link |
 | `/support` | ○ | Customers + tickets |
@@ -67,7 +73,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
 challenge were also in this list at first-audit time; all 3 are now built — see above.)
 
-## Backend API surface (133 paths, from live `/openapi.json`)
+## Backend API surface (139 paths, from live `/openapi.json`)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -80,7 +86,7 @@ challenge were also in this list at first-audit time; all 3 are now built — se
 | `/knowledge` | 6 | documents (list/create/get/chunks) incl. real XLSX/HTML extraction, knowledge-bases, graph (entity-types, entity traversal) |
 | `/search` | 1 | tenant-scoped substring search across 16 entity types |
 | `/compliance` | 53 | by far the largest surface — controls, risks, evidence, policies (incl. publish status), frameworks (incl. per-framework dashboard), vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
-| `/security` | 8 | assets, findings, alerts, incidents |
+| `/security` | 13 | overview dashboard, assets (+detail), findings, alerts (+detail), incidents (+detail, timeline, affected-assets, postmortem), cloud-scan |
 | `/sales` | 11 | accounts, contacts, leads, opportunities, outreach |
 | `/support` | 8 | customers, tickets, messages, knowledge-articles, csat, flag-upsell |
 | `/automation` | 6 | workflows, runs, resume |

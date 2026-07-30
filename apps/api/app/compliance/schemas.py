@@ -86,6 +86,7 @@ class EvidenceCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     control_id: uuid.UUID | None = None
     vendor_id: uuid.UUID | None = None
+    incident_id: uuid.UUID | None = None
     valid_until: datetime | None = None
 
 
@@ -94,6 +95,7 @@ class EvidenceOut(BaseModel):
     file_id: uuid.UUID
     control_id: uuid.UUID | None
     vendor_id: uuid.UUID | None
+    incident_id: uuid.UUID | None
     title: str
     valid_until: datetime | None
     created_at: datetime
@@ -144,11 +146,11 @@ class PolicyOut(BaseModel):
     owner_id: uuid.UUID | None
     created_at: datetime
 
+    model_config = {"from_attributes": True}
+
 
 class PolicyStatusUpdate(BaseModel):
     status: str = Field(pattern="^(draft|published)$")
-
-    model_config = {"from_attributes": True}
 
 
 class AISystemCreate(BaseModel):

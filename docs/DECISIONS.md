@@ -1087,3 +1087,84 @@ line), the derogation-creates-risk hook, the negative case for an
 adequacy-decision transfer, the status lifecycle, linking to an existing
 `ProcessingActivity`, rejecting one from another org, and tenant
 isolation.
+
+## ADR-0037 — Cloud/Identity Security reuse the Findings category discriminator and the credential-gated honesty pattern; the incident workspace's "Evidence" tab reuses the evidence library; Security Policies has no store of its own
+
+**Decision**: Cloud Security (spec §15) and Identity Security (spec §16)
+are built as real `boto3` checks (`app.secops.cloud_scanner`) that write
+ordinary `SecurityFinding` rows using the `category` discriminator that
+already existed for this purpose (`cloud_misconfiguration`/`identity`) —
+the same category-reuse decision the original Security build made for
+Findings in general, extended here rather than superseded by a fourth
+table. `run_cloud_security_scan` follows the same credential-gated
+honesty pattern already established for the AI providers and the six
+OAuth integrations: `is_aws_configured()` checks for real
+`AWS_SECURITY_SCAN_ACCESS_KEY_ID`/`SECRET_ACCESS_KEY`, and their absence
+returns `configured=False` with zero findings created — never a
+simulated scan result. Scope is deliberately narrow and disclosed: only
+AWS (not Azure/GCP), and only 2 of the spec's ~11 example checks (S3
+public-access-block, IAM users without MFA) — see
+`docs/KNOWN_LIMITATIONS.md`.
+
+The incident workspace (SEC-05: Timeline, Affected Assets, Evidence,
+Communication, Root Cause, Lessons Learned — spec §19) adds two new
+tables, `SecurityIncidentTimelineEntry` (`entry_type` discriminates
+`update` from `communication`, so both live in one chronological log
+rather than two parallel ones) and `SecurityIncidentAsset` (a plain
+many-to-many join, linking idempotently — POSTing an already-linked
+asset is a no-op, not an error, the same idempotency discipline other
+link-creating endpoints in this build already use). "Evidence" is not a
+third new table: `Evidence.incident_id` is added as a third optional
+target alongside the existing `control_id`/`vendor_id`, so an incident's
+supporting documents live in the same evidence library Compliance
+already built (spec §80 again) — an incident report is evidence about an
+incident the same way a SOC 2 report is evidence about a vendor. Root
+Cause and Lessons Learned are two plain text columns directly on
+`SecurityIncident`, not a separate postmortem entity, since there is
+exactly one postmortem per incident with no history requirement.
+
+The Security Overview dashboard (SEC-08, spec §13) computes all nine
+named metrics as live aggregate queries with no cached rollup to go
+stale. "Evidence Coverage" — the one metric the spec names without
+defining precisely — is defined as the percentage of an org's
+`SecurityIncident` rows that have at least one linked `Evidence` row,
+directly exercising the `Evidence.incident_id` FK just added; "Security
+Score" is an intentionally simple, disclosed-in-code deduction model
+(100 minus a fixed weight per open critical alert/critical finding/high
+finding/open incident, floored at 0) rather than an external
+benchmark-scored formula, since spec §13 names the metric but not its
+formula and a fabricated-precision score would be worse than a
+transparent one.
+
+Security Policies (SEC-09) has no backing model of its own — the page
+reads `GET /compliance/policies` (already permission-open for read)
+directly, the same "no duplicate store" principle behind the Knowledge
+Graph (a view, not a second graph) and Global Search (scoped to existing
+tenant membership, not a new read-permission model): a policy is a
+policy regardless of which module's nav a user found it from.
+
+**Why**: This build's most consistent discipline is that a new
+spec-named "module" or "tab" is a query/permission/UI slice over an
+existing primitive whenever the underlying data genuinely is the same
+thing, and a real new table only when it structurally isn't (spec §80).
+Cloud/Identity Security findings are structurally identical to every
+other Finding — same lifecycle, same severity scale — so a fourth
+category is correct where a fourth table would just be two sources of
+truth for one concept. Evidence attaching to an Incident is the exact
+shape Evidence attaching to a Vendor already was (ADR-0031); reusing it
+a third time was cheaper and more consistent than a bespoke incident-
+evidence table. Tested in `tests/test_cloud_scanner.py` (fake-client-
+stub unit tests for both real checks, plus an endpoint-level proof of
+the uncredentialed `configured=False` path), `tests/test_security_incident_
+workspace.py` (9 tests: empty-state detail shape, timeline entries of
+both types, idempotent asset linking, cross-org rejection, postmortem
+update, asset/alert detail views including cross-org 404s), and
+`tests/test_security_overview.py` (5 tests: fresh-org all-zero state,
+real-count math including the disclosed score formula, tenant isolation,
+evidence-coverage percentage). Live-verified end-to-end against the
+running Docker stack: a fresh org's all-zero overview, the uncredentialed
+cloud-scan response, and a full incident-workspace chain (asset creation,
+finding creation, incident creation, asset linking, timeline entry,
+postmortem update, re-fetching the detail view) — all against real HTTP
+responses, not test-client mocks, with the disposable test data deleted
+afterward in FK-respecting order.

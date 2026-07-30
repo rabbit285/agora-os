@@ -593,7 +593,40 @@ export type SecurityIncident = {
   related_task_id: string | null;
   owner_id: string | null;
   closed_at: string | null;
+  root_cause: string | null;
+  lessons_learned: string | null;
   created_at: string;
+};
+
+export type SecurityIncidentTimelineEntry = {
+  id: string;
+  entry_type: "update" | "communication";
+  body: string;
+  author_id: string | null;
+  created_at: string;
+};
+
+export type SecurityIncidentDetail = SecurityIncident & {
+  timeline: SecurityIncidentTimelineEntry[];
+  affected_assets: SecurityAsset[];
+};
+
+export type SecurityOverview = {
+  security_score: number;
+  critical_alerts: number;
+  high_risks: number;
+  assets_monitored: number;
+  vulnerabilities_open: number;
+  identity_issues_open: number;
+  cloud_misconfigurations_open: number;
+  open_incidents: number;
+  evidence_coverage_percent: number;
+};
+
+export type CloudScanResult = {
+  configured: boolean;
+  checks_run: string[];
+  findings_created: number;
 };
 
 export type SalesAccount = {

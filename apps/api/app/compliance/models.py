@@ -224,6 +224,11 @@ class Evidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     vendor_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True, index=True
     )
+    # A third optional target: a security incident's workspace (spec §19
+    # "Evidence") reuses this same library rather than a fourth table.
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_incidents.id"), nullable=True, index=True
+    )
     file_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("files.id"), nullable=False
     )

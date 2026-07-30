@@ -62,22 +62,27 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/trust/[org_slug]` | [x] **genuinely public, no auth** — spec B4 Trust Center page: published categories, downloadable-document links, evidence-request submission form |
 
 Not yet built (spec §67 lists these under Compliance): Framework-specific
-dashboards (GDPR/EU AI Act individual views), Evidence Library standalone
-page, a standalone Data Inventory/RoPA detail view (list-only today),
-Policies list page (API exists, no UI yet), Regulatory Intelligence.
+dashboards (GDPR/EU AI Act individual views — `/compliance/frameworks/[id]`
+covers the generic per-framework case), Evidence Library standalone page
+(evidence upload/list lives inline on `/compliance` today), a standalone
+Data Inventory/RoPA detail view (list-only today), Regulatory Intelligence.
 
 ## SECURITY
 
 | Route | Status |
 |---|---|
-| `/security` | [x] assets + findings + alerts + incidents overview |
-| `/security/incidents/[id]` | [x] detail: status workflow, linked compliance risk, linked response task |
+| `/security` | [x] Security Overview dashboard (9 live metrics + "Run cloud scan" button) + assets + findings + alerts + incidents |
+| `/security/assets/[id]` | [x] detail: findings on this asset, incidents referencing this asset |
+| `/security/alerts/[id]` | [x] detail: status workflow, related finding |
+| `/security/incidents/[id]` | [x] detail: status workflow, linked compliance risk, linked response task, full incident workspace (Timeline + Communication log, Affected Assets linker, Root Cause/Lessons Learned editor) |
+| `/security/policies` | [x] reuses `GET /compliance/policies` read-only (spec §80 — no duplicate policy store) |
 
-Not yet built (spec §67 lists these under Security): standalone Asset
-Detail page, Cloud Security / Identity Security dedicated views, Alert
-Detail page, Security Policies. Incident workspace has a status workflow
-but not the full Timeline/Affected Assets/Evidence/Communication/Root
-Cause/Lessons Learned tab structure spec §19 describes.
+Cloud Security / Identity Security (spec §15-16) have no dedicated
+standalone views — findings from `app.secops.cloud_scanner` surface in the
+existing Findings list (filterable by category) and the Overview
+dashboard's Cloud Misconfigurations / Identity Issues tiles, consistent
+with the category-discriminator design already used for the Findings
+table rather than a fourth table.
 
 ## SALES
 
