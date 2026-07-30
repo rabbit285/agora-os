@@ -6,6 +6,8 @@ export type User = {
   id: string;
   email: string;
   full_name: string | null;
+  email_verified_at: string | null;
+  mfa_enabled: boolean;
 };
 
 export type Organization = {
@@ -43,6 +45,34 @@ export type Membership = {
   status: string;
   roles: string[];
 };
+
+export type Invitation = {
+  id: string;
+  email: string;
+  role_key: string;
+  accepted_at: string | null;
+  expires_at: string;
+};
+
+// Mirrors app.core.rbac.SYSTEM_ROLE_KEYS.
+export const SYSTEM_ROLES: { key: string; name: string }[] = [
+  { key: "org_admin", name: "Organization Admin" },
+  { key: "executive", name: "Executive" },
+  { key: "operations_manager", name: "Operations Manager" },
+  { key: "compliance_manager", name: "Compliance Manager" },
+  { key: "dpo", name: "DPO" },
+  { key: "security_manager", name: "Security Manager" },
+  { key: "ai_governance_manager", name: "AI Governance Manager" },
+  { key: "sales_manager", name: "Sales Manager" },
+  { key: "sales_representative", name: "Sales Representative" },
+  { key: "support_manager", name: "Support Manager" },
+  { key: "support_agent", name: "Support Agent" },
+  { key: "automation_manager", name: "Automation Manager" },
+  { key: "legal", name: "Legal" },
+  { key: "auditor", name: "Auditor" },
+  { key: "employee", name: "Employee" },
+  { key: "read_only", name: "Read Only" },
+];
 
 export type Notification = {
   id: string;

@@ -47,6 +47,18 @@ class PasswordResetToken(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class EmailVerificationToken(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "email_verification_tokens"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Session(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "sessions"
 
@@ -63,4 +75,9 @@ class Session(UUIDPrimaryKeyMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # False only for a session created by a login for an mfa_enabled user,
+    # until a correct TOTP code is submitted to /auth/mfa/verify — gates
+    # app.dependencies.get_org_context (see docs there), not get_current_user,
+    # so /auth/me and /auth/mfa/verify still work mid-challenge.
+    mfa_verified: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

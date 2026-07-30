@@ -219,11 +219,19 @@ implied to work.
   execution allowlist because the Copilot can't take actions yet, only
   answer questions; that becomes necessary before any AI-triggered action
   ships.
-- **No invitation flow.** New members can only join today via signup
-  (which creates a new organization) or direct database insertion (see
-  `tests/test_rbac.py` for the pattern). `/invite/[token]` is not built.
-- **MFA is schema-only.** `users.mfa_enabled` / `mfa_secret_encrypted`
-  columns exist; there is no enrollment or challenge flow yet.
+- **Invitation, email verification, and MFA are implemented** (fixed
+  2026-07-30, completeness-audit backlog PLAT-13/14/15): `org.users.manage`
+  holders invite an email to a specific role at
+  `POST /organizations/current/invitations`; accepting at `/invite/[token]`
+  creates (or attaches) the user and an active Membership with
+  `invited_by` set. Every signup triggers an email verification token
+  (`/verify-email/[token]`, resendable). MFA is real TOTP (RFC 6238, via
+  `pyotp`): `/settings/security` enrolls and confirms a secret, login for
+  an `mfa_enabled` user creates a session with `mfa_verified=False` that
+  `app.dependencies.get_org_context` rejects until a correct code is
+  submitted at `/mfa-challenge`. No real email provider is wired up yet
+  (same log-only dev adapter as password reset) — WebAuthn/hardware-key
+  MFA is not implemented, only TOTP.
 - **No SSO/SAML/SCIM.** Reserved for Phase 10 per the spec.
 
 ## Trust and progressive access model (spec §B)

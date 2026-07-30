@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -30,6 +31,8 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str | None
+    email_verified_at: datetime | None
+    mfa_enabled: bool
 
     model_config = {"from_attributes": True}
 
@@ -43,5 +46,48 @@ class OrganizationOut(BaseModel):
 
 
 class SignupResponse(BaseModel):
+    user: UserOut
+    organization: OrganizationOut
+
+
+class LoginResponse(BaseModel):
+    user: UserOut
+    mfa_required: bool
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class MfaEnrollResponse(BaseModel):
+    provisioning_uri: str
+
+
+class MfaCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class InvitationCreate(BaseModel):
+    email: EmailStr
+    role_key: str = Field(min_length=1, max_length=100)
+
+
+class InvitationOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    role_key: str
+    accepted_at: datetime | None
+    expires_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AcceptInvitationRequest(BaseModel):
+    token: str
+    full_name: str | None = Field(default=None, max_length=200)
+    password: str | None = Field(default=None, min_length=12, max_length=200)
+
+
+class AcceptInvitationResponse(BaseModel):
     user: UserOut
     organization: OrganizationOut

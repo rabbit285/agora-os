@@ -70,6 +70,14 @@ async def get_org_context(
 ) -> OrgContext:
     user, session = user_session
 
+    if not session.mfa_verified:
+        # Authenticated (get_current_user succeeded) but the login-time MFA
+        # challenge hasn't been completed yet — /auth/me and /auth/mfa/verify
+        # only depend on get_current_user, so they still work mid-challenge.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="MFA verification required"
+        )
+
     requested_org_id_raw = request.headers.get("X-Organization-Id")
     organization_id = (
         uuid.UUID(requested_org_id_raw) if requested_org_id_raw else session.organization_id

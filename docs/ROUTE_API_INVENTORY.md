@@ -1,13 +1,15 @@
 # Route & API Inventory
 
-Audit date: 2026-07-30. Frontend routes taken from a fresh `npm run build` (Next.js 16.2,
-Turbopack) run in this audit — not from `docs/ROUTES_AND_SCREENS.md`, which was found to
-contain 8 stale entries claiming placeholder pages that do not exist in the actual build
-(see `REMAINING_PRODUCT_GAPS.md` §A3). Backend routes taken from a fresh
-`GET /openapi.json` fetch against the running dev API (port 8001, container
+Audit date: 2026-07-30, updated same day after the Platform-foundation auth completion
+work (PLAT-13/14/15). Frontend routes taken from a fresh `npm run build` (Next.js 16.2,
+Turbopack) — not from `docs/ROUTES_AND_SCREENS.md`, which was found to contain stale
+entries claiming placeholder pages that did not exist in the build at audit time (see
+`REMAINING_PRODUCT_GAPS.md` §A3; the 3 that were genuinely missing — invite,
+verify-email, MFA challenge — are now built and listed below). Backend routes taken from
+a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (33 total, from `npm run build` output)
+## Frontend routes (37 total, from `npm run build` output)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -15,10 +17,13 @@ contain 8 stale entries claiming placeholder pages that do not exist in the actu
 |---|---|---|
 | `/` | ○ | Unified Dashboard — 2 of 4 metric tiles real, 2 honest "Not available yet" |
 | `/_not-found` | ○ | — |
-| `/login` | ○ | — |
+| `/login` | ○ | Redirects to `/mfa-challenge` when the account has TOTP enabled |
 | `/signup` | ○ | — |
 | `/forgot-password` | ○ | — |
 | `/reset-password/[token]` | ƒ | — |
+| `/verify-email/[token]` | ƒ | Consumes an email-verification token |
+| `/invite/[token]` | ƒ | Accepts an org invitation, creating or attaching the user |
+| `/mfa-challenge` | ○ | TOTP code entry, unlocks `get_org_context`-gated endpoints |
 | `/tasks` | ○ | — |
 | `/approvals` | ○ | — |
 | `/copilot` | ○ | Retrieval-grounded Q&A with citations |
@@ -44,22 +49,24 @@ contain 8 stale entries claiming placeholder pages that do not exist in the actu
 | `/automation` | ○ | Workflow list + step-form create |
 | `/automation/workflows/[id]` | ƒ | — |
 | `/settings/organization` | ○ | — |
-| `/settings/users` | ○ | — |
+| `/settings/users` | ○ | Member list + invite-a-member form + pending-invitations list with revoke |
+| `/settings/security` | ○ | Email verification status/resend, TOTP MFA enroll/confirm/disable |
 | `/settings/integrations` | ○ | Provider catalog, OAuth connections, webhooks |
 | `/coming-soon` | ƒ | Honest not-yet-built landing for unimplemented modules |
 
 ### Documented-but-nonexistent routes (drift, see gaps §A3)
 
 `/onboarding/company`, `/onboarding/goals`, `/notifications`, `/settings/roles`,
-`/settings/ai-providers`, `/invite/[token]`, `/verify-email/[token]`, MFA challenge — all
-listed in `docs/ROUTES_AND_SCREENS.md` as `[~]`/`[ ]` but produced no route in the build.
+`/settings/ai-providers` — listed in `docs/ROUTES_AND_SCREENS.md` as `[~]`/`[ ]` but
+produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
+challenge were also in this list at first-audit time; all 3 are now built — see above.)
 
-## Backend API surface (119 paths, from live `/openapi.json`)
+## Backend API surface (128 paths, from live `/openapi.json`)
 
 | Prefix | Paths | Notes |
 |---|---|---|
-| `/auth` | 6 | signup, login, logout, me, forgot-password, reset-password. No verify-email, no invite-accept. |
-| `/organizations` | 3 | current (GET/PATCH), current/members (GET only — no invite/add-member POST) |
+| `/auth` | 13 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation |
+| `/organizations` | 4 | current (GET/PATCH), current/members (GET), current/invitations (GET/POST) + revoke |
 | `/tasks`, `/approvals` | 4 | core primitives |
 | `/notifications` | 2 | list, mark-read — no dispatch-channel config endpoint |
 | `/files` | 2 | upload-url, get |

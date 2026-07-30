@@ -235,9 +235,16 @@ claim a protection that isn't there.
 
 ### Platform Foundation / RBAC / Multi-entity / Enterprise
 
-- **MISSING**: invitation flow (`/invite/[token]` has no page or API), email verification
-  flow (`/verify-email/[token]` has no page or API — and is never triggered anywhere in
-  the backend), MFA (schema-only: no challenge screen, no TOTP/WebAuthn enrollment code).
+- **[FIXED 2026-07-30]** ~~invitation flow, email verification flow, and MFA were all
+  missing~~ — all three are now real and live-verified: `POST
+  /organizations/current/invitations` (RBAC `org.users.manage`) + `/invite/[token]`
+  accept page creates/attaches a user with the invited role and `Membership.invited_by`
+  set; every signup triggers an email-verification token, `/verify-email/[token]`
+  consumes it; `/settings/security` enrolls real TOTP (RFC 6238 via `pyotp`), login for
+  an MFA-enabled user creates a session gated behind `/mfa-challenge` until a correct
+  code is submitted. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-13/14/15. WebAuthn/hardware
+  keys remain unimplemented (TOTP only) and no real email provider is wired up (same
+  log-only dev adapter as password reset).
 - **[FIXED 2026-07-30]** ~~4 of 16 seeded system roles had zero permission grants; zero
   `knowledge.*`/`copilot.*`/`ai.*` permission keys existed~~ — `executive`,
   `operations_manager`, and `employee` now carry scoped grants (approvals/tasks/

@@ -9,13 +9,13 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/login` | [x] |
+| `/login` | [x] redirects to MFA challenge when the account has TOTP enabled |
 | `/signup` | [x] |
-| `/invite/[token]` | [ ] |
+| `/invite/[token]` | [x] accept an org invitation, creating or attaching the user |
 | `/forgot-password` | [x] |
 | `/reset-password/[token]` | [x] |
-| `/verify-email/[token]` | [ ] |
-| MFA challenge | [ ] |
+| `/verify-email/[token]` | [x] |
+| MFA challenge (`/mfa-challenge`) | [x] TOTP code entry, gates `get_org_context` until verified |
 
 ## ONBOARDING
 
@@ -120,7 +120,8 @@ builder.
 | Route | Status |
 |---|---|
 | `/settings/organization` | [x] |
-| `/settings/users` | [x] |
+| `/settings/users` | [x] member list + invite-a-member form (email + role) + pending-invitations list with revoke |
+| `/settings/security` | [x] email verification status/resend, TOTP MFA enroll/confirm/disable |
 | `/settings/roles` | [~] read-only view |
 | `/settings/ai-providers` | [~] shows configured/not-configured state |
 | `/settings/integrations` | [x] provider catalog for 6 OAuth providers (permission preview of requested scopes before Connect, Not-configured badge), OAuth connections (health/scopes/sync history, refresh/disconnect/sync-now — sync polls a durable Temporal job to completion), webhook connections (create, copy URL/secret, link/unlink a workflow, received events) |

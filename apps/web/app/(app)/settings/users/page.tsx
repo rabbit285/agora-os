@@ -1,18 +1,65 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
-import type { Membership } from "@/lib/types";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ApiError, apiFetch } from "@/lib/api";
+import { SYSTEM_ROLES, type Invitation, type Membership } from "@/lib/types";
 
 export default function UsersSettingsPage() {
-  const { data: members, isLoading } = useQuery<Membership[]>({
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [roleKey, setRoleKey] = useState("employee");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: members, isLoading: membersLoading } = useQuery<Membership[]>({
     queryKey: ["organizations", "current", "members"],
     queryFn: () => apiFetch<Membership[]>("/api/v1/organizations/current/members"),
   });
+
+  const {
+    data: invitations,
+    isLoading: invitationsLoading,
+    error: invitationsError,
+  } = useQuery<Invitation[]>({
+    queryKey: ["organizations", "current", "invitations"],
+    queryFn: () => apiFetch<Invitation[]>("/api/v1/organizations/current/invitations"),
+  });
+
+  const createInvitation = useMutation({
+    mutationFn: () =>
+      apiFetch<Invitation>("/api/v1/organizations/current/invitations", {
+        method: "POST",
+        body: { email, role_key: roleKey },
+      }),
+    onSuccess: () => {
+      setEmail("");
+      setFormError(null);
+      queryClient.invalidateQueries({ queryKey: ["organizations", "current", "invitations"] });
+    },
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "Something went wrong");
+    },
+  });
+
+  const revokeInvitation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<Invitation>(`/api/v1/organizations/current/invitations/${id}/revoke`, {
+        method: "POST",
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations", "current", "invitations"] }),
+  });
+
+  const pendingInvitations = invitations?.filter(
+    (invitation) => invitation.accepted_at === null,
+  );
 
   return (
     <div>
@@ -20,7 +67,74 @@ export default function UsersSettingsPage() {
         title="Users"
         description="Members of this organization and their roles (spec section 54)."
       />
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+
+      <Card className="mb-6">
+        <CardContent className="flex flex-col gap-3 pt-6">
+          <div className="text-sm font-medium text-neutral-900">Invite a member</div>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              type="email"
+              placeholder="email@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="max-w-xs"
+            />
+            <Select value={roleKey} onChange={(e) => setRoleKey(e.target.value)} className="max-w-xs">
+              {SYSTEM_ROLES.map((role) => (
+                <option key={role.key} value={role.key}>
+                  {role.name}
+                </option>
+              ))}
+            </Select>
+            <Button
+              disabled={!email.trim() || createInvitation.isPending}
+              onClick={() => createInvitation.mutate()}
+            >
+              {createInvitation.isPending ? "Sending…" : "Send invite"}
+            </Button>
+          </div>
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          <p className="text-xs text-neutral-400">
+            No email provider is configured in this environment — the invitation link is logged
+            server-side instead of emailed (see docs/KNOWN_LIMITATIONS.md).
+          </p>
+        </CardContent>
+      </Card>
+
+      {invitationsLoading && <p className="text-sm text-neutral-500">Loading invitations…</p>}
+      {invitationsError && (
+        <p className="mb-4 text-sm text-red-600">Could not load pending invitations.</p>
+      )}
+      {pendingInvitations && pendingInvitations.length > 0 && (
+        <div className="mb-6 flex flex-col gap-2">
+          <div className="text-sm font-medium text-neutral-900">Pending invitations</div>
+          {pendingInvitations.map((invitation) => (
+            <Card key={invitation.id}>
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="text-sm text-neutral-900">{invitation.email}</div>
+                  <div className="text-xs text-neutral-400">
+                    {invitation.role_key.replace(/_/g, " ")}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={revokeInvitation.isPending}
+                  onClick={() => revokeInvitation.mutate(invitation.id)}
+                >
+                  Revoke
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {membersLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {members && members.length === 0 && (
+        <p className="text-sm text-neutral-500">No members yet.</p>
+      )}
       <div className="flex flex-col gap-2">
         {members?.map((member) => (
           <Card key={member.id}>

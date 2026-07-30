@@ -54,6 +54,7 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { label: "Organization", href: "/settings/organization", implemented: true },
       { label: "Users", href: "/settings/users", implemented: true },
+      { label: "Security", href: "/settings/security", implemented: true },
       { label: "Integrations", href: "/settings/integrations", implemented: true },
     ],
   },

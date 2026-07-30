@@ -32,8 +32,11 @@ export default function LoginPage() {
   async function onSubmit(values: FormValues) {
     setServerError(null);
     try {
-      await apiFetch("/api/v1/auth/login", { method: "POST", body: values });
-      router.push("/");
+      const result = await apiFetch<{ mfa_required: boolean }>("/api/v1/auth/login", {
+        method: "POST",
+        body: values,
+      });
+      router.push(result.mfa_required ? "/mfa-challenge" : "/");
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : "Something went wrong");
     }

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +52,15 @@ from app.compliance.service import (
     update_dsar_status,
     update_questionnaire_answer,
 )
-from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
+from app.core.models import (
+    File,
+    Invitation,
+    LegalEntity,
+    Membership,
+    MembershipRole,
+    Organization,
+    Task,
+)
 from app.core.rbac import ensure_system_roles, get_system_role
 from app.core.storage import ensure_bucket, upload_object
 from app.db.session import AsyncSessionLocal
@@ -65,7 +73,7 @@ from app.sales.models import Account, Contact, Opportunity, OutreachMessage
 from app.sales.service import send_outreach_message
 from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding
 from app.secops.service import create_incident
-from app.security import hash_password
+from app.security import generate_token, hash_password, hash_token
 from app.support.models import CSATResponse, Customer, KnowledgeArticle, TicketMessage
 from app.support.service import create_ticket, flag_upsell_signal
 from app.trust_center.models import TrustCenterItem
@@ -110,10 +118,13 @@ async def seed() -> None:
                 email=DEMO_ADMIN_EMAIL,
                 hashed_password=hash_password(DEMO_ADMIN_PASSWORD),
                 full_name="Acme Admin",
+                email_verified_at=datetime.now(UTC),
             )
             db.add(admin)
             await db.flush()
             logger.info("Created admin user %s", admin.email)
+        elif admin.email_verified_at is None:
+            admin.email_verified_at = datetime.now(UTC)
 
         membership = (
             await db.execute(
@@ -157,6 +168,24 @@ async def seed() -> None:
                     )
                 )
             logger.info("Seeded %d sample tasks", len(sample_tasks))
+
+        existing_invitation = (
+            await db.execute(
+                select(Invitation).where(Invitation.organization_id == organization.id)
+            )
+        ).scalar_one_or_none()
+        if existing_invitation is None:
+            db.add(
+                Invitation(
+                    organization_id=organization.id,
+                    email="pending-invite@example.com",
+                    role_key="security_manager",
+                    token_hash=hash_token(generate_token()),
+                    invited_by=admin.id,
+                    expires_at=datetime.now(UTC) + timedelta(days=7),
+                )
+            )
+            logger.info("Seeded 1 pending invitation")
 
         await db.commit()
 

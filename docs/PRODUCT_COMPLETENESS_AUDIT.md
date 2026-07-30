@@ -7,13 +7,17 @@ Compliance/Trust program")
 `git status` was clean at the time of writing; only the 5 documents listed below were
 added, in a separate commit from all prior feature work.
 
-**Update 2026-07-30 (post-audit fix)**: the one concrete code defect this audit found
-live — the audit-event `object_id="None"` bug (PLAT-08) — has since been fixed, tested,
-and live-reverified, per explicit follow-up instruction to treat this audit as the
-implementation backlog. See `REMAINING_PRODUCT_GAPS.md` §A1 for the fix detail. All
-counts below reflect PLAT-08 now VERIFIED (44 VERIFIED / 19 PARTIAL, previously
-43/20). This is the only status change so far; the verdict remains B pending the rest of
-the backlog.
+**Update 2026-07-30 (implementation backlog in progress)**: per explicit follow-up
+instruction, this audit's findings are now being worked as an implementation backlog,
+fixing every PARTIAL/MISSING non-AWS requirement in dependency order. Status changes so
+far: PLAT-08 (audit-event `object_id` bug), PLAT-05/06 (RBAC role scoping,
+Knowledge/Copilot permission gating), and PLAT-13/14/15 (email verification, invitation
+flow, TOTP MFA) have all moved from PARTIAL/MISSING to VERIFIED — see
+`REMAINING_PRODUCT_GAPS.md` for fix detail on each and `SPEC_TRACEABILITY_MATRIX.md` for
+the authoritative per-requirement status. **Those two documents are the live source of
+truth while this backlog is in progress** — the requirement counts and verdict below are
+frozen at initial-audit values and will be fully recomputed in one pass once the backlog
+reaches PARTIAL=0/MISSING=0, per the final "rerun the complete audit" step.
 
 This is an audit, not a status report. Every VERIFIED claim in the companion
 `SPEC_TRACEABILITY_MATRIX.md` is backed by at least one of: a file:line code citation, a
