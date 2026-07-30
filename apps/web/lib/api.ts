@@ -12,7 +12,7 @@ export class ApiError extends Error {
 }
 
 type FetchOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   organizationId?: string;
 };

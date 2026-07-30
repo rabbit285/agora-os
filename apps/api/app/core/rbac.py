@@ -58,6 +58,9 @@ PERMISSIONS: dict[str, str] = {
     "sales.leads.manage": "Create and update leads",
     "sales.opportunities.manage": "Create and update opportunities",
     "sales.outreach.manage": "Draft and send outreach messages",
+    "sales.icp.manage": "Configure the Ideal Customer Profile and rescoring",
+    "sales.sequences.manage": "Create sequences, campaigns, and enroll contacts",
+    "sales.meetings.manage": "Schedule meetings and generate prep notes",
     "support.tickets.manage": "Create and update support tickets and messages",
     "support.knowledge.manage": "Create, edit, and publish knowledge articles",
     "automation.workflows.manage": "Create, edit, and publish automation workflows",
@@ -99,6 +102,9 @@ SALES_PERMISSIONS = [
     "sales.leads.manage",
     "sales.opportunities.manage",
     "sales.outreach.manage",
+    "sales.icp.manage",
+    "sales.sequences.manage",
+    "sales.meetings.manage",
 ]
 
 SUPPORT_PERMISSIONS = [

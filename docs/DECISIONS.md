@@ -1168,3 +1168,80 @@ finding creation, incident creation, asset linking, timeline entry,
 postmortem update, re-fetching the detail view) — all against real HTTP
 responses, not test-client mocks, with the disposable test data deleted
 afterward in FK-respecting order.
+
+## ADR-0038 — Sales depth (ICP scoring, Lead Finder, Enrichment, Sequences/Campaigns, Meeting Assistant, Sales Intelligence) reuses `send_outreach_message`'s compliance gate and the credential-gated honesty pattern rather than inventing parallel mechanisms
+
+**Decision**: ICP scoring (`app.sales.icp`, spec §20) is a disclosed,
+deterministic 0-100 formula — industry match and employee-count fit worth
+up to 50 points each — against a single org-wide `ICPProfile`, not a
+black-box model or an externally-benchmarked score. Saving the profile
+immediately rescans every existing Account (`rescore_accounts`); a new
+Account created afterward is scored at creation time rather than left
+`None` until the next full rescan.
+
+Lead Finder (`app.sales.lead_finder`, spec §21) is explicitly *not* an
+external prospecting data source — none is configured in this build. It
+surfaces real value over data the org already has: Accounts that fit its
+own ICP (score ≥60, or every Account if no profile is saved yet) but have
+no open Lead tracking them. Enrichment (`app.sales.enrichment`, spec §21)
+is the one genuinely external call in this cluster — a real Clearbit
+Company API request gated on `CLEARBIT_API_KEY`, following the exact
+credential-gated honesty pattern established for the AI providers, the
+six OAuth integrations, and AWS Cloud Security scanning (ADR-0028,
+ADR-0037): absent a key, it returns `configured=False` and touches
+nothing, never a fabricated company profile.
+
+Sequences/Campaigns (`app.sales.sequences`, spec §23) add
+`Sequence`/`SequenceStep`/`SequenceEnrollment`/`Campaign`, but
+deliberately no second send mechanism: `advance_due_enrollments` builds an
+`OutreachMessage` from the step's template and calls the exact same
+`app.sales.service.send_outreach_message` a manually composed message
+uses, so every automated send is gated by the identical Compliance check
+(spec §91) — there is no way for a Sequence step to bypass the suppression
+gate a manual send would hit. Template substitution is deliberately
+simple (`{{first_name}}`/`{{full_name}}` string replacement) rather than a
+full templating engine, matching this being a v1 cadence engine rather
+than a marketing-automation platform. Step advancement
+(`POST /sales/sequences/process-due-steps`) is a plain, independently
+callable, independently testable function rather than something wired to
+a Temporal schedule today — Automation's own Temporal migration (separate,
+larger work) is the natural place to attach a periodic trigger onto this
+exact function later, so this is sequencing of work, not a missing
+capability. `Campaign` deliberately has no send path of its own: launching
+one enrolls its target contacts into a `Sequence` via the same
+`SequenceEnrollment` machinery, so a Campaign is a named, tracked
+bulk-enrollment, not a parallel messaging mechanism.
+
+Meeting Assistant (`app.sales.meetings`, spec §26) generates prep notes via
+a real call to the existing retrieval-grounded `ask_copilot` — when the
+org's knowledge base has nothing relevant, the honest "no evidence"
+message it already returns elsewhere flows through unchanged, not a
+fabricated briefing. Sales Intelligence (`app.sales.intelligence`, spec
+§29) is entirely live-computed aggregate queries (pipeline value by
+stage, win rate, average deal size, top ICP accounts, sequence completion
+rate) with no cached rollup to go stale, the same discipline the Security
+Overview dashboard established (ADR-0037).
+
+**Why**: This build's most consistent pattern — reuse a shared primitive
+and a disclosed real/honest-fallback boundary rather than a bespoke
+mechanism per feature — applies as cleanly to Sales' most feature-heavy
+cluster as it did to Compliance's and Security's. The risk unique to this
+cluster was a second, ungated send path being introduced by Sequences;
+routing every automated step through `send_outreach_message` instead of a
+new function closes that off structurally, not just by test coverage.
+Tested in `tests/test_sales_icp_and_enrichment.py` (9 tests: scoring
+formula unit tests, save-triggers-rescore, new-account auto-score, RBAC
+denial, uncredentialed enrichment), `tests/test_sales_sequences_and_
+campaigns.py` (7 tests: step creation, immediate first-step firing,
+suppression respected mid-sequence, multi-step wait timing, campaign
+stats, cross-org 404), `tests/test_sales_meetings_intelligence_and_lead_
+finder.py` (9 tests), and `tests/test_sales_detail_views.py` (5 tests).
+Live-verified end-to-end against the running Docker stack: ICP profile
+save → immediate account rescore, Lead Finder creating a real Lead from a
+qualifying Account, the uncredentialed enrichment response, a full
+Sequence chain (step added, contact enrolled, step fired with real
+`{{first_name}}` substitution producing a real "sent" OutreachMessage),
+Meeting prep notes genuinely falling back to the "no evidence" message
+with an empty knowledge base, and Sales Intelligence's win-rate/average-
+deal-size math against real won/lost Opportunities — with disposable test
+data deleted afterward in FK-respecting order.

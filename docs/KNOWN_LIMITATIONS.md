@@ -91,13 +91,31 @@ implied to work.
   account scanning has not been live-verified (no AWS account available
   in this environment) — only the uncredentialed path and the two check
   functions (against fake client stubs) have been.
-- **Sales**: outreach "sending" doesn't call a real email/LinkedIn
-  provider — it only transitions the message's own status (`sent` or
-  `blocked`), gated by a genuine compliance check
-  (`Contact.do_not_contact`), not a stub of one. No sequences/campaigns
-  (multi-step automation), no lead-finding/enrichment (needs external
-  data connectors), no meetings or sales inbox. The suppression check
-  itself is a single boolean, not the fuller jurisdiction/consent/
+- **Sales**: outreach "sending" (manual or via a Sequence/Campaign step)
+  doesn't call a real email/LinkedIn provider — it only transitions the
+  message's own status (`sent` or `blocked`), gated by a genuine
+  compliance check (`Contact.do_not_contact`), not a stub of one.
+  Sequences/Campaigns now exist (`app.sales.sequences`) — multi-step
+  cadences with simple `{{first_name}}` template substitution, advanced
+  by a real, independently-callable function
+  (`POST /sales/sequences/process-due-steps`) rather than a Temporal
+  schedule (Automation's own Temporal migration is the natural place to
+  wire a periodic trigger onto it later). ICP scoring
+  (`app.sales.icp`) is a deterministic, disclosed 0-100 formula (industry
+  match + employee-count fit, 50 points each), not a black-box model.
+  Lead Finder (`app.sales.lead_finder`) surfaces the org's own existing
+  ICP-fit Accounts lacking an open Lead — it is not an external
+  prospecting data source. Company Enrichment (`app.sales.enrichment`)
+  is real when a `CLEARBIT_API_KEY` is configured, honestly
+  `configured=false` otherwise — the same credential-gated pattern as
+  the AI providers, OAuth integrations, and AWS Cloud Security scanning.
+  Meetings exist with a real AI Copilot-generated prep-notes feature
+  (`app.sales.meetings`, honestly falls back to "no evidence" when the
+  knowledge base has nothing relevant) — there is no real calendar sync
+  (Google/Microsoft Calendar), so scheduling is manual entry only. Sales
+  Inbox shows outbound outreach status only — no inbound reply tracking,
+  since no real email/LinkedIn provider is connected. The suppression
+  check itself is a single boolean, not the fuller jurisdiction/consent/
   marketing-basis engine spec §91 describes (ADR-0019). A `closed_won`
   Opportunity creates a real Support Customer + onboarding Task
   (ADR-0025), but not a real welcome email or a billing/accounting

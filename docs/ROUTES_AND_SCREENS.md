@@ -88,13 +88,16 @@ table rather than a fourth table.
 
 | Route | Status |
 |---|---|
-| `/sales` | [x] accounts + pipeline overview |
-| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won, and a deal-blocker link to `/compliance/security-reviews/[id]` once a security review exists) |
-
-Not yet built (spec §67 lists these under Sales): ICP Builder, Lead
-Finder, Lead Detail, Contact Detail (standalone), Sequences/Sequence
-Builder, Campaigns, Sales Inbox, Meetings, Opportunity Detail (standalone),
-Sales Intelligence.
+| `/sales` | [x] Sales Intelligence dashboard, accounts, leads, pipeline overview, Lead Finder button |
+| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won, and a deal-blocker link to `/compliance/security-reviews/[id]` once a security review exists), ICP score badge, Enrich button |
+| `/sales/icp` | [x] ICP Builder — saving immediately rescans every Account |
+| `/sales/leads/[id]` | [x] detail: linked account/contact, status workflow |
+| `/sales/contacts/[id]` | [x] detail: linked account, outreach history, suppression toggle |
+| `/sales/opportunities/[id]` | [x] detail: linked account, stage workflow, onboarding indicator |
+| `/sales/sequences`, `/sales/sequences/[id]` | [x] Sequence list + Sequence Builder (steps, enrollments, enroll-a-contact) |
+| `/sales/campaigns`, `/sales/campaigns/[id]` | [x] Campaign list + create + real stats (enrolled/sent/blocked/completed) |
+| `/sales/inbox` | [x] Sales Inbox — outbound outreach status across all contacts (no inbound reply tracking, no real provider connected) |
+| `/sales/meetings` | [x] Meeting CRUD + real AI Copilot-generated prep notes (Meeting Assistant) |
 
 ## SUPPORT
 

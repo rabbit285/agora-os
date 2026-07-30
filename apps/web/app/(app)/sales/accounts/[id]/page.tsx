@@ -11,7 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { OutreachMessage, SalesAccountDetail, SecurityReview } from "@/lib/types";
+import type {
+  EnrichmentResult,
+  OutreachMessage,
+  SalesAccountDetail,
+  SecurityReview,
+} from "@/lib/types";
 
 export default function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -59,6 +64,12 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
     },
   });
 
+  const enrich = useMutation({
+    mutationFn: () =>
+      apiFetch<EnrichmentResult>(`/api/v1/sales/accounts/${id}/enrich`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sales", "accounts", id] }),
+  });
+
   if (!account) return null;
 
   return (
@@ -68,6 +79,15 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
         description={account.industry ?? undefined}
         actions={
           <div className="flex items-center gap-3">
+            {account.icp_score !== null && <Badge variant="outline">ICP {account.icp_score}</Badge>}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={enrich.isPending}
+              onClick={() => enrich.mutate()}
+            >
+              {enrich.isPending ? "Enriching…" : "Enrich"}
+            </Button>
             <Link
               href={`/knowledge/graph?type=sales_account&id=${id}`}
               className="text-sm text-neutral-500 hover:underline"
@@ -78,6 +98,15 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
           </div>
         }
       />
+      {enrich.data && (
+        <p className="mb-4 text-xs text-neutral-500">
+          {enrich.data.configured
+            ? enrich.data.updated_fields.length > 0
+              ? `Enriched: updated ${enrich.data.updated_fields.join(", ")}.`
+              : "No new fields to update from enrichment."
+            : "Company enrichment is not configured for this organization (no Clearbit API key set)."}
+        </p>
+      )}
 
       <div className="mb-8">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
@@ -88,7 +117,12 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
             <Card key={contact.id}>
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{contact.full_name}</div>
+                  <Link
+                    href={`/sales/contacts/${contact.id}`}
+                    className="font-medium text-neutral-900 hover:underline"
+                  >
+                    {contact.full_name}
+                  </Link>
                   <div className="text-xs text-neutral-400">{contact.email}</div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -161,7 +195,12 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
               <Card key={opportunity.id}>
                 <CardContent className="flex items-center justify-between pt-6">
                   <div>
-                    <div className="font-medium text-neutral-900">{opportunity.title}</div>
+                    <Link
+                      href={`/sales/opportunities/${opportunity.id}`}
+                      className="font-medium text-neutral-900 hover:underline"
+                    >
+                      {opportunity.title}
+                    </Link>
                     {opportunity.onboarding_customer_id && (
                       <Link href="/support" className="text-xs text-neutral-500 hover:underline">
                         Onboarded as a Support customer →

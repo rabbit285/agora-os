@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     )
     aws_security_scan_region: str = Field(default="eu-central-1", alias="AWS_SECURITY_SCAN_REGION")
 
+    # Sales company enrichment (spec §21) — optional; absence means
+    # Enrichment reports configured=false rather than a fabricated
+    # company profile.
+    clearbit_api_key: str | None = Field(default=None, alias="CLEARBIT_API_KEY")
+
     # Billing — optional
     stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
@@ -141,6 +146,7 @@ def _diagnose(settings: Settings) -> None:
         "SLACK_CLIENT_ID": settings.slack_client_id,
         "SALESFORCE_CLIENT_ID": settings.salesforce_client_id,
         "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
+        "CLEARBIT_API_KEY": settings.clearbit_api_key,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:

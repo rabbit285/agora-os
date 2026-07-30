@@ -223,14 +223,32 @@ claim a protection that isn't there.
   page all exist. Security Policies deliberately reuses `GET /compliance/policies`
   read-only rather than inventing a second policy store (spec §80).
 
-### Sales
+### Sales (resolved 2026-07-30 — see SALES-04/05/06/07/08 in the traceability matrix)
 
-- **MISSING**: ICP scoring algorithm — `icp_score` is a bare column, only ever set via a
-  hardcoded seed demo value (87.5); no scoring logic exists.
-- **MISSING**: Lead Finder, Lead/Contact/Opportunity detail pages, Sequences/Sequence
-  Builder, Campaigns, Sales Inbox, Meetings, Sales Intelligence — all entirely absent
-  beyond bare CRUD (Sequences has a single manual-send `OutreachMessage`, no automated
-  cadence).
+- **RESOLVED**: ICP scoring (spec §20) — `app.sales.icp` computes a deterministic 0-100
+  score (industry match + employee-count fit) against a real org-configured
+  `ICPProfile`; saving the profile rescans every existing Account.
+- **RESOLVED**: Lead Finder (spec §21) — surfaces the org's own existing ICP-fit Accounts
+  lacking an open Lead. Deliberately not an external prospecting data source (none is
+  configured in this build).
+- **RESOLVED**: Enrichment (spec §21) — real Clearbit Company API call gated on
+  `CLEARBIT_API_KEY`; honest `configured=false` when absent, never a fabricated profile.
+- **RESOLVED**: Sequences/Sequence Builder/Campaigns (spec §23) — a real multi-step
+  cadence engine (`app.sales.sequences`). Every automated step reuses
+  `send_outreach_message`, so the same compliance gate applies to automated sends as
+  manual ones. Step advancement is a real, independently-callable function, not yet
+  wired to a periodic Temporal schedule (natural follow-on once Automation's own
+  Temporal migration lands).
+- **RESOLVED**: Sales Inbox (spec §24) — outbound outreach status across all contacts.
+  Still outbound-only (disclosed): no inbound reply tracking, since no real
+  email/LinkedIn provider is connected.
+- **RESOLVED**: Meeting Assistant (spec §26) — real `Meeting` CRUD plus AI
+  Copilot-generated prep notes (retrieval-grounded, honest "no evidence" fallback). No
+  real calendar sync (Google/Microsoft) — scheduling is manual entry.
+- **RESOLVED**: Sales Intelligence (spec §29) — live-computed pipeline value by stage,
+  win rate, average deal size, top ICP accounts, sequence completion rate.
+- **RESOLVED (frontend)**: Lead/Contact/Opportunity standalone detail pages all exist,
+  each showing real linked data (account/contact cross-links, outreach history).
 - **VERIFIED (genuinely real, not a gap)**: `close_opportunity_won`'s idempotency guard,
   no-contact honest-skip fallback, and the account-detail security-review deal-blocker
   indicator — all independently re-confirmed live in this audit.

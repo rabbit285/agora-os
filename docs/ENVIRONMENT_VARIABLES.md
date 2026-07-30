@@ -75,6 +75,18 @@ responses are just clearly labeled demo output until a key is added.
 |---|---|
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` | billing module not yet implemented (Phase 10); reserved now so the shape doesn't change later |
 
+## Cloud Security scanning — optional
+
+| Variable | Behavior when unset |
+|---|---|
+| `AWS_SECURITY_SCAN_ACCESS_KEY_ID` / `AWS_SECURITY_SCAN_SECRET_ACCESS_KEY` / `AWS_SECURITY_SCAN_REGION` | Cloud Security / Identity Security (`POST /api/v1/security/cloud-scan`) reports `configured: false` and creates nothing — see `docs/KNOWN_LIMITATIONS.md`. Deliberately separate from `S3_*` above, which point at this app's own MinIO/S3 object storage, not a customer AWS account to scan. |
+
+## Sales enrichment — optional
+
+| Variable | Behavior when unset |
+|---|---|
+| `CLEARBIT_API_KEY` | Company enrichment (`POST /api/v1/sales/accounts/{id}/enrich`) reports `configured: false` and changes nothing — see `docs/KNOWN_LIMITATIONS.md`. |
+
 ## Integrations — optional
 
 Every OAuth provider follows the identical three-variable shape

@@ -700,6 +700,115 @@ export type OutreachMessage = {
   sent_at: string | null;
 };
 
+export type SalesLeadDetail = SalesLead & {
+  account: SalesAccount | null;
+  contact: SalesContact | null;
+};
+
+export type SalesContactDetail = SalesContact & {
+  account: SalesAccount | null;
+  outreach: OutreachMessage[];
+};
+
+export type SalesOpportunityDetail = SalesOpportunity & {
+  account: SalesAccount;
+};
+
+export type ICPProfile = {
+  id: string;
+  target_industries: string[];
+  min_employee_count: number | null;
+  max_employee_count: number | null;
+  created_at: string;
+};
+
+export type LeadFinderResult = {
+  created_leads: SalesLead[];
+  candidates_considered: number;
+};
+
+export type EnrichmentResult = {
+  configured: boolean;
+  updated_fields: string[];
+};
+
+export type SequenceStep = {
+  id: string;
+  order_index: number;
+  wait_days: number;
+  channel: "email" | "linkedin";
+  subject_template: string | null;
+  body_template: string;
+};
+
+export type Sequence = {
+  id: string;
+  name: string;
+  status: "active" | "paused";
+  created_at: string;
+};
+
+export type SequenceEnrollment = {
+  id: string;
+  sequence_id: string;
+  contact_id: string;
+  campaign_id: string | null;
+  status: "active" | "completed" | "exited";
+  current_step_index: number;
+  next_step_due_at: string;
+  enrolled_at: string;
+};
+
+export type SequenceDetail = Sequence & {
+  steps: SequenceStep[];
+  enrollments: SequenceEnrollment[];
+};
+
+export type ProcessDueStepsResult = {
+  processed: number;
+};
+
+export type Campaign = {
+  id: string;
+  name: string;
+  sequence_id: string;
+  status: "draft" | "active" | "completed";
+  created_at: string;
+};
+
+export type CampaignStats = {
+  enrolled: number;
+  messages_sent: number;
+  messages_blocked: number;
+  completed: number;
+};
+
+export type CampaignDetail = Campaign & {
+  stats: CampaignStats;
+};
+
+export type Meeting = {
+  id: string;
+  title: string;
+  account_id: string | null;
+  opportunity_id: string | null;
+  contact_id: string | null;
+  scheduled_at: string;
+  notes: string | null;
+  prep_notes: string | null;
+  status: "scheduled" | "completed" | "no_show" | "cancelled";
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type SalesIntelligence = {
+  pipeline_value_by_stage: Record<string, number>;
+  win_rate_percent: number;
+  average_deal_size: number;
+  top_accounts_by_icp_score: SalesAccount[];
+  sequence_completion_rate_percent: number;
+};
+
 export type SupportCustomer = {
   id: string;
   name: string;
