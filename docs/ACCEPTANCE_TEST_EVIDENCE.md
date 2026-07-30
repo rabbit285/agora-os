@@ -24,8 +24,10 @@ implement real extraction (PDF/DOCX/TXT/MD), real chunking, real JSON-stored emb
 real Python-scan cosine-similarity retrieval (ADR-0007/ADR-0012). Test-suite covered.
 Live, this audit: a Copilot ask against the seeded org returned real citations
 (`document_id`, `chunk_id`, `chunk_index`, `score`) proving the retrieval index is live
-and queryable, not decorative. XLSX/HTML are claimed-supported but have no extractor code
-(see `REMAINING_PRODUCT_GAPS.md` §B Knowledge).
+and queryable, not decorative. **Update 2026-07-30**: XLSX and HTML extractors were added
+and live-verified end to end (real presigned upload → real Temporal-worker ingestion →
+`ready` status with correctly extracted content) — see `REMAINING_PRODUCT_GAPS.md`
+Knowledge & RAG section.
 
 ### 3. Evidence-grounded Copilot response with citations — 🟢 VERIFIED
 Live, this audit: `POST /api/v1/ai/copilot/ask {"prompt":"What is our data retention
@@ -167,10 +169,15 @@ this audit) — DSAR status can be marked "fulfilled" but nothing in the codebas
 performs the export or the erasure. This is a real gap between "we tracked that we
 should do this" and "the system did it."
 
-### 24. Global search permission enforcement — 🔴 MISSING (feature itself does not exist)
-Global search is not implemented at all (`PLAT-21`); the sidebar entry correctly routes to
-the honest coming-soon state rather than a broken or fake result, but there is nothing to
-verify permission enforcement against.
+### 24. Global search permission enforcement — 🟢 VERIFIED (fixed 2026-07-30)
+`app/search/service.py` provides a real, tenant-scoped `ILIKE` search across 16 entity
+types; `/search` page reachable from an always-visible top-nav box. Live, this audit: a
+fresh org's account was found by name; a header-spoof attempt to search a different
+(existing) organization's data via the same session correctly returned `403 "Not
+authorized"` — identical enforcement to every other tenant-scoped endpoint in the app.
+No per-module *read* permission distinct from tenant membership exists anywhere else in
+the app (only writes are permission-gated), so search doesn't invent one just for
+itself — this is disclosed in the module's docstring rather than silently scoped down.
 
 ### 25. AI action risk classification + approval enforcement — 🟡 PARTIAL
 The closest verified analog is the **AI System Inventory**'s EU AI Act risk-tier
@@ -211,9 +218,10 @@ afterward, not risk-gated beforehand.
 | 21 | Cross-tenant access denial | 🟢 |
 | 22 | Restricted-role access denial | 🟢 |
 | 23 | Data export/deletion controls | 🔴 |
-| 24 | Global search permission enforcement | 🔴 |
+| 24 | Global search permission enforcement | 🟢 (fixed 2026-07-30) |
 | 25 | AI action risk classification + approval | 🟡 |
 
-**14 VERIFIED, 8 PARTIAL, 2 MISSING** (out of 25 named scenarios; item 6 counts as
-verified for its request-tracking scope with the export/erasure gap called out separately
-under item 23 per the audit's literal wording).
+**15 VERIFIED, 8 PARTIAL, 1 MISSING** (out of 25 named scenarios, updated 2026-07-30 as
+item 24 moved to VERIFIED; item 6 counts as verified for its request-tracking scope with
+the export/erasure gap called out separately under item 23 per the audit's literal
+wording).

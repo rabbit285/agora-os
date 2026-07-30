@@ -66,7 +66,17 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
       <PageHeader
         title={account.name}
         description={account.industry ?? undefined}
-        actions={<StatusBadge status={account.status} />}
+        actions={
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/knowledge/graph?type=sales_account&id=${id}`}
+              className="text-sm text-neutral-500 hover:underline"
+            >
+              View in Knowledge Graph
+            </Link>
+            <StatusBadge status={account.status} />
+          </div>
+        }
       />
 
       <div className="mb-8">

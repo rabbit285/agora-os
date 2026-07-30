@@ -39,7 +39,7 @@ is still present per row, just labeled inline rather than column-separated.
 | PLAT-18 | SSO/SAML/SCIM | MISSING (spec's own Phase 10 deferral, §59, §79) | No implementation found | Consistent with spec's own deferral | No |
 | PLAT-19 | Billing & entitlements | MISSING | No implementation found | Full build | No |
 | PLAT-20 | Reporting module | MISSING | No implementation found | Full build | No |
-| PLAT-21 | Global search | MISSING | FE: sidebar entry routes to honest coming-soon state; BE: no endpoint | Full build | No |
+| PLAT-21 | Global search | VERIFIED (fixed 2026-07-30) | See KNOW-08/PLAT-21 row below in the Knowledge & RAG section (same requirement, tracked once) | — | No |
 | PLAT-22 | Global Create button | MISSING | Not present in navigation/build output | Full build | No |
 | PLAT-23 | Workflow engine decoupled from HTTP request cycle via Temporal (§61) | PARTIAL (Automation module specifically) | BE: Automation executes fully synchronously in-request, zero Temporal usage, contradicting §61; Knowledge and Integrations correctly use Temporal | Move Automation execution onto Temporal | No |
 | PLAT-24 | CI/CD pipeline configuration exists in-repo | MISSING | No `.github/` directory found | Add CI workflow config (excludes live AWS deploy validation) | No |
@@ -50,12 +50,12 @@ is still present per row, just labeled inline rather than column-separated.
 |---|---|---|---|---|---|
 | KNOW-01 | Document upload → parsing → chunking → embedding pipeline | VERIFIED | BE: `app/knowledge/{parsing,chunking,retrieval,service}.py`; MIG: knowledge migration `532f9ba4848e`; API: `/knowledge/documents`; FE: `/knowledge`, `/knowledge/[id]`; TEST: suite | — | No |
 | KNOW-02 | PDF/DOCX/TXT/MD ingestion | VERIFIED | BE: real extractor code confirmed by direct read | — | No |
-| KNOW-03 | XLSX/HTML ingestion (claimed-supported) | PARTIAL | BE: no extractor code exists for either format despite being claimed-supported | Implement extractors or correct the claim | No |
+| KNOW-03 | XLSX/HTML ingestion (claimed-supported) | VERIFIED (fixed 2026-07-30) | BE: `_extract_xlsx` (openpyxl), `_extract_html` (BeautifulSoup, strips script/style) in `app/knowledge/parsing.py`; TEST: `test_knowledge_extractors_and_reranking.py`; RUN: this audit — live-uploaded a real .xlsx and a real .html file through the presigned-URL flow, both ingested to `ready` via the real Temporal worker with correct extracted chunk content | — | No |
 | KNOW-04 | PPTX / OCR ingestion | MISSING (correctly disclosed as architecture-only) | `docs/DECISIONS.md` honestly discloses this | Full build | No |
 | KNOW-05 | Retrieval via embedding similarity search | VERIFIED | BE: JSON-stored embeddings (ADR-0007), Python-scan cosine similarity (ADR-0012), both honestly documented; RUN: this audit — live Copilot ask returned real citations with document_id/chunk_id/score | — | No |
-| KNOW-06 | Reranking | MISSING (honestly labeled) | `NotImplementedError` raised by both adapters, gracefully caught in `gateway.py:228` | Implement reranking for at least one provider | No |
-| KNOW-07 | Organization Knowledge Graph / entity-relationship extraction (§10-11) | MISSING | No implementation; not disclosed in `docs/DECISIONS.md` | Full build | No |
-| KNOW-08 | Global/unified search across modules (§47) | MISSING | No endpoint; sidebar routes to coming-soon | Full build | No |
+| KNOW-06 | Reranking | VERIFIED (fixed 2026-07-30) | BE: `ModelGateway.rerank()` facade (logs `AiRun`, falls back to a real deterministic lexical-overlap `DemoAdapter.rerank`, not a no-op, on `NotImplementedError`); `AnthropicAdapter`/`OpenAIAdapter.rerank()` now genuinely implemented via `generate_structured` + a `RerankScores` schema; wired into `app.ai.copilot._retrieve_and_rerank` (widens the candidate pool then reranks before truncating to top-k); TEST: 6 tests incl. a constructed case proving reranking overrides a misleading initial embedding score; RUN: this audit — live Copilot ask against 2 ingested docs showed reordered, lexically-scored citations and a `knowledge.rerank` `AiRun` row between `embed_query` and `copilot_ask` | — | No |
+| KNOW-07 | Organization Knowledge Graph (§10) | VERIFIED (fixed 2026-07-30, scoped) | BE: `app/knowledge/graph.py` — a read-only one-hop traversal over 20 entity types' real existing foreign keys (deliberately not a duplicated graph store, see module docstring); API `GET /knowledge/graph/{entity_type}/{entity_id}`, `GET /knowledge/graph/entity-types`; FE `/knowledge/graph` explorer (click-through navigation) + a "View in Knowledge Graph" link on the Sales Account detail page; TEST: 6 tests incl. tenant isolation; RUN: this audit — live traversal from a real Account through Contact/Opportunity/onboarded Customer. Document-text entity/relationship *extraction* (spec §11's ingestion-pipeline step) is explicitly out of this scope — see `REMAINING_PRODUCT_GAPS.md` | Document-text entity extraction remains unbuilt (disclosed, not attempted) | No |
+| KNOW-08 / PLAT-21 | Global/unified search across modules (§47) | VERIFIED (fixed 2026-07-30) | BE: `app/search/service.py` — real tenant-scoped `ILIKE` search across 16 entity types spanning Sales/Support/Compliance/Security/Automation/Knowledge; API `GET /api/v1/search?q=`; FE `/search` page reachable from an always-visible top-nav search box, results grouped by module, linking to each entity's detail page or the Knowledge Graph explorer as a fallback; TEST: 6 tests incl. cross-tenant isolation; RUN: this audit — live search found a real account, and a cross-tenant header-spoof attempt correctly 403'd | — | No |
 
 ## AI Gateway & Copilot (spec §55-58)
 
@@ -68,7 +68,7 @@ is still present per row, just labeled inline rather than column-separated.
 | AI-05 | Evidence-grounded Copilot Q&A with citations | VERIFIED | BE: `app/ai/copilot.py` retrieve→ground→generate→cite pipeline; RUN: this audit — live ask returned `grounded:true` + 2 citations with scores | — | No |
 | AI-06 | Honest "no evidence" fallback message | VERIFIED | BE: `NO_EVIDENCE_MESSAGE` constant, used when retrieval empty | — | No |
 | AI-07 | Prompt-injection resistance for retrieved content | PARTIAL | BE: `<source>` tag framing + untrusted-data warning present; TEST: only string-presence tested, no adversarial test | Add adversarial prompt-injection test cases | No |
-| AI-08 | `generate_structured` wired into domain services | MISSING | Defined on Protocol/adapters, never called anywhere | Wire at least one real caller or remove dead plumbing | No |
+| AI-08 | `generate_structured` wired into domain services | VERIFIED (fixed 2026-07-30) | BE: `AnthropicAdapter.rerank`/`OpenAIAdapter.rerank` (`app/ai/adapters/{anthropic,openai}.py`) now call `generate_structured` with a `RerankScores` schema — see KNOW-06 | — | No |
 
 ## Compliance / GDPR / EU AI Act / AI Governance / Privacy (spec §12, §50, plus GDPR Art. 30/35/15-20)
 

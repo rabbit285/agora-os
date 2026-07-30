@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.gateway import GenerateRequest, ModelGateway
-from app.knowledge.retrieval import RetrievedChunk, search_chunks
+from app.knowledge.retrieval import DEFAULT_TOP_K, RetrievedChunk, search_chunks
 
 NO_EVIDENCE_MESSAGE = (
     "I don't have any indexed documents to answer this from yet. "
@@ -25,6 +25,51 @@ NO_EVIDENCE_MESSAGE = (
 
 PROMPT_TEMPLATE = "copilot.grounded_answer"
 PROMPT_VERSION = "v1"
+
+# Retrieve a wider candidate pool than we'll actually use so reranking has
+# something real to reorder (spec §46) — reranking a list already truncated
+# to the final size can't change which chunks are shown, only their order.
+RERANK_CANDIDATE_MULTIPLIER = 3
+
+
+async def _retrieve_and_rerank(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    requested_by: uuid.UUID | None,
+    question: str,
+    query_embedding: list[float],
+    gateway: ModelGateway,
+    top_k: int = DEFAULT_TOP_K,
+) -> list[RetrievedChunk]:
+    candidates = await search_chunks(
+        db,
+        organization_id=organization_id,
+        query_embedding=query_embedding,
+        top_k=top_k * RERANK_CANDIDATE_MULTIPLIER,
+    )
+    if not candidates:
+        return []
+
+    scores = await gateway.rerank(
+        db,
+        organization_id=organization_id,
+        requested_by=requested_by,
+        query=question,
+        documents=[c.content for c in candidates],
+    )
+    reranked = [
+        RetrievedChunk(
+            document_id=c.document_id,
+            chunk_id=c.chunk_id,
+            chunk_index=c.chunk_index,
+            content=c.content,
+            score=score,
+        )
+        for c, score in zip(candidates, scores, strict=True)
+    ]
+    reranked.sort(key=lambda c: c.score, reverse=True)
+    return reranked[:top_k]
 
 
 def build_grounded_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
@@ -73,8 +118,13 @@ async def ask_copilot(
         task_type="knowledge.embed_query",
         texts=[question],
     )
-    chunks = await search_chunks(
-        db, organization_id=organization_id, query_embedding=query_embedding
+    chunks = await _retrieve_and_rerank(
+        db,
+        organization_id=organization_id,
+        requested_by=requested_by,
+        question=question,
+        query_embedding=query_embedding,
+        gateway=gateway,
     )
 
     if not chunks:

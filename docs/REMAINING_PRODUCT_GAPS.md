@@ -140,19 +140,36 @@ claim a protection that isn't there.
 
 ### Knowledge & RAG
 
-- **MISSING**: Organization Knowledge Graph (spec §10) — entity/relationship extraction
-  pipeline (spec §11 steps) absent entirely; no acknowledgment in `docs/DECISIONS.md`.
-- **PARTIAL**: XLSX and HTML are claimed-supported ingestion formats with no actual
-  extractor code (`apps/api/app/knowledge/parsing.py`) — unlike PPTX/OCR, which are
-  correctly marked architecture-only, this gap is undisclosed.
-- **MISSING**: Global/unified search across modules (spec §47) — not implemented; sidebar
-  "Global search" entry routes to the honest coming-soon state.
-- **PARTIAL**: Reranking is unimplemented for both the Anthropic and OpenAI adapters
-  (`apps/api/app/ai/adapters/{anthropic,openai}.py`); the gateway catches
-  `NotImplementedError` gracefully and continues without reranking — honest, but the
-  retrieval quality feature itself does not exist.
-- **PARTIAL**: `generate_structured` is defined on the model-adapter Protocol and every
-  adapter, but is never called by any domain service (dead plumbing).
+- **[FIXED 2026-07-30]** ~~XLSX and HTML were claimed-supported ingestion formats with no
+  extractor code~~ — `_extract_xlsx` (openpyxl) and `_extract_html` (BeautifulSoup,
+  strips script/style) added to `parsing.py`; live-verified end to end through the real
+  presigned-upload → Temporal-worker ingestion path.
+- **[FIXED 2026-07-30]** ~~Reranking was unimplemented for both Anthropic and OpenAI, and
+  `generate_structured` was dead plumbing~~ — `ModelGateway.rerank()` added (logs an
+  `AiRun`, falls back to a genuine deterministic lexical-overlap scorer, not a no-op);
+  `AnthropicAdapter`/`OpenAIAdapter.rerank()` now call `generate_structured` with a
+  `RerankScores` schema (this is also `generate_structured`'s first real caller); wired
+  into Copilot's retrieval step. Live-verified: a Copilot ask's citations came back
+  re-scored and reordered, with a `knowledge.rerank` AiRun row in between embedding and
+  generation.
+- **[FIXED 2026-07-30, scoped]** ~~Organization Knowledge Graph (spec §10) was entirely
+  unbuilt~~ — `app/knowledge/graph.py` provides a read-only one-hop traversal over 20
+  entity types' real existing foreign keys (Account↔Contact↔Opportunity↔Customer↔Ticket,
+  Vendor↔Risk, AI System↔DPIA↔Incident, etc.) — deliberately a view over the relational
+  data already there, not a duplicated graph store (see the module's docstring for why
+  that's the more honest design). `GET /knowledge/graph/{type}/{id}` + a `/knowledge/graph`
+  explorer page with click-through navigation. **Scoped exclusion, disclosed**: spec §11's
+  ingestion-pipeline step "entity extraction → relationship extraction" *from document
+  text* is a separate, harder NLP feature not attempted here — the graph only concerns
+  records that already exist as rows, not entities mentioned inside uploaded documents.
+- **[FIXED 2026-07-30]** ~~Global/unified search across modules (spec §47) did not
+  exist~~ — `app/search/service.py` provides a real tenant-scoped `ILIKE` search across 16
+  entity types (Sales/Support/Compliance/Security/Automation/Knowledge); `/search` page
+  reachable from an always-visible top-nav search box. Live-verified including cross-tenant
+  denial (header-spoof attempt correctly 403'd, same enforcement as every other endpoint).
+  Per-module *read* permission scoping beyond tenant isolation doesn't exist anywhere else
+  in the app either (only writes are permission-gated), so this doesn't invent one just
+  for search — disclosed in the module's docstring.
 
 ### Compliance / GDPR / EU AI Act / AI Governance
 

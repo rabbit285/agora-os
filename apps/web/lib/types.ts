@@ -795,3 +795,35 @@ export type SyncRun = {
   started_at: string;
   completed_at: string | null;
 };
+
+// Organization Knowledge Graph (spec section 10) — mirrors
+// app.knowledge.graph.GraphNode/GraphEdge/GraphResult.
+export type GraphNode = {
+  entity_type: string;
+  id: string;
+  label: string;
+};
+
+export type GraphEdge = {
+  relation: string;
+  node: GraphNode;
+};
+
+export type GraphResult = {
+  node: GraphNode;
+  edges: GraphEdge[];
+};
+
+// Global Search (spec section 47) — mirrors
+// app.search.schemas.SearchResultOut/SearchResponse.
+export type SearchResult = {
+  entity_type: string;
+  id: string;
+  label: string;
+  module: string;
+};
+
+export type SearchResponse = {
+  query: string;
+  results: SearchResult[];
+};

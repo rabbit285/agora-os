@@ -11,11 +11,14 @@ from app.audit.service import record_event
 from app.core.models import File
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
+from app.knowledge.graph import ENTITY_TYPES, UnknownEntityTypeError, get_entity_graph
 from app.knowledge.models import Document, DocumentChunk, KnowledgeBase
 from app.knowledge.schemas import (
     DocumentChunkOut,
     DocumentCreate,
     DocumentOut,
+    EntityTypeOut,
+    GraphResultOut,
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
 )
@@ -146,3 +149,35 @@ async def list_document_chunks(
         .order_by(DocumentChunk.chunk_index)
     )
     return list(result.scalars().all())
+
+
+@router.get("/graph/entity-types", response_model=EntityTypeOut)
+async def list_graph_entity_types(
+    context: OrgContext = Depends(get_org_context),
+) -> EntityTypeOut:
+    return EntityTypeOut(entity_types=ENTITY_TYPES)
+
+
+@router.get("/graph/{entity_type}/{entity_id}", response_model=GraphResultOut)
+async def get_graph(
+    entity_type: str,
+    entity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> GraphResultOut:
+    """Organization Knowledge Graph (spec §10): one entity plus its
+    one-hop neighbors, tenant-scoped like every other query."""
+    try:
+        result = await get_entity_graph(
+            db,
+            organization_id=context.organization_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+    except UnknownEntityTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown entity type: {exc}"
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+    return GraphResultOut.model_validate(result, from_attributes=True)

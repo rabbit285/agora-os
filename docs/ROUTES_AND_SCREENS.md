@@ -34,15 +34,16 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/tasks` | [x] list + create |
 | `/approvals` | [x] list + approve/reject |
 | `/notifications` | [~] |
-| Global search | [ ] |
+| Global search (`/search`) | [x] real tenant-scoped search across 16 entity types, reachable from an always-visible top-nav box |
 | Global Create button | [ ] |
 
 ## KNOWLEDGE
 
 | Route | Status |
 |---|---|
-| `/knowledge` | [x] list + upload |
+| `/knowledge` | [x] list + upload (real XLSX/HTML extraction in addition to PDF/DOCX/TXT/MD/CSV) |
 | `/knowledge/[id]` | [x] detail with chunk viewer |
+| `/knowledge/graph` | [x] Organization Knowledge Graph explorer — click-through traversal over 20 entity types' real cross-module relationships |
 
 ## COMPLIANCE
 

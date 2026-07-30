@@ -14,6 +14,8 @@ import io
 TEXT_CONTENT_TYPES = {"text/plain", "text/markdown", "text/csv"}
 PDF_CONTENT_TYPES = {"application/pdf"}
 DOCX_CONTENT_TYPES = {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+XLSX_CONTENT_TYPES = {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+HTML_CONTENT_TYPES = {"text/html"}
 
 
 class UnsupportedFormatError(Exception):
@@ -29,6 +31,10 @@ def extract_text(content_type: str, data: bytes) -> str:
         return _extract_pdf(data)
     if content_type in DOCX_CONTENT_TYPES:
         return _extract_docx(data)
+    if content_type in XLSX_CONTENT_TYPES:
+        return _extract_xlsx(data)
+    if content_type in HTML_CONTENT_TYPES:
+        return _extract_html(data)
     raise UnsupportedFormatError(content_type)
 
 
@@ -54,3 +60,26 @@ def _extract_docx(data: bytes) -> str:
 
     document = docx.Document(io.BytesIO(data))
     return "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+
+def _extract_xlsx(data: bytes) -> str:
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    lines: list[str] = []
+    for sheet in workbook.worksheets:
+        lines.append(f"# {sheet.title}")
+        for row in sheet.iter_rows(values_only=True):
+            cells = [str(cell) for cell in row if cell is not None]
+            if cells:
+                lines.append(", ".join(cells))
+    return "\n".join(lines)
+
+
+def _extract_html(data: bytes) -> str:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(data.decode("utf-8", errors="replace"), "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    return str(soup.get_text(separator="\n", strip=True))

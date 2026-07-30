@@ -47,6 +47,26 @@ class GenerateResult:
     citations: list[dict[str, Any]] = field(default_factory=list)
 
 
+class RerankScores(BaseModel):
+    """Shape returned by an LLM-based reranker (spec §46 retrieval quality):
+    one relevance score per input document, same order, 0.0-1.0."""
+
+    scores: list[float]
+
+
+def build_rerank_request(query: str, documents: list[str]) -> GenerateRequest:
+    """Pure so the prompt shape can be unit tested without a provider —
+    same reasoning as app.ai.copilot.build_grounded_prompt."""
+    listing = "\n\n".join(f"[{i}] {doc}" for i, doc in enumerate(documents))
+    prompt = (
+        "Score how relevant each numbered passage below is to the query, on a "
+        "scale from 0.0 (irrelevant) to 1.0 (highly relevant). Return exactly "
+        f"{len(documents)} scores, in the same order as the passages.\n\n"
+        f"Query: {query}\n\n{listing}"
+    )
+    return GenerateRequest(task_type="knowledge.rerank", prompt=prompt)
+
+
 class ModelAdapter(Protocol):
     provider_name: str
 
@@ -128,7 +148,22 @@ class DemoAdapter:
         return [_vec(t) for t in texts]
 
     async def rerank(self, query: str, documents: list[str]) -> list[float]:
-        return [1.0 / (i + 1) for i in range(len(documents))]
+        """Real, deterministic lexical-overlap scoring — not a fabricated
+        confidence value, just a simple algorithm rather than an LLM call
+        (spec §82, No Fake Features: an honest simple implementation, not a
+        fake sophisticated one)."""
+        query_tokens = set(query.lower().split())
+        if not query_tokens:
+            return [0.0 for _ in documents]
+
+        def _score(document: str) -> float:
+            doc_tokens = set(document.lower().split())
+            if not doc_tokens:
+                return 0.0
+            overlap = len(query_tokens & doc_tokens)
+            return overlap / len(query_tokens)
+
+        return [_score(doc) for doc in documents]
 
 
 def build_adapter() -> ModelAdapter:
@@ -249,3 +284,47 @@ class ModelGateway:
             )
             await db.flush()
         return vectors
+
+    async def rerank(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: uuid.UUID,
+        requested_by: uuid.UUID | None,
+        query: str,
+        documents: list[str],
+    ) -> list[float]:
+        """Re-scores already-retrieved documents for relevance to `query`
+        (spec §46). Falls back to the deterministic Demo lexical-overlap
+        reranker — not a no-op — if the configured provider doesn't
+        implement one, the same graceful-degradation pattern `.embed()`
+        uses for Anthropic."""
+        start = time.perf_counter()
+        provider_name = self._adapter.provider_name
+        error: str | None = None
+        try:
+            scores = await self._adapter.rerank(query, documents)
+        except NotImplementedError:
+            provider_name = "demo"
+            scores = await DemoAdapter().rerank(query, documents)
+        except Exception as exc:  # noqa: BLE001 - logged into AiRun, then re-raised
+            error = str(exc)
+            raise
+        finally:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            db.add(
+                AiRun(
+                    organization_id=organization_id,
+                    requested_by=requested_by,
+                    task_type="knowledge.rerank",
+                    provider=provider_name,
+                    model=f"{provider_name}-rerank",
+                    input_classification="internal",
+                    output={"document_count": len(documents)},
+                    latency_ms=latency_ms,
+                    policy_result="allowed" if error is None else "error",
+                    error=error,
+                )
+            )
+            await db.flush()
+        return scores

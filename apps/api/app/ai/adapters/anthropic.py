@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
-from app.ai.gateway import GenerateRequest, GenerateResult
+from app.ai.gateway import GenerateRequest, GenerateResult, RerankScores, build_rerank_request
 
 DEFAULT_MODEL = "claude-sonnet-5"
 
@@ -67,4 +67,12 @@ class AnthropicAdapter:
         )
 
     async def rerank(self, query: str, documents: list[str]) -> list[float]:
-        raise NotImplementedError("Reranking is not implemented for the Anthropic adapter yet.")
+        request = build_rerank_request(query, documents)
+        result = await self.generate_structured(request, RerankScores)
+        assert isinstance(result, RerankScores)
+        if len(result.scores) != len(documents):
+            raise ValueError(
+                f"Anthropic returned {len(result.scores)} rerank scores for "
+                f"{len(documents)} documents"
+            )
+        return result.scores

@@ -1,15 +1,17 @@
 # Route & API Inventory
 
 Audit date: 2026-07-30, updated same day after the Platform-foundation auth completion
-work (PLAT-13/14/15). Frontend routes taken from a fresh `npm run build` (Next.js 16.2,
-Turbopack) — not from `docs/ROUTES_AND_SCREENS.md`, which was found to contain stale
-entries claiming placeholder pages that did not exist in the build at audit time (see
-`REMAINING_PRODUCT_GAPS.md` §A3; the 3 that were genuinely missing — invite,
-verify-email, MFA challenge — are now built and listed below). Backend routes taken from
-a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
+work (PLAT-13/14/15) and the Knowledge-module completeness work (XLSX/HTML extraction,
+reranking, Knowledge Graph, Global Search — KNOW-03/06/07/08, PLAT-21). Frontend routes
+taken from a fresh `npm run build` (Next.js 16.2, Turbopack) — not from
+`docs/ROUTES_AND_SCREENS.md`, which was found to contain stale entries claiming
+placeholder pages that did not exist in the build at audit time (see
+`REMAINING_PRODUCT_GAPS.md` §A3; the ones that were genuinely missing at audit time have
+since been built and are listed below). Backend routes taken from a fresh
+`GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (37 total, from `npm run build` output)
+## Frontend routes (39 total, from `npm run build` output)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -27,8 +29,10 @@ a fresh `GET /openapi.json` fetch against the running dev API (port 8001, contai
 | `/tasks` | ○ | — |
 | `/approvals` | ○ | — |
 | `/copilot` | ○ | Retrieval-grounded Q&A with citations |
-| `/knowledge` | ○ | List + upload |
+| `/knowledge` | ○ | List + upload — PDF/DOCX/TXT/MD/CSV/XLSX/HTML all real extractors |
 | `/knowledge/[id]` | ƒ | Detail with chunk viewer |
+| `/knowledge/graph` | ƒ | Organization Knowledge Graph explorer, click-through traversal |
+| `/search` | ƒ | Global Search results, reachable from an always-visible top-nav box |
 | `/compliance` | ○ | All Compliance sub-features on one page (controls, risks, vendors, questionnaires, audits, Trust Center mgmt, security reviews, AI systems, AI incidents, RoPA/DPIA/DSAR, data transfers) |
 | `/compliance/controls/[id]` | ƒ | — |
 | `/compliance/vendors/[id]` | ƒ | — |
@@ -61,7 +65,7 @@ a fresh `GET /openapi.json` fetch against the running dev API (port 8001, contai
 produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
 challenge were also in this list at first-audit time; all 3 are now built — see above.)
 
-## Backend API surface (128 paths, from live `/openapi.json`)
+## Backend API surface (131 paths, from live `/openapi.json`)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -70,8 +74,9 @@ challenge were also in this list at first-audit time; all 3 are now built — se
 | `/tasks`, `/approvals` | 4 | core primitives |
 | `/notifications` | 2 | list, mark-read — no dispatch-channel config endpoint |
 | `/files` | 2 | upload-url, get |
-| `/ai/copilot` | 1 | `/ask` |
-| `/knowledge` | 4 | documents (list/create/get/chunks), knowledge-bases |
+| `/ai/copilot` | 1 | `/ask` (real reranking now runs between retrieval and generation) |
+| `/knowledge` | 6 | documents (list/create/get/chunks) incl. real XLSX/HTML extraction, knowledge-bases, graph (entity-types, entity traversal) |
+| `/search` | 1 | tenant-scoped substring search across 16 entity types |
 | `/compliance` | 51 | by far the largest surface — controls, risks, evidence, policies, frameworks, vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
 | `/security` | 8 | assets, findings, alerts, incidents |
 | `/sales` | 11 | accounts, contacts, leads, opportunities, outreach |

@@ -47,7 +47,10 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     label: "Knowledge",
-    items: [{ label: "Documents", href: "/knowledge", implemented: true }],
+    items: [
+      { label: "Documents", href: "/knowledge", implemented: true },
+      { label: "Knowledge Graph", href: "/knowledge/graph", implemented: true },
+    ],
   },
   {
     label: "Settings",

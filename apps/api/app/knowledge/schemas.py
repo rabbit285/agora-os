@@ -46,3 +46,23 @@ class DocumentChunkOut(BaseModel):
     token_count: int
 
     model_config = {"from_attributes": True}
+
+
+class GraphNodeOut(BaseModel):
+    entity_type: str
+    id: str
+    label: str
+
+
+class GraphEdgeOut(BaseModel):
+    relation: str
+    node: GraphNodeOut
+
+
+class GraphResultOut(BaseModel):
+    node: GraphNodeOut
+    edges: list[GraphEdgeOut]
+
+
+class EntityTypeOut(BaseModel):
+    entity_types: list[str]
