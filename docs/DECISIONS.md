@@ -1245,3 +1245,83 @@ Meeting prep notes genuinely falling back to the "no evidence" message
 with an empty knowledge base, and Sales Intelligence's win-rate/average-
 deal-size math against real won/lost Opportunities — with disposable test
 data deleted afterward in FK-respecting order.
+
+## ADR-0039 — Support depth: AI-grounded replies never auto-send an ungrounded answer; Conversations reuses Tickets rather than duplicating ADR-0017; `ensure_system_roles` is now actually called at startup
+
+**Decision**: AI-grounded ticket response (`app.support.copilot.
+draft_ticket_reply`, spec §32) calls the same `ask_copilot` every other
+grounded feature in this build uses, over a question built from the
+ticket's subject/description/message thread. The result always lands as
+a `TicketMessage` with a new `status` column (`draft` by default); it is
+marked `sent` immediately only when the org's new `AIAgentConfig` has
+both `enabled` and `auto_send_grounded_replies` set AND
+`CopilotAnswer.grounded` is `True`. The last condition is load-bearing
+and intentionally cannot be bypassed by config alone: `ask_copilot`
+already returns an honest "no evidence" answer with `grounded=False` when
+the knowledge base has nothing relevant, and that answer must never be
+auto-sent to a customer as if it were a confident response — "confidence"
+here is deliberately this one honest boolean (was retrieval actually
+grounded in real content), not a fabricated numeric score, since no finer
+-grained confidence signal exists anywhere else in this build's AI
+Gateway.
+
+Conversations (spec §32) gets no new backing table. The original Support
+module (ADR-0017) already collapsed spec's separate
+"support_conversations" concept into `Ticket`, reasoning that the two have
+near-identical shape. Rather than reversing that call under time
+pressure, the Conversations *screen* is built as a second real view over
+the same `Ticket`/`TicketMessage` data — thread-first, filtered to the
+conversational channels (`email`/`chat`, excluding `api`) — the same
+"shared primitive, multiple views" reuse already applied to Security
+Policies (a view over Compliance's `Policy`, ADR-0037) and Cloud/Identity
+Security (views over `SecurityFinding` filtered by category). QA scoring
+(`TicketQAScore`) is deliberately independent of the customer-submitted
+`CSATResponse` — a QA score is a reviewer's judgement of *handling
+quality*, CSAT is the customer's own satisfaction, and conflating them
+would lose the distinction spec §32 draws between "QA" and "Analytics".
+`app.support.analytics.compute_support_analytics` follows the exact
+live-aggregate-query pattern the Security Overview dashboard and Sales
+Intelligence established (ADR-0037/ADR-0038).
+
+Separately, while wiring the two new Support permissions
+(`support.ai_agent.manage`, `support.qa.manage`) into `app/core/rbac.py`,
+live verification surfaced a real latent gap: `ensure_system_roles()`'s
+own docstring says it is "safe to call on every startup", but nothing in
+`app/main.py` actually called it at startup — only the signup flow and
+the standalone seed script did. Since the function is genuinely
+idempotent and additive (confirmed by reading it), an organization that
+signed up *before* a given permission existed would never receive it on
+its `org_admin` role, even after the API process was later restarted with
+code that granted it — because nothing re-ran the sync for that
+already-seeded role. `app/main.py`'s `lifespan()` now calls
+`ensure_system_roles()` once per boot against a real session, so this
+class of gap is closed structurally for every future permission addition,
+not just retroactively patched for these two.
+
+**Why**: The auto-send gate is the one place in this cluster where a
+config toggle alone could have silently produced a worse outcome than no
+automation at all (a customer receiving "I don't have any indexed
+documents to answer this from yet" as if it were a real answer) — anchoring
+the gate to the same honest `grounded` signal `ask_copilot` already
+computes, rather than adding a redundant heuristic, means there is exactly
+one source of truth for "was this actually answered from real content."
+The Conversations decision keeps this build's data model from
+accumulating two ways to represent the same conversation thread, which
+would have created exactly the kind of drift this build's shared
+-primitive discipline (spec §80) exists to prevent. The `ensure_system_
+roles` fix was not something this cluster set out to find — it surfaced
+because this session's own working pattern (edit code, restart the
+container, live-verify against a fresh org) happened to never expose it
+until an *old* org was reused for verification, which is exactly the
+scenario a real multi-week deployment would hit on its first permission
+addition after initial launch. Tested in
+`tests/test_support_ai_agent_and_qa.py` (7 tests: pending-draft-by
+-default, agent send-approval, the 409 double-send guard, AI Agent config
+defaulting to none, the auto-send-still-drafts-when-ungrounded case, QA
+score lifecycle, and analytics tenant isolation). Live-verified against
+the running Docker stack: the honest no-KB draft reply, agent approval,
+real CSAT/QA/resolution-time math on `/support/analytics`, and — after
+discovering and fixing the `ensure_system_roles` gap — a direct SQL
+confirmation that an org created before the fix correctly received the
+new permission grants on the next restart, with the previously-403 calls
+then succeeding.

@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import type {
+  SupportAnalytics,
   SupportCustomer,
   SupportTicket,
   TicketCategory,
@@ -19,6 +20,52 @@ import type {
 
 const selectClassName =
   "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+
+function AnalyticsSection() {
+  const { data: analytics } = useQuery<SupportAnalytics>({
+    queryKey: ["support", "analytics"],
+    queryFn: () => apiFetch<SupportAnalytics>("/api/v1/support/analytics"),
+  });
+
+  if (!analytics) return null;
+
+  return (
+    <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">{analytics.open_tickets}</div>
+          <div className="text-xs text-neutral-500">Open Tickets</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">
+            {analytics.average_resolution_hours}h
+          </div>
+          <div className="text-xs text-neutral-500">Avg Resolution Time</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">{analytics.average_csat}</div>
+          <div className="text-xs text-neutral-500">
+            Avg CSAT ({analytics.csat_response_count} responses)
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">
+            {analytics.average_qa_score}
+          </div>
+          <div className="text-xs text-neutral-500">
+            Avg QA Score ({analytics.qa_score_count} reviews)
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function CustomersSection() {
   const queryClient = useQueryClient();
@@ -193,6 +240,12 @@ function TicketsSection({ customers }: { customers: SupportCustomer[] | undefine
   );
 }
 
+const SUB_PAGES = [
+  { href: "/support/conversations", label: "Conversations" },
+  { href: "/support/knowledge", label: "Knowledge Base" },
+  { href: "/support/ai-agent", label: "AI Agent" },
+];
+
 export default function SupportPage() {
   const { data: customers } = useQuery<SupportCustomer[]>({
     queryKey: ["support", "customers"],
@@ -204,7 +257,19 @@ export default function SupportPage() {
       <PageHeader
         title="Customer Support"
         description="Customers, tickets, and the Support → Security escalation hook — spec sections 30-35."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {SUB_PAGES.map((page) => (
+              <Link key={page.href} href={page.href}>
+                <Button variant="outline" size="sm">
+                  {page.label}
+                </Button>
+              </Link>
+            ))}
+          </div>
+        }
       />
+      <AnalyticsSection />
       <CustomersSection />
       <TicketsSection customers={customers} />
     </div>

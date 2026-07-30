@@ -26,6 +26,21 @@ Sales — the field is nullable.
 and notifies the linked account's owner, reusing Sales' and Phase 1's
 existing primitives instead of inventing a new "signal" type — see
 app.support.service.flag_upsell_signal and docs/DECISIONS.md ADR-0022.
+
+`AIAgentConfig` and `TicketMessage.status` add spec §32's "AI Agent"
+grounded-response feature: `app.support.copilot.draft_ticket_reply` always
+generates a real retrieval-grounded reply via the existing AI Copilot,
+landing as a `status="draft"` message pending agent approval unless the
+org has opted into `auto_send_grounded_replies` AND the answer was
+actually grounded (never auto-sending an honest "no evidence" fallback).
+`TicketQAScore` adds spec §32's "QA" reviewer scoring, independent of the
+customer's own `CSATResponse`. "Conversations" (spec §32) is intentionally
+not a second backing table — spec's Conversations and Tickets have
+near-identical shape (ADR-0017's original reasoning); the Conversations
+screen is a real second view over the same `Ticket`/`TicketMessage` data,
+filtered to the conversational channels (`email`/`chat`) and presented
+thread-first rather than queue-first — see app.routers.support and the
+frontend's `/support/conversations` page.
 """
 
 from __future__ import annotations
@@ -107,6 +122,52 @@ class TicketMessage(UUIDPrimaryKeyMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    # draft | sent — customer/agent messages are always "sent" (they were
+    # just typed and posted); an "ai" message defaults to "draft" pending
+    # human approval (spec §32) unless the org's AIAgentConfig auto-sends
+    # grounded replies — see app.support.copilot.draft_ticket_reply.
+    status: Mapped[str] = mapped_column(String(10), default="sent")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AIAgentConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """spec §32/§35 "AI Agent" configuration — one row per organization.
+    Governs how `app.support.copilot.draft_ticket_reply` behaves: always
+    real retrieval-grounded generation (never a canned template), but
+    whether a reply lands as a pending draft or is auto-sent depends on
+    this config plus whether the answer was actually grounded in real
+    knowledge-base content (the honest proxy for "confidence" used here —
+    there is no finer-grained numeric confidence signal anywhere else in
+    this build's AI Gateway)."""
+
+    __tablename__ = "support_ai_agent_configs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, unique=True
+    )
+    enabled: Mapped[bool] = mapped_column(default=False)
+    # Only takes effect when enabled=True: a grounded draft is marked
+    # "sent" immediately instead of waiting for agent approval.
+    auto_send_grounded_replies: Mapped[bool] = mapped_column(default=False)
+
+
+class TicketQAScore(UUIDPrimaryKeyMixin, Base):
+    """spec §32 "QA" — a human reviewer's quality score for a resolved
+    ticket's handling, independent of the customer's own CSATResponse."""
+
+    __tablename__ = "support_ticket_qa_scores"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("support_tickets.id"), nullable=False, index=True
+    )
+    score: Mapped[int] = mapped_column(nullable=False)  # 1-5
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -9,10 +9,87 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api";
-import type { SalesLead, SecurityAlert, SupportTicketDetail, TicketStatus } from "@/lib/types";
+import type {
+  QAScore,
+  SalesLead,
+  SecurityAlert,
+  SupportTicketDetail,
+  TicketMessage,
+  TicketStatus,
+} from "@/lib/types";
 
 const WORKFLOW: TicketStatus[] = ["open", "pending", "resolved", "closed"];
+
+function QAScoreSection({ ticketId }: { ticketId: string }) {
+  const queryClient = useQueryClient();
+  const [score, setScore] = useState(5);
+  const [notes, setNotes] = useState("");
+
+  const { data: qaScores } = useQuery<QAScore[]>({
+    queryKey: ["support", "tickets", ticketId, "qa-scores"],
+    queryFn: () => apiFetch<QAScore[]>(`/api/v1/support/tickets/${ticketId}/qa-scores`),
+  });
+
+  const addScore = useMutation({
+    mutationFn: () =>
+      apiFetch<QAScore>(`/api/v1/support/tickets/${ticketId}/qa-score`, {
+        method: "POST",
+        body: { score, notes: notes || null },
+      }),
+    onSuccess: () => {
+      setNotes("");
+      queryClient.invalidateQueries({
+        queryKey: ["support", "tickets", ticketId, "qa-scores"],
+      });
+    },
+  });
+
+  return (
+    <div className="mb-6">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        QA Review
+      </h2>
+      <Card className="mb-3">
+        <CardContent className="flex flex-col gap-2 pt-6">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-neutral-700">Score (1-5):</label>
+            <Input
+              type="number"
+              min={1}
+              max={5}
+              className="w-20"
+              value={score}
+              onChange={(e) => setScore(Number(e.target.value))}
+            />
+          </div>
+          <Textarea
+            placeholder="Notes (optional)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+          <Button
+            size="sm"
+            className="self-start"
+            disabled={addScore.isPending}
+            onClick={() => addScore.mutate()}
+          >
+            Submit QA score
+          </Button>
+        </CardContent>
+      </Card>
+      {qaScores?.map((qa) => (
+        <Card key={qa.id} className="mb-2">
+          <CardContent className="pt-6">
+            <div className="text-sm text-neutral-900">Score: {qa.score}/5</div>
+            {qa.notes && <p className="text-xs text-neutral-500">{qa.notes}</p>}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 export default function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -60,6 +137,18 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       setMessageBody("");
       queryClient.invalidateQueries({ queryKey: ["support", "tickets", id] });
     },
+  });
+
+  const draftReply = useMutation({
+    mutationFn: () =>
+      apiFetch<TicketMessage>(`/api/v1/support/tickets/${id}/draft-reply`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["support", "tickets", id] }),
+  });
+
+  const sendDraft = useMutation({
+    mutationFn: (messageId: string) =>
+      apiFetch(`/api/v1/support/tickets/${id}/messages/${messageId}/send`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["support", "tickets", id] }),
   });
 
   if (!ticket) return null;
@@ -153,6 +242,8 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
         </Card>
       )}
 
+      <QAScoreSection ticketId={id} />
+
       <div>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
           Conversation
@@ -164,15 +255,30 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
           {ticket.messages.map((message) => (
             <Card key={message.id}>
               <CardContent className="pt-6">
-                <div className="mb-1 text-xs uppercase tracking-wide text-neutral-400">
-                  {message.sender_type}
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wide text-neutral-400">
+                    {message.sender_type}
+                  </span>
+                  {message.status === "draft" && (
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status="draft" />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={sendDraft.isPending}
+                        onClick={() => sendDraft.mutate(message.id)}
+                      >
+                        Send
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="text-sm text-neutral-700">{message.body}</div>
               </CardContent>
             </Card>
           ))}
         </div>
-        <Card>
+        <Card className="mb-3">
           <CardContent className="flex gap-2 pt-6">
             <Input
               placeholder="Reply as agent…"
@@ -190,6 +296,19 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
             </Button>
           </CardContent>
         </Card>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={draftReply.isPending}
+          onClick={() => draftReply.mutate()}
+        >
+          {draftReply.isPending ? "Drafting…" : "Draft AI Reply"}
+        </Button>
+        <p className="mt-2 text-xs text-neutral-400">
+          AI-drafted replies are retrieval-grounded (spec §32) and land as a pending draft
+          requiring agent approval, unless the org&rsquo;s AI Agent is configured to auto-send
+          grounded replies.
+        </p>
       </div>
     </div>
   );

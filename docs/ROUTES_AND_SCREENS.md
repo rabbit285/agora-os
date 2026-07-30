@@ -103,13 +103,11 @@ table rather than a fourth table.
 
 | Route | Status |
 |---|---|
-| `/support` | [x] customers + ticket creation/list overview |
-| `/support/tickets/[id]` | [x] detail: status workflow, linked security alert, linked sales lead (upsell signal), message thread |
-
-Not yet built (spec §67 lists these under Support): Conversations
-(separate from Tickets), AI Agent configuration, Knowledge Base standalone
-management UI (API exists, no dedicated page yet), QA scoring dashboard,
-CSAT reporting, support analytics.
+| `/support` | [x] analytics tiles (open tickets, resolution time, CSAT, QA score) + customers + ticket creation/list overview |
+| `/support/tickets/[id]` | [x] detail: status workflow, linked security alert, linked sales lead (upsell signal), message thread, AI draft-reply + approval, QA review form |
+| `/support/knowledge` | [x] Knowledge Base article create/list + publish toggle |
+| `/support/ai-agent` | [x] AI Agent enable + auto-send-grounded-replies configuration |
+| `/support/conversations` | [x] thread-first view over the same Ticket data, filtered to email/chat channels (spec's Conversations screen — not a duplicate store, see ADR-0017/ADR-0039) |
 
 ## AUTOMATION
 

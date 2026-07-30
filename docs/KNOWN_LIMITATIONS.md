@@ -124,16 +124,23 @@ implied to work.
   faked with a placeholder email.
 - **Support**: tickets have a `channel` field (`email`/`chat`/`api`) but
   no real channel connectors — there's no inbound email parsing or chat
-  widget, only the API. No SLA policies/timers, no QA review scoring, no
-  AI-drafted replies or confidence-gated auto-resolution (spec §32 — the
-  Copilot/retrieval infrastructure exists from Phase 2 but nothing wires
-  Support into it yet), no knowledge-gap detection or FAQ generation. The
-  security-category cross-module hook creates a `SecurityAlert` (Security's
-  triage inbox), not a full `SecurityIncident` — see ADR-0020 for why.
-  Flagging a ticket as an upsell signal creates a real Sales Lead and
-  notifies the linked account's owner (or the flagging agent if there's no
-  linked Sales Account or no account owner), but does not auto-create an
-  Opportunity — that conversion is left to a human sales rep (ADR-0022).
+  widget, only the API. AI-grounded ticket replies now exist
+  (`app.support.copilot.draft_ticket_reply`) — a real retrieval-grounded
+  Copilot call landing as a pending draft, auto-sent only when the org's
+  `AIAgentConfig` opts in AND the answer was genuinely grounded (an
+  honest "no evidence" answer is never auto-sent). QA review scoring
+  (`TicketQAScore`) and a CSAT/QA/resolution-time analytics dashboard
+  (`app.support.analytics`) also now exist. Still missing: SLA
+  policies/timers, knowledge-gap detection, FAQ generation. "Conversations"
+  is a real second FE view over the same Ticket data (filtered to
+  email/chat channels), not a separate backing table — see ADR-0017's
+  original reasoning, extended in ADR-0039. The security-category
+  cross-module hook creates a `SecurityAlert` (Security's triage inbox),
+  not a full `SecurityIncident` — see ADR-0020 for why. Flagging a ticket
+  as an upsell signal creates a real Sales Lead and notifies the linked
+  account's owner (or the flagging agent if there's no linked Sales
+  Account or no account owner), but does not auto-create an Opportunity —
+  that conversion is left to a human sales rep (ADR-0022).
 - **Cross-Module Intelligence (Phase 8)**: four of spec §69's five named
   cross-module scenarios are now fully implemented ("Support Upsell
   Signal", the "Security Incident" chain, "New Customer", and now

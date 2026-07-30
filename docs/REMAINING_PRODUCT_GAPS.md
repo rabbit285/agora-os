@@ -134,6 +134,33 @@ undetected.
 on `audit_events` from the application's database role, or correct the docstring to not
 claim a protection that isn't there.
 
+### A5. [FIXED — 2026-07-30] `ensure_system_roles()`'s own docstring said "safe to call on every startup" but nothing called it at startup
+
+Found while adding two new Support permissions (`support.ai_agent.manage`,
+`support.qa.manage`) in this session: an organization signed up *before* those
+permissions were added to `app/core/rbac.py` never received them on its `org_admin`
+role, even after the API process was restarted with the new code — because
+`ensure_system_roles` (which is genuinely idempotent/additive, confirmed by reading it)
+was only ever called from the signup flow (`app.identity.service.login`... actually
+`create_organization`-adjacent signup code) and the standalone seed script, never from
+`app/main.py`'s own startup. Every permission added in every earlier cluster this
+session (PLAT-05/06, SEC's three new permissions, Sales' three, Support's two) had this
+same latent gap — it only went unnoticed because this audit's live-verification
+convention is always a *fresh* signup per test, which always got the current code's
+grants at signup time.
+
+**Fix applied (2026-07-30)**: `app/main.py`'s `lifespan()` now calls
+`ensure_system_roles()` once against a real session on every application boot, so a
+newly added permission reaches every already-seeded system role (not just newly signed
+up organizations) the next time the API process restarts — matching what the function's
+own docstring already promised. Confirmed live: an org created before this fix, and
+before the two new Support permissions existed, could not call
+`PUT /support/ai-agent-config` (403 "Missing permission") even after an API restart with
+the new route code; after adding the startup call and restarting again, the same org's
+`org_admin` role was confirmed via direct SQL to now hold both new permission grants, and
+the same previously-403 calls succeeded. Full backend suite (315 tests) still green
+after the change.
+
 ---
 
 ## B. Per-module gaps
@@ -253,15 +280,24 @@ claim a protection that isn't there.
   no-contact honest-skip fallback, and the account-detail security-review deal-blocker
   indicator — all independently re-confirmed live in this audit.
 
-### Support
+### Support (resolved 2026-07-30 — see SUPP-03/04/05/06/07 in the traceability matrix)
 
-- **MISSING**: zero AI involvement anywhere in the module — no call into
-  `app/ai/copilot.py` or `app/knowledge/retrieval.py` from any support code path (grounded
-  ticket response, spec §32, does not exist).
-- **MISSING (frontend)**: Knowledge Base has a working backend
-  (`support_knowledge_articles`) but no frontend page.
-- **MISSING**: Conversations (separate from Tickets), AI Agent configuration, QA scoring
-  dashboard, CSAT reporting/analytics beyond the raw `POST /support/csat` endpoint.
+- **RESOLVED**: AI-grounded ticket response (spec §32) — `app.support.copilot.
+  draft_ticket_reply` calls the real retrieval-grounded `ask_copilot`. A new
+  `TicketMessage.status` (draft/sent) means an AI reply lands pending agent approval
+  by default; it is only ever auto-sent when the org's new `AIAgentConfig` opts in
+  AND the answer was genuinely grounded — an honest "no evidence" answer is never
+  auto-sent regardless of that setting.
+- **RESOLVED (frontend)**: Knowledge Base now has a frontend page (`/support/knowledge`)
+  over the pre-existing complete backend.
+- **RESOLVED**: Conversations — a real second, thread-first view (`/support/conversations`)
+  over the same Ticket/TicketMessage data, filtered to the conversational channels
+  (email/chat). Deliberately not a second backing table, consistent with ADR-0017's
+  original reasoning that spec's Conversations and Tickets share near-identical shape.
+- **RESOLVED**: AI Agent configuration (`AIAgentConfig`) — enable/disable and
+  auto-send-grounded-replies toggles, real FE page at `/support/ai-agent`.
+- **RESOLVED**: QA scoring (`TicketQAScore`) and a real CSAT/QA/resolution-time
+  analytics dashboard (`app.support.analytics`, `GET /support/analytics`).
 
 ### Automation
 

@@ -7,9 +7,12 @@ Compliance completeness work (Policy publish, Evidence Library, Framework Dashbo
 Compliance-as-Governance-Layer — COMP-05/17/18), the Security-module completeness
 work (audited alerts, full incident workspace, Cloud/Identity Security scanning,
 Security Overview dashboard, Asset/Alert Detail + Security Policies pages —
-SEC-03/05/06/07/08/09), and the Sales-module completeness work (ICP scoring, Lead
+SEC-03/05/06/07/08/09), the Sales-module completeness work (ICP scoring, Lead
 Finder, Enrichment, Sequences/Campaigns, Sales Inbox, Meeting Assistant, Sales
-Intelligence, Lead/Contact/Opportunity detail pages — SALES-04/05/06/07/08). Frontend routes taken from a fresh
+Intelligence, Lead/Contact/Opportunity detail pages — SALES-04/05/06/07/08), and the
+Support-module completeness work (AI-grounded ticket response, Knowledge Base page,
+Conversations view, AI Agent configuration, QA scoring + analytics dashboard —
+SUPP-03/04/05/06/07). Frontend routes taken from a fresh
 `npm run build` (Next.js 16.2, Turbopack) — not from `docs/ROUTES_AND_SCREENS.md`, which
 was found to contain stale entries claiming placeholder pages that did not exist in the
 build at audit time (see `REMAINING_PRODUCT_GAPS.md` §A3; the ones that were genuinely
@@ -17,7 +20,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (54 total, from `npm run build` output)
+## Frontend routes (57 total, from `npm run build` output)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -68,8 +71,11 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/sales/leads/[id]` | ƒ | Detail: linked account/contact, status workflow |
 | `/sales/contacts/[id]` | ƒ | Detail: linked account, outreach history, suppression toggle |
 | `/sales/opportunities/[id]` | ƒ | Detail: linked account, stage workflow, onboarding indicator |
-| `/support` | ○ | Customers + tickets |
-| `/support/tickets/[id]` | ƒ | — |
+| `/support` | ○ | Analytics tiles + customers + tickets, sub-page nav |
+| `/support/tickets/[id]` | ƒ | AI draft-reply + approval, QA review section |
+| `/support/knowledge` | ○ | Knowledge Base article CRUD + publish toggle |
+| `/support/ai-agent` | ○ | AI Agent enable/auto-send config |
+| `/support/conversations` | ○ | Thread-first view over Tickets, filtered to email/chat channels |
 | `/automation` | ○ | Workflow list + step-form create |
 | `/automation/workflows/[id]` | ƒ | — |
 | `/settings/organization` | ○ | — |
@@ -85,7 +91,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
 challenge were also in this list at first-audit time; all 3 are now built — see above.)
 
-## Backend API surface (154 paths, from live `/openapi.json`)
+## Backend API surface (160 paths, from live `/openapi.json`)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -100,7 +106,7 @@ challenge were also in this list at first-audit time; all 3 are now built — se
 | `/compliance` | 53 | by far the largest surface — controls, risks, evidence, policies (incl. publish status), frameworks (incl. per-framework dashboard), vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
 | `/security` | 13 | overview dashboard, assets (+detail), findings, alerts (+detail), incidents (+detail, timeline, affected-assets, postmortem), cloud-scan |
 | `/sales` | 25 | accounts (+detail+enrich), contacts (+detail), leads (+detail+find), opportunities (+detail), outreach, icp-profile, sequences (+detail+steps+enroll+process-due-steps), campaigns (+detail), meetings (+prep-notes), inbox, intelligence |
-| `/support` | 8 | customers, tickets, messages, knowledge-articles, csat, flag-upsell |
+| `/support` | 14 | customers, tickets (+detail+flag-upsell), messages (+draft-reply+send), knowledge-articles, csat, ai-agent-config, qa-score(s), analytics |
 | `/automation` | 6 | workflows, runs, resume |
 | `/integrations` | 10 | providers, connections, oauth start/callback, refresh/disconnect/health/sync, sync-runs, webhooks/receive |
 | `/trust-center` | 5 | items, evidence-requests, public (unauthenticated) |

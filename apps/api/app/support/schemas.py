@@ -69,6 +69,7 @@ class TicketMessageOut(BaseModel):
     sender_type: str
     author_id: uuid.UUID | None
     body: str
+    status: str
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -113,3 +114,44 @@ class CSATResponseOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AIAgentConfigIn(BaseModel):
+    enabled: bool
+    auto_send_grounded_replies: bool = False
+
+
+class AIAgentConfigOut(BaseModel):
+    id: uuid.UUID
+    enabled: bool
+    auto_send_grounded_replies: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QAScoreCreate(BaseModel):
+    score: int = Field(ge=1, le=5)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class QAScoreOut(BaseModel):
+    id: uuid.UUID
+    ticket_id: uuid.UUID
+    score: int
+    reviewer_id: uuid.UUID | None
+    notes: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SupportAnalyticsOut(BaseModel):
+    total_tickets: int
+    open_tickets: int
+    tickets_by_status: dict[str, int]
+    average_resolution_hours: float
+    average_csat: float
+    csat_response_count: int
+    average_qa_score: float
+    qa_score_count: int

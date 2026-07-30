@@ -12,7 +12,9 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
+from app.core.rbac import ensure_system_roles
 from app.core.storage import ensure_bucket
+from app.db.session import AsyncSessionLocal
 from app.identity.router import router as auth_router
 from app.routers import (
     ai,
@@ -41,6 +43,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Local/dev convenience only — a real AWS deployment provisions the
     # bucket via Terraform (docs/PLATFORM_ARCHITECTURE.md), not at boot.
     ensure_bucket()
+    # Re-syncs system roles/permissions on every boot (ensure_system_roles
+    # is additive-only — see its docstring) so a newly added PERMISSIONS
+    # entry or ROLE_PERMISSION_GRANTS line reaches already-seeded system
+    # roles in a running deployment without a separate manual seed step.
+    async with AsyncSessionLocal() as db:
+        await ensure_system_roles(db)
     yield
 
 

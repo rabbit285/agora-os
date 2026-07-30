@@ -11,8 +11,20 @@ from app.audit.service import record_event
 from app.compliance.governance import check_customer_disclosure_permission
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
-from app.support.models import CSATResponse, Customer, KnowledgeArticle, Ticket, TicketMessage
+from app.support.analytics import compute_support_analytics
+from app.support.copilot import draft_ticket_reply, get_ai_agent_config
+from app.support.models import (
+    AIAgentConfig,
+    CSATResponse,
+    Customer,
+    KnowledgeArticle,
+    Ticket,
+    TicketMessage,
+    TicketQAScore,
+)
 from app.support.schemas import (
+    AIAgentConfigIn,
+    AIAgentConfigOut,
     CSATResponseCreate,
     CSATResponseOut,
     CustomerCreate,
@@ -20,6 +32,9 @@ from app.support.schemas import (
     KnowledgeArticleCreate,
     KnowledgeArticleOut,
     KnowledgeArticleUpdate,
+    QAScoreCreate,
+    QAScoreOut,
+    SupportAnalyticsOut,
     TicketCreate,
     TicketDetailOut,
     TicketMessageCreate,
@@ -233,6 +248,148 @@ async def create_ticket_message(
     await db.commit()
     await db.refresh(message)
     return message
+
+
+@router.post("/tickets/{ticket_id}/draft-reply", response_model=TicketMessageOut)
+async def draft_reply(
+    ticket_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("support.tickets.manage")),
+) -> TicketMessage:
+    """AI-grounded ticket response (spec §32): a real retrieval-grounded
+    Copilot call, landing as a pending draft unless the org's AI Agent
+    is configured to auto-send grounded replies — see
+    app.support.copilot."""
+    ticket = await _get_org_ticket(db, ticket_id, context.organization_id)
+    message = await draft_ticket_reply(
+        db, organization_id=context.organization_id, ticket=ticket, requested_by=context.user.id
+    )
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="support.ticket_message.ai_drafted",
+        object_type="support_ticket",
+        object_id=str(ticket.id),
+        after_state={"message_id": str(message.id), "status": message.status},
+    )
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+@router.post("/tickets/{ticket_id}/messages/{message_id}/send", response_model=TicketMessageOut)
+async def send_draft_message(
+    ticket_id: uuid.UUID,
+    message_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("support.tickets.manage")),
+) -> TicketMessage:
+    """Human approval gate for an AI-drafted reply (spec §32) — never
+    auto-sent without either this explicit approval or the org's AI
+    Agent config opting in."""
+    message = await db.get(TicketMessage, message_id)
+    if (
+        message is None
+        or message.organization_id != context.organization_id
+        or message.ticket_id != ticket_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    if message.status != "draft":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Message already sent")
+    message.status = "sent"
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="support.ticket_message.draft_approved",
+        object_type="support_ticket",
+        object_id=str(ticket_id),
+        after_state={"message_id": str(message.id)},
+    )
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
+@router.get("/ai-agent-config", response_model=AIAgentConfigOut | None)
+async def get_ai_agent_config_endpoint(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> AIAgentConfig | None:
+    return await get_ai_agent_config(db, organization_id=context.organization_id)
+
+
+@router.put("/ai-agent-config", response_model=AIAgentConfigOut)
+async def save_ai_agent_config(
+    payload: AIAgentConfigIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("support.ai_agent.manage")),
+) -> AIAgentConfig:
+    config = await get_ai_agent_config(db, organization_id=context.organization_id)
+    if config is None:
+        config = AIAgentConfig(organization_id=context.organization_id, **payload.model_dump())
+        db.add(config)
+    else:
+        for field_name, value in payload.model_dump().items():
+            setattr(config, field_name, value)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="support.ai_agent_config.saved",
+        object_type="support_ai_agent_config",
+        object_id=str(config.id),
+        after_state=payload.model_dump(),
+    )
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
+@router.post(
+    "/tickets/{ticket_id}/qa-score", response_model=QAScoreOut, status_code=status.HTTP_201_CREATED
+)
+async def create_qa_score(
+    ticket_id: uuid.UUID,
+    payload: QAScoreCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("support.qa.manage")),
+) -> TicketQAScore:
+    await _get_org_ticket(db, ticket_id, context.organization_id)
+    qa_score = TicketQAScore(
+        organization_id=context.organization_id,
+        ticket_id=ticket_id,
+        reviewer_id=context.user.id,
+        **payload.model_dump(),
+    )
+    db.add(qa_score)
+    await db.commit()
+    await db.refresh(qa_score)
+    return qa_score
+
+
+@router.get("/tickets/{ticket_id}/qa-scores", response_model=list[QAScoreOut])
+async def list_qa_scores(
+    ticket_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[TicketQAScore]:
+    await _get_org_ticket(db, ticket_id, context.organization_id)
+    result = await db.execute(
+        select(TicketQAScore)
+        .where(TicketQAScore.ticket_id == ticket_id)
+        .order_by(TicketQAScore.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/analytics", response_model=SupportAnalyticsOut)
+async def get_support_analytics(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> SupportAnalyticsOut:
+    data = await compute_support_analytics(db, organization_id=context.organization_id)
+    return SupportAnalyticsOut(**data)
 
 
 @router.get("/knowledge-articles", response_model=list[KnowledgeArticleOut])

@@ -63,6 +63,8 @@ PERMISSIONS: dict[str, str] = {
     "sales.meetings.manage": "Schedule meetings and generate prep notes",
     "support.tickets.manage": "Create and update support tickets and messages",
     "support.knowledge.manage": "Create, edit, and publish knowledge articles",
+    "support.ai_agent.manage": "Configure the Support AI Agent's auto-response behavior",
+    "support.qa.manage": "Score resolved tickets for quality",
     "automation.workflows.manage": "Create, edit, and publish automation workflows",
     "automation.runs.manage": "Trigger and resume workflow runs",
     "integrations.connections.manage": "Create, edit, and link integration connections",
@@ -110,6 +112,8 @@ SALES_PERMISSIONS = [
 SUPPORT_PERMISSIONS = [
     "support.tickets.manage",
     "support.knowledge.manage",
+    "support.ai_agent.manage",
+    "support.qa.manage",
 ]
 
 AUTOMATION_PERMISSIONS = [

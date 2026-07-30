@@ -845,6 +845,7 @@ export type TicketMessage = {
   sender_type: "customer" | "agent" | "ai";
   author_id: string | null;
   body: string;
+  status: "draft" | "sent";
   created_at: string;
 };
 
@@ -867,6 +868,33 @@ export type CSATResponse = {
   score: number;
   comment: string | null;
   created_at: string;
+};
+
+export type AIAgentConfig = {
+  id: string;
+  enabled: boolean;
+  auto_send_grounded_replies: boolean;
+  created_at: string;
+};
+
+export type QAScore = {
+  id: string;
+  ticket_id: string;
+  score: number;
+  reviewer_id: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type SupportAnalytics = {
+  total_tickets: number;
+  open_tickets: number;
+  tickets_by_status: Record<string, number>;
+  average_resolution_hours: number;
+  average_csat: number;
+  csat_response_count: number;
+  average_qa_score: number;
+  qa_score_count: number;
 };
 
 export type WorkflowStepType = "create_task" | "send_notification" | "human_approval";
