@@ -97,18 +97,29 @@ class HubSpotAdapter:
             ok=True, detail="Connected", external_account_id=str(hub_id) if hub_id else None
         )
 
-    async def sync(self, *, access_token: str) -> SyncResult:
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult:
+        """Incremental, checkpointed (spec §G2): HubSpot's own `after`
+        pagination cursor is round-tripped via `SyncResult.next_cursor` /
+        `IntegrationConnection.sync_cursor` so each sync continues from
+        where the previous one left off instead of re-fetching the same
+        first page of contacts every time."""
+        params: dict[str, str | int] = {"limit": 10}
+        if cursor:
+            params["after"] = cursor
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             response = await client.get(
                 CONTACTS_URL,
-                params={"limit": 10},
+                params=params,
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             response.raise_for_status()
             body = response.json()
         results = body.get("results", [])
+        next_cursor = body.get("paging", {}).get("next", {}).get("after")
         return SyncResult(
-            items_synced=len(results), detail="Fetched recent HubSpot contacts (read-only)"
+            items_synced=len(results),
+            detail="Fetched HubSpot contacts (read-only)",
+            next_cursor=next_cursor,
         )
 
     async def revoke(self, *, access_token: str) -> None:

@@ -32,6 +32,16 @@ class HealthResult:
 class SyncResult:
     items_synced: int
     detail: str
+    # spec §G2 "incremental cursors"/"checkpointing": the provider's own
+    # pagination cursor (HubSpot's `after`, Slack's `next_cursor`,
+    # Microsoft's `@odata.nextLink` skip token, Google's `nextPageToken`,
+    # GitHub's next page number) to resume from on the next sync rather
+    # than always re-fetching the same first page. `None` means either
+    # the provider reported no further pages (a full pass just
+    # completed — the next sync starts over from the beginning) or this
+    # adapter's endpoint has no meaningful pagination (Salesforce's
+    # single-item identity check).
+    next_cursor: str | None = None
 
 
 class OAuthConnectorAdapter(Protocol):
@@ -51,6 +61,6 @@ class OAuthConnectorAdapter(Protocol):
 
     async def test_connection(self, *, access_token: str) -> HealthResult: ...
 
-    async def sync(self, *, access_token: str) -> SyncResult: ...
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult: ...
 
     async def revoke(self, *, access_token: str) -> None: ...

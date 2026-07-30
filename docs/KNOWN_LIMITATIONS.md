@@ -190,37 +190,58 @@ implied to work.
   equivalents here are `extract_data`/`classify_data` for data
   transformation and nothing yet for true nested subworkflows).
 - **Integrations**: `IntegrationConnection.connector_key` supports
-  `"webhook"` plus six OAuth2 providers — HubSpot, Google, Microsoft,
-  GitHub, Slack, Salesforce (ADR-0026, ADR-0028) — every other spec §48
-  category (Email, Marketing, Customer Support beyond generic webhook,
-  Cloud, remaining Identity/Engineering/Communication/Documents/
-  Accounting categories) still needs a real third-party OAuth app or API
-  key this environment doesn't have, and none are stubbed as "connected"
-  (spec §82) — the provider catalog endpoint reports `configured: bool`
-  honestly per provider (all six show "Not configured" without real
-  `<PROVIDER>_CLIENT_ID`/`<PROVIDER>_CLIENT_SECRET`) and additionally
-  exposes each provider's requested `scopes` as a permission preview. A
-  mock OAuth adapter (mirroring the AI gateway's `DemoAdapter`, labeled
-  with the real `provider_key`) lets the full authorize→callback→
-  connected→sync→disconnect flow be exercised for testing/demo purposes
-  for every provider even without real credentials — this is what the
-  automated test suite runs against, and the demo seed data deliberately
-  does *not* create a "connected" row for any provider, to avoid any
-  appearance of a fabricated live connection. Two providers (GitHub
-  classic OAuth Apps, Slack bot tokens without rotation) genuinely have no
-  refresh flow for the token type used here — `refresh_access_token`
-  raises a clear error rather than faking support, but callers never reach
-  it since no refresh token is ever stored for them in the first place.
-  Salesforce's adapter is a documented simplification: it calls the
-  generic `login.salesforce.com` identity endpoint rather than the org's
-  own instance-specific API domain (`instance_url`, returned at token
-  exchange but not persisted), since threading that through would mean a
-  Salesforce-only parameter on every other provider's adapter methods — a
-  real Salesforce connector needs to store and use `instance_url` for
-  anything beyond identity/revoke. Stored OAuth tokens are encrypted at
-  rest (Fernet, `app/core/crypto.py`), but the encryption key falls back
-  to one derived from `SECRET_KEY` when `TOKEN_ENCRYPTION_KEY` is unset —
-  fine for dev/test, but a real deployment must set its own key (rotating
+  `"webhook"` plus seven OAuth2 providers — HubSpot, Google (Calendar +
+  Gmail + Drive), Microsoft (Calendar + Outlook Mail), GitHub, Slack,
+  Salesforce, Zendesk (ADR-0026, ADR-0028, ADR-0041) — covering every spec
+  §48 category that doesn't carry an explicit "architecture" qualifier
+  except Cloud (AWS/Azure/GCP, excluded with AWS deployment per this
+  build's scope) and CRM's Pipedrive/Customer Support's Intercom (deferred
+  alongside the explicitly-"architecture" providers below for the same
+  reason: no real OAuth app exists in this environment to build or test
+  against, and a same-shaped adapter for a ninth or tenth provider adds no
+  new pattern). Still not built, all disclosed as architecture-ready-not-
+  built rather than silently missing: CRM's Pipedrive/Zoho, Marketing's
+  Mailchimp, Customer Support's Intercom/Freshdesk, Identity's Okta/Entra/
+  Google Workspace, Engineering's GitLab/Jira/Azure DevOps, Communication's
+  Teams, Documents' SharePoint/OneDrive/Notion, and Accounting's
+  QuickBooks/Xero/Stripe/ERP — each would follow the exact same
+  `OAuthConnectorAdapter` Protocol shape already proven seven times over.
+  The provider catalog endpoint reports `configured: bool` honestly per
+  provider (all seven show "Not configured" without real
+  `<PROVIDER>_CLIENT_ID`/`<PROVIDER>_CLIENT_SECRET`, and Zendesk
+  additionally needs `ZENDESK_SUBDOMAIN` since a Zendesk OAuth app is
+  registered against one specific customer subdomain rather than a
+  multi-tenant authorize URL) and additionally exposes each provider's
+  requested `scopes` as a permission preview. A mock OAuth adapter
+  (mirroring the AI gateway's `DemoAdapter`, labeled with the real
+  `provider_key`) lets the full authorize→callback→connected→sync→
+  disconnect flow be exercised for testing/demo purposes for every
+  provider even without real credentials — this is what the automated
+  test suite runs against, and the demo seed data deliberately does *not*
+  create a "connected" row for any provider, to avoid any appearance of a
+  fabricated live connection. Three providers (GitHub classic OAuth Apps,
+  Slack bot tokens without rotation, Zendesk OAuth tokens without
+  rotation) genuinely have no refresh flow for the token type used here —
+  `refresh_access_token` raises a clear error rather than faking support,
+  but callers never reach it since no refresh token is ever stored for
+  them in the first place. Salesforce's adapter is a documented
+  simplification: it calls the generic `login.salesforce.com` identity
+  endpoint rather than the org's own instance-specific API domain
+  (`instance_url`, returned at token exchange but not persisted), since
+  threading that through would mean a Salesforce-only parameter on every
+  other provider's adapter methods — a real Salesforce connector needs to
+  store and use `instance_url` for anything beyond identity/revoke.
+  Google's and Microsoft's `sync()` cover more than one spec §48 category
+  on a single connection (Calendar+Gmail+Drive; Calendar+Outlook Mail) —
+  spec §G2 incremental cursor/checkpointing round-trips only the original
+  Calendar resource's pagination token; Gmail/Drive/Outlook Mail always
+  fetch their latest first page rather than each carrying an independent
+  checkpoint, since `IntegrationConnection.sync_cursor` is a single opaque
+  string, not a per-resource map — a disclosed scope decision, not a
+  silent gap. Stored OAuth tokens are encrypted at rest (Fernet,
+  `app/core/crypto.py`), but the encryption key falls back to one derived
+  from `SECRET_KEY` when `TOKEN_ENCRYPTION_KEY` is unset — fine for
+  dev/test, but a real deployment must set its own key (rotating
   `SECRET_KEY` would otherwise silently break every stored token). A
   webhook connection's `webhook_secret` is still returned in plain text by
   the API to whoever can read the connection (session-authenticated,
@@ -228,15 +249,26 @@ implied to work.
   yet. `subscribe()`, `execute_action()`, and `collect_evidence()` from
   spec §49's full Connector Contract aren't implemented — this slice only
   needed authorize/token-exchange/refresh/health/sync/revoke. "Sync now"
-  runs as a durable Temporal workflow (`IntegrationSyncWorkflow`) rather
-  than inline in the request, and fetches a small page of the provider's
-  own read-only data (contacts, calendar events, public repos, channels,
-  etc. depending on provider) purely to prove connectivity — it doesn't
-  import any of it into Sales/Support/Knowledge yet. No sync safety
-  features (spec §G2: incremental cursors, checkpointing, replay safety,
-  rate-limit handling) since there's no polling/scheduled sync, only
-  on-demand. No API keys for outbound platform access. No AWS
-  infrastructure exists yet to exercise the Secrets Manager/Parameter
+  runs as a durable Temporal workflow (`IntegrationSyncWorkflow`, with a
+  bounded `RetryPolicy` — 3 attempts, exponential backoff — spec §G2
+  retries/backoff), and fetches a page of the provider's own read-only
+  data (contacts, calendar events, public repos, channels, tickets, etc.
+  depending on provider) purely to prove connectivity — it doesn't import
+  any of it into Sales/Support/Knowledge yet. Sync safety (spec §G2) now
+  covers incremental cursors/checkpointing (`IntegrationConnection.
+  sync_cursor` persists each provider's real pagination cursor —
+  HubSpot's `after`, Slack's `next_cursor`, Google Calendar's
+  `nextPageToken`, Microsoft Graph's `@odata.nextLink`, GitHub's `Link`
+  header page number, Zendesk's `after_cursor`; Salesforce's single
+  identity call honestly has none), replay safety (`execute_sync_run`
+  is idempotent — a `SyncRun` that's already finalized is returned
+  unchanged rather than re-synced or double-advancing the cursor), and
+  retries/backoff (above). Still not covered: tombstones/deletions and
+  rate-limit-specific handling (a 429 is just an unhandled error like any
+  other failure, not specially detected or backed off differently) and
+  partial-failure-within-a-page reporting (a page either fully succeeds or
+  the whole `SyncRun` fails). No API keys for outbound platform access. No
+  AWS infrastructure exists yet to exercise the Secrets Manager/Parameter
   Store/ECS secret-injection design documented in
   `docs/ENVIRONMENT_VARIABLES.md` — it's a commitment for whoever builds
   Phase 10's AWS deployment, not yet built or tested.

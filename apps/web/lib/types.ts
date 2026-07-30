@@ -1120,6 +1120,7 @@ export type SyncRun = {
   status: "running" | "succeeded" | "failed";
   items_synced: number | null;
   error: string | null;
+  cursor_used: string | null;
   started_at: string;
   completed_at: string | null;
 };

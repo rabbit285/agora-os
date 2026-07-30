@@ -88,19 +88,28 @@ class SlackAdapter:
             return HealthResult(ok=False, detail=f"Slack auth.test failed: {body.get('error')}")
         return HealthResult(ok=True, detail="Connected", external_account_id=body.get("team_id"))
 
-    async def sync(self, *, access_token: str) -> SyncResult:
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult:
+        """Incremental, checkpointed (spec §G2): Slack's own cursor
+        pagination is round-tripped so each sync continues through the
+        channel list rather than always re-fetching the first page."""
+        params: dict[str, str | int] = {"limit": 10, "types": "public_channel"}
+        if cursor:
+            params["cursor"] = cursor
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             response = await client.get(
                 CONVERSATIONS_URL,
-                params={"limit": 10, "types": "public_channel"},
+                params=params,
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             body = response.json()
         if not body.get("ok"):
             raise ValueError(f"Slack conversations.list failed: {body.get('error')}")
         channels = body.get("channels", [])
+        next_cursor = body.get("response_metadata", {}).get("next_cursor") or None
         return SyncResult(
-            items_synced=len(channels), detail="Fetched public channel list (read-only)"
+            items_synced=len(channels),
+            detail="Fetched public channel list (read-only)",
+            next_cursor=next_cursor,
         )
 
     async def revoke(self, *, access_token: str) -> None:

@@ -328,14 +328,46 @@ after the change.
 
 ### Integrations
 
-- **MISSING**: every connector category in spec §48 other than the 6 built OAuth
-  providers (HubSpot, Google, Microsoft, GitHub, Slack, Salesforce) — Email, Marketing,
-  Cloud, Identity (beyond the 6), Engineering, Documents, Accounting, Support-competitor
-  connectors all have zero code. Note even "Email" isn't truly covered: Google/Microsoft's
-  wired capability is Calendar-shaped, not Mail.
-- **PARTIAL**: Temporal-backed sync durability exists but lacks cursors / checkpointing /
-  tombstone handling per spec §G2.
-- **VERIFIED (genuinely real, not a gap)**: all 6 OAuth adapters use real provider URLs
+- **[FIXED 2026-07-30]** ~~Temporal-backed sync durability exists but lacks cursors /
+  checkpointing / tombstone handling per spec §G2~~ — `IntegrationConnection.sync_cursor`
+  and `SyncRun.cursor_used` (migration `3d13a5b8ba86`) now persist each provider's real
+  pagination cursor across syncs (HubSpot `paging.next.after`, Slack
+  `response_metadata.next_cursor`, Google Calendar `nextPageToken`, Microsoft Graph
+  `@odata.nextLink`, GitHub `Link` header page number, Zendesk `after_cursor`; Salesforce
+  honestly returns `next_cursor=None`, no pagination concept on its single identity call).
+  `execute_sync_run` is now idempotent (an already-finalized `SyncRun` is returned
+  unchanged rather than re-synced or double-advancing the cursor — spec §G2 replay
+  safety), and `IntegrationSyncWorkflow`'s activity call now carries a bounded
+  `RetryPolicy` (3 attempts, exponential backoff — spec §G2 retries/backoff). Live-
+  verified via `test_sync_checkpoints_the_provider_cursor_across_runs` (two sequential
+  syncs against the mock adapter's simulated two-page response prove the second sync
+  resumes from the first's cursor) and
+  `test_execute_sync_run_is_idempotent_for_an_already_finalized_run`. Still not covered,
+  disclosed in `KNOWN_LIMITATIONS.md`: tombstones/deletions and rate-limit-specific
+  detection (a 429 is an unhandled error like any other, not specially backed off) and
+  partial-failure-within-a-page reporting.
+- **[FIXED 2026-07-30]** ~~every connector category in spec §48 other than the 6 built
+  OAuth providers (HubSpot, Google, Microsoft, GitHub, Slack, Salesforce) — Email,
+  Marketing, Cloud, Identity (beyond the 6), Engineering, Documents, Accounting,
+  Support-competitor connectors all have zero code. Note even "Email" isn't truly
+  covered: Google/Microsoft's wired capability is Calendar-shaped, not Mail~~ — the
+  Google adapter now also requests `gmail.readonly` and `drive.readonly` scopes and
+  `sync()` fetches real Gmail messages and Drive files alongside Calendar events (Email
+  and Documents categories); the Microsoft adapter now also requests `Mail.Read` and
+  `sync()` fetches real Outlook messages alongside Calendar events (Email category); a
+  new `ZendeskAdapter` (`app/integrations/adapters/zendesk.py`) covers the Customer
+  Support category with a real OAuth2 flow against a configured subdomain
+  (`ZENDESK_CLIENT_ID`/`SECRET`/`REDIRECT_URI`/`SUBDOMAIN`). Every spec §48 provider
+  without an explicit "architecture" qualifier is now built except CRM's Pipedrive and
+  Customer Support's Intercom, deliberately deferred alongside the explicitly-
+  "architecture" providers (Zoho, Mailchimp, Freshdesk, Okta, Entra, Google Workspace,
+  GitLab, Jira, Azure DevOps, Teams, SharePoint, OneDrive, Notion, QuickBooks, Xero,
+  Stripe, ERP) and disclosed as architecture-ready-not-built in `KNOWN_LIMITATIONS.md` —
+  each would follow the exact same `OAuthConnectorAdapter` Protocol shape already proven
+  seven times over, adding no new pattern, and none can be tested end to end in this
+  environment regardless (no real developer app exists for any of them). Cloud
+  (AWS/Azure/GCP) is excluded under this build's AWS-deployment scope.
+- **VERIFIED (genuinely real, not a gap)**: all 7 OAuth adapters use real provider URLs
   and real `httpx` calls; Fernet token encryption is real; the mock-fallback and
   "Not configured" UI states are honest, not fake-connected.
 

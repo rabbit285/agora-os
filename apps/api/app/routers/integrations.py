@@ -48,6 +48,7 @@ PROVIDER_CATALOG: list[dict[str, str]] = [
     {"connector_key": "github", "name": "GitHub", "auth_type": "oauth2"},
     {"connector_key": "slack", "name": "Slack", "auth_type": "oauth2"},
     {"connector_key": "salesforce", "name": "Salesforce", "auth_type": "oauth2"},
+    {"connector_key": "zendesk", "name": "Zendesk", "auth_type": "oauth2"},
 ]
 
 

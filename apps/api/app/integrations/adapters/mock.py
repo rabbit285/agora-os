@@ -55,10 +55,27 @@ class MockOAuthAdapter:
             external_account_id=f"mock-{self.provider_key}-account-0001",
         )
 
-    async def sync(self, *, access_token: str) -> SyncResult:
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult:
+        # Simulates a real two-page provider (spec §G2 incremental
+        # cursors/checkpointing) rather than always claiming "page one":
+        # the first call returns a `next_cursor`, and resuming with it
+        # completes the (demo) pass.
+        if cursor is None:
+            return SyncResult(
+                items_synced=3,
+                detail=(
+                    f"Demo {self.provider_key} sync — 3 sample records "
+                    "(no real provider configured)"
+                ),
+                next_cursor="mock-page-2",
+            )
         return SyncResult(
-            items_synced=3,
-            detail=f"Demo {self.provider_key} sync — 3 sample records (no real provider configured)",
+            items_synced=2,
+            detail=(
+                f"Demo {self.provider_key} sync — 2 more sample records "
+                "(no real provider configured)"
+            ),
+            next_cursor=None,
         )
 
     async def revoke(self, *, access_token: str) -> None:

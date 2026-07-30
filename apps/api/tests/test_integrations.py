@@ -387,7 +387,7 @@ async def test_execute_sync_run_against_mock_adapter_succeeds(
         provider_key = "hubspot"
         SCOPES: list[str] = []
 
-        async def sync(self, *, access_token: str) -> None:
+        async def sync(self, *, access_token: str, cursor: str | None = None) -> None:
             raise RuntimeError("simulated provider outage")
 
     import app.integrations.service as integrations_service
@@ -400,6 +400,76 @@ async def test_execute_sync_run_against_mock_adapter_succeeds(
         integrations_service.get_oauth_adapter = original_get_adapter
     assert failing_run.status == "failed"
     assert failing_run.error is not None
+
+
+async def test_sync_checkpoints_the_provider_cursor_across_runs(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """spec §G2 incremental cursors/checkpointing: a second sync should
+    resume from the first sync's `next_cursor` (persisted on the
+    connection) rather than re-fetching the same first page."""
+    from app.integrations.models import IntegrationConnection as _Connection
+    from app.integrations.service import run_sync
+
+    await _signup(client, "oauth-cursor1@example.com", "OAuth Cursor Org 1")
+    connection_id, state = await _start_hubspot_oauth(client)
+    await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+
+    connection = await db_session.get(_Connection, uuid.UUID(connection_id))
+    assert connection is not None
+    assert connection.sync_cursor is None
+
+    first_run = await run_sync(db_session, connection=connection)
+    await db_session.commit()
+    assert first_run.status == "succeeded"
+    assert first_run.cursor_used is None
+    assert first_run.items_synced == 3
+    assert connection.sync_cursor == "mock-page-2"
+
+    second_run = await run_sync(db_session, connection=connection)
+    await db_session.commit()
+    assert second_run.status == "succeeded"
+    assert second_run.cursor_used == "mock-page-2"
+    assert second_run.items_synced == 2
+    # The mock provider's (demo) pass completed — next sync starts over.
+    assert connection.sync_cursor is None
+
+
+async def test_execute_sync_run_is_idempotent_for_an_already_finalized_run(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """spec §G2 replay safety: if the Temporal activity is replayed against
+    a `SyncRun` that already finished (e.g. a worker crash after the first
+    attempt committed but before the activity returned), re-running it must
+    not sync again or advance the cursor a second time."""
+    from app.integrations.models import IntegrationConnection as _Connection
+    from app.integrations.service import create_sync_run, execute_sync_run
+
+    await _signup(client, "oauth-idempotent1@example.com", "OAuth Idempotent Org 1")
+    connection_id, state = await _start_hubspot_oauth(client)
+    await client.get(
+        "/api/v1/integrations/connections/oauth/hubspot/callback",
+        params={"code": "fake-code", "state": state},
+    )
+
+    connection = await db_session.get(_Connection, uuid.UUID(connection_id))
+    assert connection is not None
+    sync_run = await create_sync_run(db_session, connection=connection)
+    finished = await execute_sync_run(db_session, connection=connection, sync_run=sync_run)
+    await db_session.commit()
+    assert finished.status == "succeeded"
+    assert connection.sync_cursor == "mock-page-2"
+
+    replayed = await execute_sync_run(db_session, connection=connection, sync_run=finished)
+    await db_session.commit()
+    assert replayed is finished
+    assert replayed.status == "succeeded"
+    assert replayed.items_synced == 3
+    # Not advanced a second time for the same (already-finalized) run.
+    assert connection.sync_cursor == "mock-page-2"
 
 
 async def test_generic_oauth_flow_works_for_a_non_hubspot_provider(client: AsyncClient) -> None:

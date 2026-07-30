@@ -65,6 +65,7 @@ class SyncRunOut(BaseModel):
     status: str
     items_synced: int | None
     error: str | None
+    cursor_used: str | None
     started_at: datetime
     completed_at: datetime | None
 

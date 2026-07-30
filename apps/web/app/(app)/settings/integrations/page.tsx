@@ -266,7 +266,14 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
                 key={run.id}
                 className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs"
               >
-                <span>{new Date(run.started_at).toLocaleString()}</span>
+                <div className="flex flex-col">
+                  <span>{new Date(run.started_at).toLocaleString()}</span>
+                  {run.cursor_used && (
+                    <span className="font-mono text-neutral-400">
+                      resumed from checkpoint
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   {run.items_synced !== null && (
                     <span className="text-neutral-400">{run.items_synced} items</span>

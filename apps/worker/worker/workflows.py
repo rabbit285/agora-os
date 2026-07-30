@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 
 @workflow.defn
@@ -48,10 +49,21 @@ class IntegrationSyncWorkflow:
 
     @workflow.run
     async def run(self, connection_id: str, sync_run_id: str) -> str:
+        # spec §G2 "retries, backoff, rate-limit handling": a real, bounded
+        # retry policy rather than relying on Temporal's unlimited default
+        # — a provider that's rate-limiting or briefly unavailable gets a
+        # few backed-off attempts, not endless retries against the same
+        # `SyncRun` row.
         return await workflow.execute_activity(
             "execute_integration_sync_activity",
             args=[connection_id, sync_run_id],
             start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=5),
+                backoff_coefficient=2.0,
+                maximum_interval=timedelta(minutes=1),
+                maximum_attempts=3,
+            ),
         )
 
 

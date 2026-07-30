@@ -81,6 +81,13 @@ class IntegrationConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # spec §G2 "incremental cursors"/"checkpointing": the provider's own
+    # pagination cursor from the most recent successful sync (see
+    # `app.integrations.adapters.base.SyncResult.next_cursor`), so the next
+    # sync resumes rather than re-fetching the same first page. `None`
+    # means "start from the beginning" (either never synced, or the last
+    # sync completed a full pass).
+    sync_cursor: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
 class WebhookEvent(UUIDPrimaryKeyMixin, Base):
@@ -102,10 +109,13 @@ class WebhookEvent(UUIDPrimaryKeyMixin, Base):
 
 class SyncRun(UUIDPrimaryKeyMixin, Base):
     """A single "sync now" execution against an OAuth connector (spec §49's
-    `sync()` capability). Runs synchronously inline in this build, not as a
-    durable Temporal job — see docs/KNOWN_LIMITATIONS.md — so this row is
-    the only record of what happened, written after the fact rather than
-    checkpointed during a long-running job."""
+    `sync()` capability). Runs as a durable Temporal job
+    (`IntegrationSyncWorkflow`), not inline in the request: this row is
+    created synchronously (`running`) so `GET .../sync-runs` shows it
+    immediately, then finalized by the activity. `cursor_used` records
+    which checkpoint this particular run started from (spec §G2), for
+    audit/debugging — the live checkpoint used by the *next* sync is
+    `IntegrationConnection.sync_cursor`."""
 
     __tablename__ = "integration_sync_runs"
 
@@ -119,5 +129,6 @@ class SyncRun(UUIDPrimaryKeyMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="running")
     items_synced: Mapped[int | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cursor_used: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,8 +1,14 @@
 """Append-only audit event log (spec section B8).
 
-The migration that creates this table also REVOKEs UPDATE/DELETE from the
-application database role — see migrations/versions for the revision that
-adds audit_events, and docs/SECURITY_ARCHITECTURE.md.
+Migration `7f2a9c1d4e6b` adds a `BEFORE UPDATE OR DELETE` Postgres trigger
+(`prevent_audit_event_mutation`) that unconditionally raises — real
+DB-level enforcement that survives even a compromised or buggy application
+role, not just an application-code convention (no service function ever
+calls `UPDATE`/`DELETE` against this table, but the trigger doesn't rely on
+that holding). A plain `REVOKE UPDATE/DELETE` grant was deliberately not
+used instead: this table's owning role is the same role Alembic migrations
+run as, and Postgres table owners bypass ordinary GRANT/REVOKE ACL checks,
+so a revoke against an owner-equivalent role would have had no effect.
 """
 
 from __future__ import annotations

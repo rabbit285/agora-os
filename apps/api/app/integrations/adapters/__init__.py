@@ -24,6 +24,7 @@ from app.integrations.adapters.microsoft import MicrosoftAdapter
 from app.integrations.adapters.mock import MockOAuthAdapter
 from app.integrations.adapters.salesforce import SalesforceAdapter
 from app.integrations.adapters.slack import SlackAdapter
+from app.integrations.adapters.zendesk import ZendeskAdapter
 
 
 class _AdapterFactory(Protocol):
@@ -42,6 +43,11 @@ class _ProviderSpec:
     client_id: str | None
     client_secret: str | None
     redirect_uri: str | None
+    # Zendesk-only (see app.integrations.adapters.zendesk's module
+    # docstring): a Zendesk OAuth client is registered against one specific
+    # customer subdomain, so it needs a fourth "is this configured" input
+    # the other five providers don't.
+    subdomain: str | None = None
 
 
 def _provider_specs() -> dict[str, _ProviderSpec]:
@@ -82,6 +88,13 @@ def _provider_specs() -> dict[str, _ProviderSpec]:
             settings.salesforce_client_secret,
             settings.salesforce_redirect_uri,
         ),
+        "zendesk": _ProviderSpec(
+            ZendeskAdapter,
+            settings.zendesk_client_id,
+            settings.zendesk_client_secret,
+            settings.zendesk_redirect_uri,
+            settings.zendesk_subdomain,
+        ),
     }
 
 
@@ -103,6 +116,8 @@ def is_provider_configured(connector_key: str) -> bool:
     spec = _provider_specs().get(connector_key)
     if spec is None:
         return False
+    if connector_key == "zendesk":
+        return bool(spec.client_id and spec.client_secret and spec.subdomain)
     return bool(spec.client_id and spec.client_secret)
 
 
@@ -118,5 +133,12 @@ def get_oauth_adapter(connector_key: str) -> OAuthConnectorAdapter:
     if spec is not None and is_provider_configured(connector_key):
         assert spec.client_id is not None
         assert spec.client_secret is not None
+        if connector_key == "zendesk":
+            assert spec.subdomain is not None
+            return ZendeskAdapter(
+                client_id=spec.client_id,
+                client_secret=spec.client_secret,
+                subdomain=spec.subdomain,
+            )
         return spec.adapter_cls(client_id=spec.client_id, client_secret=spec.client_secret)
     return MockOAuthAdapter(provider_key=connector_key if spec is not None else "mock")

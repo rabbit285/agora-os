@@ -118,6 +118,15 @@ class Settings(BaseSettings):
     salesforce_client_id: str | None = Field(default=None, alias="SALESFORCE_CLIENT_ID")
     salesforce_client_secret: str | None = Field(default=None, alias="SALESFORCE_CLIENT_SECRET")
     salesforce_redirect_uri: str | None = Field(default=None, alias="SALESFORCE_REDIRECT_URI")
+    zendesk_client_id: str | None = Field(default=None, alias="ZENDESK_CLIENT_ID")
+    zendesk_client_secret: str | None = Field(default=None, alias="ZENDESK_CLIENT_SECRET")
+    zendesk_redirect_uri: str | None = Field(default=None, alias="ZENDESK_REDIRECT_URI")
+    # Known simplification (see docs/KNOWN_LIMITATIONS.md): unlike the other
+    # five providers, a Zendesk OAuth app is registered against one
+    # customer's subdomain (there is no single multi-tenant authorize URL),
+    # so this build supports exactly one configured Zendesk account rather
+    # than a per-connection subdomain prompt a production build would add.
+    zendesk_subdomain: str | None = Field(default=None, alias="ZENDESK_SUBDOMAIN")
     # Encrypts stored OAuth tokens at rest (app/core/crypto.py). Falls back
     # to a key derived from SECRET_KEY when unset — fine for dev/test,
     # a real deployment should set its own (see docs/KNOWN_LIMITATIONS.md).
@@ -145,6 +154,7 @@ def _diagnose(settings: Settings) -> None:
         "GITHUB_CLIENT_ID": settings.github_client_id,
         "SLACK_CLIENT_ID": settings.slack_client_id,
         "SALESFORCE_CLIENT_ID": settings.salesforce_client_id,
+        "ZENDESK_CLIENT_ID": settings.zendesk_client_id,
         "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
         "CLEARBIT_API_KEY": settings.clearbit_api_key,
     }

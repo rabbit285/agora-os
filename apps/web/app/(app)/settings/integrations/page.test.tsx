@@ -172,6 +172,7 @@ describe("IntegrationsSettingsPage — OAuth connection lifecycle", () => {
           status: "running",
           items_synced: null,
           error: null,
+          cursor_used: null,
           started_at: new Date().toISOString(),
           completed_at: null,
         },

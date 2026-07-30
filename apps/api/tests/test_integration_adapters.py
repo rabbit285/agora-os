@@ -28,11 +28,12 @@ from app.integrations.adapters.microsoft import MicrosoftAdapter
 from app.integrations.adapters.mock import MockOAuthAdapter
 from app.integrations.adapters.salesforce import SalesforceAdapter
 from app.integrations.adapters.slack import SlackAdapter
+from app.integrations.adapters.zendesk import ZendeskAdapter
 
-ALL_PROVIDERS = {"hubspot", "google", "microsoft", "github", "slack", "salesforce"}
+ALL_PROVIDERS = {"hubspot", "google", "microsoft", "github", "slack", "salesforce", "zendesk"}
 
 
-def test_oauth_provider_keys_match_all_six_expected_providers() -> None:
+def test_oauth_provider_keys_match_all_seven_expected_providers() -> None:
     assert OAUTH_PROVIDER_KEYS == ALL_PROVIDERS
 
 
@@ -128,6 +129,32 @@ def test_salesforce_authorization_url_includes_refresh_token_scope() -> None:
     url = urlparse(adapter.authorization_url(state="s6", redirect_uri="https://app.example/cb"))
     params = parse_qs(url.query)
     assert "refresh_token" in params["scope"][0]
+
+
+def test_zendesk_authorization_url_is_scoped_to_its_subdomain() -> None:
+    adapter = ZendeskAdapter(client_id="zd-client", client_secret="zd-secret", subdomain="acme")
+    url = urlparse(adapter.authorization_url(state="s7", redirect_uri="https://app.example/cb"))
+    params = parse_qs(url.query)
+    assert url.hostname == "acme.zendesk.com"
+    assert params["client_id"] == ["zd-client"]
+    assert params["state"] == ["s7"]
+
+
+async def test_zendesk_refresh_raises_because_non_rotating_tokens_never_expire() -> None:
+    adapter = ZendeskAdapter(client_id="zd-client", client_secret="zd-secret", subdomain="acme")
+    with pytest.raises(RuntimeError, match="cannot be refreshed"):
+        await adapter.refresh_access_token(refresh_token="irrelevant")
+
+
+def test_zendesk_is_not_configured_without_a_subdomain_even_with_client_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "zendesk_client_id", "zd-client")
+    monkeypatch.setattr(settings, "zendesk_client_secret", "zd-secret")
+    monkeypatch.setattr(settings, "zendesk_subdomain", None)
+    assert is_provider_configured("zendesk") is False
 
 
 async def test_mock_adapter_labels_results_with_its_provider_key() -> None:

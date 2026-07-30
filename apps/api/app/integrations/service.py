@@ -429,17 +429,29 @@ async def execute_sync_run(
     sync_run: SyncRun,
     actor_user_id: uuid.UUID | None = None,
 ) -> SyncRun:
-    """Runs the actual provider sync call and finalizes `sync_run` — a real
-    but deliberately simplified version of spec §49's `sync()` capability
-    (no incremental cursors/checkpointing yet, see
-    docs/KNOWN_LIMITATIONS.md). Called by the Temporal activity in
-    production; called directly in tests."""
+    """Runs the actual provider sync call and finalizes `sync_run` — spec
+    §49's `sync()` capability, with spec §G2 incremental
+    cursors/checkpointing: resumes from `connection.sync_cursor` and
+    persists the provider's `next_cursor` for the following call. Called
+    by the Temporal activity in production; called directly in tests.
+
+    Idempotency guard (spec §G2 "replay safety"): if this `SyncRun` was
+    already finalized (e.g. the activity is replayed after a worker crash
+    that occurred after the first attempt committed), return it unchanged
+    rather than syncing — and, critically, without re-advancing
+    `connection.sync_cursor` a second time for the same logical attempt."""
+    if sync_run.status != "running":
+        return sync_run
+
+    cursor_used = connection.sync_cursor
+    sync_run.cursor_used = cursor_used
     try:
         access_token = await ensure_fresh_access_token(db, connection=connection)
         adapter = get_oauth_adapter(connection.connector_key)
-        result = await adapter.sync(access_token=access_token)
+        result = await adapter.sync(access_token=access_token, cursor=cursor_used)
         sync_run.status = "succeeded"
         sync_run.items_synced = result.items_synced
+        connection.sync_cursor = result.next_cursor
         connection.last_synced_at = utcnow()
         connection.last_error = None
         await record_event(

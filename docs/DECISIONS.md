@@ -1455,3 +1455,81 @@ deciding the Approval purely from the automatic signal (never calling
 `/resume` manually), a `new_crm_lead`-triggered workflow firing a real
 run when a Lead was created, and template cloning producing a real new
 draft workflow.
+
+## ADR-0041 — Integrations gets real spec §G2 sync safety (cursors, replay safety, bounded retries) and grows from 6 to 7 OAuth providers by extending existing adapters' scope rather than only adding new connector shapes
+
+**Decision**: spec §G2's sync-safety bullet list — idempotency, incremental
+cursors, retries, backoff, rate-limit handling, tombstones/deletions,
+partial-failure reporting, checkpointing, replay safety, tenant isolation
+— was previously true only for the "runs as a durable Temporal job, not
+inline" half. The other half needed the provider's own real pagination
+mechanism threaded through, not invented: `SyncResult` gained a
+`next_cursor: str | None` field and `OAuthConnectorAdapter.sync()` gained
+a `cursor: str | None = None` parameter, and every one of the (now seven)
+adapters extracts and returns its provider's actual next-page token —
+HubSpot's `paging.next.after`, Slack's `response_metadata.next_cursor`,
+Google Calendar's `nextPageToken`, Microsoft Graph's fully-formed
+`@odata.nextLink` (used directly as the next request URL, not
+reconstructed), GitHub's page-number pagination (derived from whether the
+`Link` response header actually advertises `rel="next"`, not assumed),
+and Zendesk's `after_cursor`. Salesforce's `sync()` accepts the parameter
+to satisfy the Protocol but always returns `next_cursor=None`, honestly,
+since its single non-paginated identity call has no pagination concept —
+same "disclosed simplification over silent gap" discipline as every prior
+capability-boundary decision this build has made. The cursor is persisted
+on `IntegrationConnection.sync_cursor` (migration `3d13a5b8ba86`) and
+round-tripped by `execute_sync_run`, which also records `cursor_used` on
+each `SyncRun` for audit/debugging — the live checkpoint for the *next*
+sync is always the connection's field, not any individual run's.
+
+Replay safety got a real guard, not just a docstring claim: if
+`execute_sync_run` is called against a `SyncRun` that's already
+`succeeded`/`failed` (the realistic trigger is a Temporal activity replay
+after a worker crash between committing the first attempt and returning),
+it returns the row unchanged instead of re-syncing — critically, without
+advancing `connection.sync_cursor` a second time for the same logical
+attempt, which would silently skip a page. Retries/backoff got a real,
+*bounded* `RetryPolicy` (3 attempts, exponential backoff, 1-minute cap) on
+`IntegrationSyncWorkflow`'s activity call, replacing reliance on
+Temporal's unlimited default — a provider that's rate-limiting or briefly
+down gets a few backed-off attempts against the same `SyncRun`, not
+endless ones. Tombstones/deletions and rate-limit-*specific* detection
+(vs. just retrying any error) remain genuinely unbuilt and are disclosed
+in `KNOWN_LIMITATIONS.md` rather than silently absent.
+
+Provider coverage grew from 6 to 7 (`ZendeskAdapter`, Customer Support
+category) following the exact established `OAuthConnectorAdapter` shape,
+plus its own documented simplification: unlike the other six providers, a
+Zendesk OAuth client is registered against one specific customer
+subdomain rather than a multi-tenant authorize URL, so
+`_ProviderSpec`/`is_provider_configured`/`get_oauth_adapter` in
+`app/integrations/adapters/__init__.py` gained a fourth, Zendesk-only
+"is this configured" input (`ZENDESK_SUBDOMAIN`) rather than threading an
+optional subdomain parameter through every other provider's constructor.
+Two more categories were closed not with new connectors but by widening
+existing ones: the Google adapter now also requests `gmail.readonly` and
+`drive.readonly` and its `sync()` fetches real Gmail messages and Drive
+files alongside Calendar events (Email, Documents); the Microsoft adapter
+now also requests `Mail.Read` and fetches real Outlook messages alongside
+Calendar events (Email) — the same reasoning a real Google Workspace or
+Microsoft 365 app would use (one OAuth grant, several related read scopes)
+rather than treating "one adapter, one category" as a hard rule. The
+tradeoff, disclosed rather than hidden: spec §G2 checkpointing only
+round-trips each adapter's *original* resource's cursor (Calendar for
+both); the newly-added resources (Gmail, Drive, Outlook Mail) always
+fetch their latest first page, since `IntegrationConnection.sync_cursor`
+is a single opaque string, not a per-resource map, and building that map
+for two secondary resources per adapter was judged not worth the schema
+growth relative to the value of always seeing the *latest* mail/files
+either way.
+
+Every spec §48 provider without an explicit "architecture" qualifier is
+now built except CRM's Pipedrive and Customer Support's Intercom, left
+alongside the explicitly-"architecture" providers (Zoho, Mailchimp,
+Freshdesk, Okta, Entra, Google Workspace, GitLab, Jira, Azure DevOps,
+Teams, SharePoint, OneDrive, Notion, QuickBooks, Xero, Stripe, ERP) as
+disclosed architecture-ready-not-built in `KNOWN_LIMITATIONS.md`: each
+would be the same `OAuthConnectorAdapter` shape already proven seven
+times over, adding no new pattern, and — like all seven built providers —
+none can be exercised end to end in this environment regardless, since no
+real developer app exists for any of them here.

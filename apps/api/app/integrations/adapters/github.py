@@ -106,7 +106,13 @@ class GitHubAdapter:
             external_account_id=str(body.get("id")) if body.get("id") else body.get("login"),
         )
 
-    async def sync(self, *, access_token: str) -> SyncResult:
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult:
+        """Incremental, checkpointed (spec §G2): GitHub's REST pagination
+        is page-number based (`?page=N`); the next page number is
+        round-tripped as the opaque `cursor` string, and derived from
+        whether the response's `Link` header advertises a `rel="next"`
+        page rather than assumed."""
+        page = int(cursor) if cursor else 1
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             me = await client.get(
                 USER_URL,
@@ -116,13 +122,16 @@ class GitHubAdapter:
             login = me.json()["login"]
             response = await client.get(
                 PUBLIC_REPOS_URL.format(login=login),
-                params={"per_page": 10, "sort": "updated"},
+                params={"per_page": 10, "sort": "updated", "page": page},
                 headers=API_VERSION_HEADERS,
             )
             response.raise_for_status()
             repos = response.json()
+        next_cursor = str(page + 1) if 'rel="next"' in response.headers.get("Link", "") else None
         return SyncResult(
-            items_synced=len(repos), detail=f"Fetched {login}'s public repositories (read-only)"
+            items_synced=len(repos),
+            detail=f"Fetched {login}'s public repositories (read-only)",
+            next_cursor=next_cursor,
         )
 
     async def revoke(self, *, access_token: str) -> None:

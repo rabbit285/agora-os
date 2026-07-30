@@ -115,11 +115,14 @@ class SalesforceAdapter:
             ok=True, detail="Connected", external_account_id=body.get("user_id") or body.get("sub")
         )
 
-    async def sync(self, *, access_token: str) -> SyncResult:
+    async def sync(self, *, access_token: str, cursor: str | None = None) -> SyncResult:
         # See the module docstring's "Known simplification": without a
         # persisted instance_url, the only endpoint this adapter can call
         # honestly (real data, real HTTP call) via the generic login domain
-        # is the same identity endpoint health uses.
+        # is the same identity endpoint health uses. That single-item
+        # identity check has no pagination concept, so `cursor` is
+        # accepted only to satisfy `OAuthConnectorAdapter` and always
+        # ignored, and `next_cursor` is honestly always `None` (spec §G2).
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             response = await client.get(
                 USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}
