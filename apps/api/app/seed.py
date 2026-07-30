@@ -26,11 +26,14 @@ from app.compliance.models import (
     Evidence,
     Framework,
     ProcessingActivity,
+    Questionnaire,
+    QuestionnaireAnswer,
     Requirement,
     Risk,
     Vendor,
 )
 from app.compliance.service import (
+    add_questionnaire_question,
     create_ai_incident,
     create_dpia,
     create_dsar,
@@ -38,6 +41,7 @@ from app.compliance.service import (
     record_vendor_assessment,
     register_ai_system,
     update_dsar_status,
+    update_questionnaire_answer,
 )
 from app.core.models import File, LegalEntity, Membership, MembershipRole, Organization, Task
 from app.core.rbac import ensure_system_roles, get_system_role
@@ -227,6 +231,20 @@ async def seed() -> None:
         )
         if not existing_vendors:
             await _seed_demo_vendor_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_questionnaires = (
+            (
+                await db.execute(
+                    select(Questionnaire).where(Questionnaire.organization_id == organization.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_questionnaires:
+            await _seed_demo_questionnaire_data(
+                db, organization_id=organization.id, admin_id=admin.id
+            )
 
         existing_assets = (
             (
@@ -703,6 +721,64 @@ async def _seed_demo_vendor_data(
     await db.commit()
     logger.info(
         "Seeded demo vendor data (1 low-risk vendor, 1 vendor with a critical assessment + linked risk)"
+    )
+
+
+async def _seed_demo_questionnaire_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one customer-provided questionnaire with two questions: one
+    already answered and approved (seeding the org's own answer library
+    for future reuse), one left unanswered so the demo org shows the
+    honest "missing" state `python -m app.seed` produces, not a
+    fabricated complete questionnaire."""
+    questionnaire = Questionnaire(
+        organization_id=organization_id,
+        title="Nordwind Robotics vendor security questionnaire",
+        source="customer_provided",
+        status="in_progress",
+        owner_id=admin_id,
+    )
+    db.add(questionnaire)
+    await db.flush()
+
+    answered_question = await add_questionnaire_question(
+        db,
+        organization_id=organization_id,
+        questionnaire=questionnaire,
+        text="Do you encrypt customer data at rest?",
+        category="security",
+        order_index=0,
+        actor_user_id=admin_id,
+    )
+    answered_result = await db.execute(
+        select(QuestionnaireAnswer).where(QuestionnaireAnswer.question_id == answered_question.id)
+    )
+    answered_answer = answered_result.scalar_one()
+    await update_questionnaire_answer(
+        db,
+        answer=answered_answer,
+        answer_text="Yes — all customer data is encrypted at rest using AES-256.",
+        status="approved",
+        evidence_id=None,
+        control_id=None,
+        actor_user_id=admin_id,
+    )
+
+    await add_questionnaire_question(
+        db,
+        organization_id=organization_id,
+        questionnaire=questionnaire,
+        text="Do you have a signed Data Processing Agreement (DPA) template available?",
+        category="compliance",
+        order_index=1,
+        actor_user_id=admin_id,
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo questionnaire data (1 questionnaire, 1 answered+approved question, "
+        "1 missing question)"
     )
 
 

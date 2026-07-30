@@ -33,9 +33,18 @@ implied to work.
   now exists — a `high`/`critical` assessment conclusion auto-creates a
   linked Risk, reusing `record_assessment`'s hook shape for a fourth
   entity type (ADR-0031); `Evidence` can now attach to a Vendor as well
-  as a Control — but no data transfers (the remaining Privacy
-  sub-feature), no audits (auditor portal), no security questionnaires,
-  or Trust Center.
+  as a Control. Security Questionnaires (`Questionnaire`/
+  `QuestionnaireQuestion`/`QuestionnaireAnswer`) also now exist — answers
+  are drafted via an org-wide exact-text match against previously
+  approved answers, then a live AI Copilot call as fallback, always
+  landing as `status="draft"` until a human approves (ADR-0032). The
+  answer-library match is a simplified, non-fuzzy comparison
+  (`strip().lower()` equality) — two questions that are semantically
+  identical but worded differently will not match and will fall through
+  to the AI Copilot path instead of reusing the human-approved answer; a
+  future iteration could reuse Knowledge's embeddings for a similarity
+  match instead. Still missing: data transfers (the remaining Privacy
+  sub-feature), audits (auditor portal), and Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —

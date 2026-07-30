@@ -186,11 +186,23 @@ erDiagram
   (`vendor_id`, alongside `control_id`) rather than a new evidence table,
   since a SOC 2 report or DPA is the same File-backed artifact shape
   either way.
+- **Questionnaire / QuestionnaireQuestion / QuestionnaireAnswer** —
+  spec §12/§67's "Security Questionnaires" screen. Each question gets
+  exactly one answer row, created atomically with `status="missing"`.
+  Answering tries an org-wide exact-text match against previously
+  `approved` answers first (`source_type="reused_from_library"`), then
+  falls back to a live **AI Copilot** call
+  (`source_type="ai_suggested"`, with retrieval `citations`) — either
+  way the result is always `status="draft"`, never auto-approved, the
+  same human-in-the-loop discipline as the AISystem/DPIA Approval gates
+  (ADR-0032). `opportunity_id` is a deliberately forward-looking
+  nullable FK to **Sales Opportunity**, unused until the Enterprise
+  Sales Security Review slice.
 
 Not modeled yet: framework/evidence versioning, audits (auditor portal),
-data transfers (the remaining Privacy sub-feature), security
-questionnaires, Trust Center — each a substantial feature attaching to
-this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
+data transfers (the remaining Privacy sub-feature), Trust Center — each
+a substantial feature attaching to this backbone, not blocking it. See
+`docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 4 entities (implemented — Security backbone)
 

@@ -333,3 +333,75 @@ class VendorAssessmentOut(BaseModel):
 class VendorDetailOut(VendorOut):
     assessments: list[VendorAssessmentOut]
     evidence: list[EvidenceOut]
+
+
+class QuestionnaireCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    source: str = Field(
+        default="internal_template", pattern="^(customer_provided|internal_template)$"
+    )
+    opportunity_id: uuid.UUID | None = None
+    owner_id: uuid.UUID | None = None
+
+
+class QuestionnaireStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(draft|in_progress|completed)$")
+
+
+class QuestionnaireOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    source: str
+    status: str
+    opportunity_id: uuid.UUID | None
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestionnaireQuestionCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    category: str = Field(default="compliance", pattern="^(compliance|security)$")
+    order_index: int = 0
+
+
+class QuestionnaireQuestionOut(BaseModel):
+    id: uuid.UUID
+    questionnaire_id: uuid.UUID
+    text: str
+    category: str
+    order_index: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestionnaireAnswerUpdate(BaseModel):
+    answer_text: str | None = None
+    status: str = Field(pattern="^(draft|approved|missing)$")
+    evidence_id: uuid.UUID | None = None
+    control_id: uuid.UUID | None = None
+
+
+class QuestionnaireAnswerOut(BaseModel):
+    id: uuid.UUID
+    question_id: uuid.UUID
+    answer_text: str | None
+    status: str
+    source_type: str | None
+    citations: list[dict[str, object]] | None
+    evidence_id: uuid.UUID | None
+    control_id: uuid.UUID | None
+    answered_by: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestionnaireQuestionDetailOut(QuestionnaireQuestionOut):
+    answer: QuestionnaireAnswerOut | None
+
+
+class QuestionnaireDetailOut(QuestionnaireOut):
+    questions: list[QuestionnaireQuestionDetailOut]

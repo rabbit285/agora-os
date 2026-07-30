@@ -20,6 +20,9 @@ from app.compliance.models import (
     Framework,
     Policy,
     ProcessingActivity,
+    Questionnaire,
+    QuestionnaireAnswer,
+    QuestionnaireQuestion,
     Requirement,
     Risk,
     Vendor,
@@ -53,6 +56,15 @@ from app.compliance.schemas import (
     PolicyOut,
     ProcessingActivityCreate,
     ProcessingActivityOut,
+    QuestionnaireAnswerOut,
+    QuestionnaireAnswerUpdate,
+    QuestionnaireCreate,
+    QuestionnaireDetailOut,
+    QuestionnaireOut,
+    QuestionnaireQuestionCreate,
+    QuestionnaireQuestionDetailOut,
+    QuestionnaireQuestionOut,
+    QuestionnaireStatusUpdate,
     RequirementOut,
     RiskCreate,
     RiskOut,
@@ -65,6 +77,7 @@ from app.compliance.schemas import (
     VendorStatusUpdate,
 )
 from app.compliance.service import (
+    add_questionnaire_question,
     create_ai_incident,
     create_dpia,
     create_dsar,
@@ -73,8 +86,10 @@ from app.compliance.service import (
     record_assessment,
     record_vendor_assessment,
     register_ai_system,
+    suggest_questionnaire_answer,
     update_ai_incident_status,
     update_dsar_status,
+    update_questionnaire_answer,
 )
 from app.core.models import File
 from app.db.session import get_db
@@ -232,6 +247,15 @@ async def list_evidence(
         .order_by(Evidence.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def _get_org_evidence(
+    db: AsyncSession, evidence_id: uuid.UUID, organization_id: uuid.UUID
+) -> Evidence:
+    evidence = await db.get(Evidence, evidence_id)
+    if evidence is None or evidence.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+    return evidence
 
 
 @router.post("/evidence", response_model=EvidenceOut, status_code=status.HTTP_201_CREATED)
@@ -858,3 +882,221 @@ async def create_vendor_assessment(
     await db.commit()
     await db.refresh(assessment)
     return assessment
+
+
+@router.get("/questionnaires", response_model=list[QuestionnaireOut])
+async def list_questionnaires(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[Questionnaire]:
+    result = await db.execute(
+        select(Questionnaire)
+        .where(Questionnaire.organization_id == context.organization_id)
+        .order_by(Questionnaire.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/questionnaires", response_model=QuestionnaireOut, status_code=status.HTTP_201_CREATED
+)
+async def create_questionnaire(
+    payload: QuestionnaireCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.questionnaires.manage")),
+) -> Questionnaire:
+    if payload.opportunity_id is not None:
+        from app.sales.models import Opportunity
+
+        opportunity = await db.get(Opportunity, payload.opportunity_id)
+        if opportunity is None or opportunity.organization_id != context.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity not found"
+            )
+
+    questionnaire = Questionnaire(organization_id=context.organization_id, **payload.model_dump())
+    db.add(questionnaire)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.questionnaire.created",
+        object_type="questionnaire",
+        object_id=str(questionnaire.id),
+        after_state={"title": questionnaire.title, "source": questionnaire.source},
+    )
+    await db.commit()
+    await db.refresh(questionnaire)
+    return questionnaire
+
+
+async def _get_org_questionnaire(
+    db: AsyncSession, questionnaire_id: uuid.UUID, organization_id: uuid.UUID
+) -> Questionnaire:
+    questionnaire = await db.get(Questionnaire, questionnaire_id)
+    if questionnaire is None or questionnaire.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Questionnaire not found")
+    return questionnaire
+
+
+@router.get("/questionnaires/{questionnaire_id}", response_model=QuestionnaireDetailOut)
+async def get_questionnaire(
+    questionnaire_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> QuestionnaireDetailOut:
+    questionnaire = await _get_org_questionnaire(db, questionnaire_id, context.organization_id)
+    questions_result = await db.execute(
+        select(QuestionnaireQuestion)
+        .where(QuestionnaireQuestion.questionnaire_id == questionnaire.id)
+        .order_by(QuestionnaireQuestion.order_index)
+    )
+    questions = list(questions_result.scalars().all())
+
+    question_details: list[QuestionnaireQuestionDetailOut] = []
+    for question in questions:
+        answer_result = await db.execute(
+            select(QuestionnaireAnswer).where(QuestionnaireAnswer.question_id == question.id)
+        )
+        answer = answer_result.scalar_one_or_none()
+        question_details.append(
+            QuestionnaireQuestionDetailOut(
+                **QuestionnaireQuestionOut.model_validate(question).model_dump(),
+                answer=QuestionnaireAnswerOut.model_validate(answer) if answer else None,
+            )
+        )
+
+    return QuestionnaireDetailOut(
+        **QuestionnaireOut.model_validate(questionnaire).model_dump(),
+        questions=question_details,
+    )
+
+
+@router.patch("/questionnaires/{questionnaire_id}/status", response_model=QuestionnaireOut)
+async def update_questionnaire_status(
+    questionnaire_id: uuid.UUID,
+    payload: QuestionnaireStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.questionnaires.manage")),
+) -> Questionnaire:
+    questionnaire = await _get_org_questionnaire(db, questionnaire_id, context.organization_id)
+    before_status = questionnaire.status
+    questionnaire.status = payload.status
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.questionnaire.status_changed",
+        object_type="questionnaire",
+        object_id=str(questionnaire.id),
+        before_state={"status": before_status},
+        after_state={"status": questionnaire.status},
+    )
+    await db.commit()
+    await db.refresh(questionnaire)
+    return questionnaire
+
+
+@router.post(
+    "/questionnaires/{questionnaire_id}/questions",
+    response_model=QuestionnaireQuestionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_questionnaire_question(
+    questionnaire_id: uuid.UUID,
+    payload: QuestionnaireQuestionCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.questionnaires.manage")),
+) -> QuestionnaireQuestion:
+    questionnaire = await _get_org_questionnaire(db, questionnaire_id, context.organization_id)
+    question = await add_questionnaire_question(
+        db,
+        organization_id=context.organization_id,
+        questionnaire=questionnaire,
+        text=payload.text,
+        category=payload.category,
+        order_index=payload.order_index,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(question)
+    return question
+
+
+async def _get_org_question_and_answer(
+    db: AsyncSession,
+    questionnaire_id: uuid.UUID,
+    question_id: uuid.UUID,
+    organization_id: uuid.UUID,
+) -> tuple[QuestionnaireQuestion, QuestionnaireAnswer]:
+    question = await db.get(QuestionnaireQuestion, question_id)
+    if (
+        question is None
+        or question.organization_id != organization_id
+        or question.questionnaire_id != questionnaire_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    answer_result = await db.execute(
+        select(QuestionnaireAnswer).where(QuestionnaireAnswer.question_id == question.id)
+    )
+    answer = answer_result.scalar_one_or_none()
+    if answer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer not found")
+    return question, answer
+
+
+@router.post(
+    "/questionnaires/{questionnaire_id}/questions/{question_id}/suggest-answer",
+    response_model=QuestionnaireAnswerOut,
+)
+async def suggest_answer(
+    questionnaire_id: uuid.UUID,
+    question_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.questionnaires.manage")),
+) -> QuestionnaireAnswer:
+    question, answer = await _get_org_question_and_answer(
+        db, questionnaire_id, question_id, context.organization_id
+    )
+    answer = await suggest_questionnaire_answer(
+        db,
+        organization_id=context.organization_id,
+        question=question,
+        answer=answer,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(answer)
+    return answer
+
+
+@router.patch(
+    "/questionnaires/{questionnaire_id}/questions/{question_id}/answer",
+    response_model=QuestionnaireAnswerOut,
+)
+async def update_answer(
+    questionnaire_id: uuid.UUID,
+    question_id: uuid.UUID,
+    payload: QuestionnaireAnswerUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.questionnaires.manage")),
+) -> QuestionnaireAnswer:
+    _, answer = await _get_org_question_and_answer(
+        db, questionnaire_id, question_id, context.organization_id
+    )
+    if payload.evidence_id is not None:
+        await _get_org_evidence(db, payload.evidence_id, context.organization_id)
+    if payload.control_id is not None:
+        await _get_org_control(db, payload.control_id, context.organization_id)
+    answer = await update_questionnaire_answer(
+        db,
+        answer=answer,
+        answer_text=payload.answer_text,
+        status=payload.status,
+        evidence_id=payload.evidence_id,
+        control_id=payload.control_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(answer)
+    return answer

@@ -3,7 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AIIncident, AISystem, DPIA, DSAR, ProcessingActivity, Vendor } from "@/lib/types";
+import type {
+  AIIncident,
+  AISystem,
+  DPIA,
+  DSAR,
+  ProcessingActivity,
+  Questionnaire,
+  Vendor,
+} from "@/lib/types";
 
 import CompliancePage from "./page";
 
@@ -93,6 +101,16 @@ const VENDOR_FIXTURE: Vendor = {
   created_at: new Date().toISOString(),
 };
 
+const QUESTIONNAIRE_FIXTURE: Questionnaire = {
+  id: "33333333-4444-5555-6666-777777777777",
+  title: "Nordwind Robotics vendor security questionnaire",
+  source: "customer_provided",
+  status: "in_progress",
+  opportunity_id: null,
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -109,6 +127,7 @@ function mockRoutes(overrides: {
   aiSystems?: AISystem[];
   aiIncidents?: AIIncident[];
   vendors?: Vendor[];
+  questionnaires?: Questionnaire[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -128,6 +147,10 @@ function mockRoutes(overrides: {
       return { ...VENDOR_FIXTURE };
     }
     if (path === "/api/v1/compliance/vendors") return overrides.vendors ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/questionnaires") {
+      return { ...QUESTIONNAIRE_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/questionnaires") return overrides.questionnaires ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -265,6 +288,43 @@ describe("CompliancePage — Vendors section", () => {
       expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/vendors", {
         method: "POST",
         body: { name: "New Vendor Inc", category: "cloud_infrastructure" },
+      }),
+    );
+  });
+});
+
+describe("CompliancePage — Questionnaires section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders questionnaires with their source and status", async () => {
+    mockRoutes({ questionnaires: [QUESTIONNAIRE_FIXTURE] });
+    renderPage();
+
+    expect(
+      await screen.findByText("Nordwind Robotics vendor security questionnaire"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("customer provided")).toBeInTheDocument();
+    expect(screen.getByText("in progress")).toBeInTheDocument();
+  });
+
+  it("creates a new questionnaire with the entered title and source", async () => {
+    mockRoutes({});
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(
+      await screen.findByPlaceholderText("Questionnaire title"),
+      "New Customer Questionnaire",
+    );
+    await user.selectOptions(screen.getByDisplayValue("Internal template"), "customer_provided");
+    await user.click(screen.getByRole("button", { name: "Create questionnaire" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/questionnaires", {
+        method: "POST",
+        body: { title: "New Customer Questionnaire", source: "customer_provided" },
       }),
     );
   });

@@ -287,6 +287,54 @@ export type VendorDetail = Vendor & {
   evidence: Evidence[];
 };
 
+export type QuestionnaireSource = "customer_provided" | "internal_template";
+export type QuestionnaireStatus = "draft" | "in_progress" | "completed";
+
+export type Questionnaire = {
+  id: string;
+  title: string;
+  source: QuestionnaireSource;
+  status: QuestionnaireStatus;
+  opportunity_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type QuestionCategory = "compliance" | "security";
+
+export type QuestionnaireQuestion = {
+  id: string;
+  questionnaire_id: string;
+  text: string;
+  category: QuestionCategory;
+  order_index: number;
+  created_at: string;
+};
+
+export type AnswerStatus = "draft" | "approved" | "missing";
+export type AnswerSourceType = "ai_suggested" | "manual" | "reused_from_library" | null;
+
+export type QuestionnaireAnswer = {
+  id: string;
+  question_id: string;
+  answer_text: string | null;
+  status: AnswerStatus;
+  source_type: AnswerSourceType;
+  citations: Record<string, unknown>[] | null;
+  evidence_id: string | null;
+  control_id: string | null;
+  answered_by: string | null;
+  created_at: string;
+};
+
+export type QuestionnaireQuestionDetail = QuestionnaireQuestion & {
+  answer: QuestionnaireAnswer | null;
+};
+
+export type QuestionnaireDetail = Questionnaire & {
+  questions: QuestionnaireQuestionDetail[];
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

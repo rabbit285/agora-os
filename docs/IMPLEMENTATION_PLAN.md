@@ -83,10 +83,19 @@ Also done: Vendor Risk (`Vendor`/`VendorAssessment`, spec §12/§67
 a linked Risk (ADR-0031). `Evidence` gained a second optional target
 (`vendor_id`) alongside `control_id`.
 
-Remaining: data transfers (Privacy's remaining sub-feature), security
-questionnaires, audits (auditor portal), Trust Center, regulatory
-intelligence feed. Each is a substantial feature attaching to the
-backbone above, not a blocker
+Also done: Security Questionnaires (`Questionnaire`/
+`QuestionnaireQuestion`/`QuestionnaireAnswer`, spec §12/§67 "Security
+Questionnaires"). Answers are drafted via an org-wide exact-text match
+against previously-approved answers, then a live AI Copilot call as
+fallback — always landing as `status="draft"`, never auto-approved
+(ADR-0032). `Questionnaire.opportunity_id` is a forward-looking nullable
+FK to Sales Opportunity for the not-yet-built Enterprise Sales Security
+Review slice.
+
+Remaining: data transfers (Privacy's remaining sub-feature), audits
+(auditor portal), Trust Center, Enterprise Sales Security Review,
+regulatory intelligence feed. Each is a substantial feature attaching to
+the backbone above, not a blocker
 to it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
 
 ## Phase 4 — Security (backbone in progress)

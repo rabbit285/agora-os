@@ -992,3 +992,164 @@ async def test_vendor_from_other_org_returns_not_found(client: AsyncClient) -> N
     )
     assert response.status_code == 404
     await other_client.aclose()
+
+
+# --- Security Questionnaires ---
+
+
+async def _create_questionnaire(client: AsyncClient, title: str) -> str:
+    response = await client.post("/api/v1/compliance/questionnaires", json={"title": title})
+    assert response.status_code == 201, response.text
+    return response.json()["id"]  # type: ignore[no-any-return]
+
+
+async def test_employee_role_cannot_create_questionnaire(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "quest-emp1@example.com", "Questionnaire Employee Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-quest@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post("/api/v1/compliance/questionnaires", json={"title": "Should fail"})
+    assert response.status_code == 403
+
+
+async def test_compliance_manager_can_create_questionnaire_and_add_question(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "quest-cm1@example.com", "Questionnaire CM Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="cm-quest@example.com",
+        role_key="compliance_manager",
+    )
+    client.cookies.set("agora_session", token)
+
+    questionnaire = await client.post(
+        "/api/v1/compliance/questionnaires",
+        json={"title": "Acme Corp security questionnaire", "source": "customer_provided"},
+    )
+    assert questionnaire.status_code == 201, questionnaire.text
+    questionnaire_id = questionnaire.json()["id"]
+
+    question = await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions",
+        json={"text": "Do you encrypt data at rest?", "category": "security"},
+    )
+    assert question.status_code == 201, question.text
+
+    detail = await client.get(f"/api/v1/compliance/questionnaires/{questionnaire_id}")
+    assert detail.status_code == 200
+    assert len(detail.json()["questions"]) == 1
+    assert detail.json()["questions"][0]["answer"]["status"] == "missing"
+
+
+async def test_suggest_answer_without_knowledge_returns_honest_no_evidence_message(
+    client: AsyncClient,
+) -> None:
+    """No documents are indexed for this fresh org, so the real AI Copilot
+    call (not mocked) honestly reports it has no evidence rather than
+    fabricating an answer (spec §82)."""
+    await _signup(client, "quest1@example.com", "Questionnaire Org 1")
+    questionnaire_id = await _create_questionnaire(client, "Vendor security review")
+    question = await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions",
+        json={"text": "Do you have a SOC 2 report?", "category": "security"},
+    )
+    question_id = question.json()["id"]
+
+    suggested = await client.post(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/questions/{question_id}/suggest-answer"
+    )
+    assert suggested.status_code == 200, suggested.text
+    body = suggested.json()
+    assert body["source_type"] == "ai_suggested"
+    assert body["status"] == "draft"
+    assert "don't have any indexed documents" in body["answer_text"]
+
+
+async def test_manual_answer_approval_lets_a_later_identical_question_reuse_it(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "quest2@example.com", "Questionnaire Org 2")
+
+    first_questionnaire_id = await _create_questionnaire(client, "First customer review")
+    first_question = await client.post(
+        f"/api/v1/compliance/questionnaires/{first_questionnaire_id}/questions",
+        json={"text": "Where is customer data hosted?", "category": "compliance"},
+    )
+    first_question_id = first_question.json()["id"]
+
+    manual_answer = await client.patch(
+        f"/api/v1/compliance/questionnaires/{first_questionnaire_id}/questions/{first_question_id}/answer",
+        json={
+            "answer_text": "All customer data is hosted in AWS eu-central-1.",
+            "status": "approved",
+        },
+    )
+    assert manual_answer.status_code == 200, manual_answer.text
+
+    second_questionnaire_id = await _create_questionnaire(client, "Second customer review")
+    second_question = await client.post(
+        f"/api/v1/compliance/questionnaires/{second_questionnaire_id}/questions",
+        json={"text": "Where is customer data hosted?", "category": "compliance"},
+    )
+    second_question_id = second_question.json()["id"]
+
+    suggested = await client.post(
+        f"/api/v1/compliance/questionnaires/{second_questionnaire_id}/questions/{second_question_id}/suggest-answer"
+    )
+    assert suggested.status_code == 200, suggested.text
+    body = suggested.json()
+    assert body["source_type"] == "reused_from_library"
+    assert body["status"] == "draft"
+    assert body["answer_text"] == "All customer data is hosted in AWS eu-central-1."
+
+
+async def test_questionnaire_status_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "quest3@example.com", "Questionnaire Org 3")
+    questionnaire_id = await _create_questionnaire(client, "Status lifecycle test")
+
+    updated = await client.patch(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/status",
+        json={"status": "in_progress"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "in_progress"
+
+    completed = await client.patch(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}/status",
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+
+
+async def test_questionnaire_rejects_opportunity_from_another_org(client: AsyncClient) -> None:
+    await _signup(client, "quest4@example.com", "Questionnaire Org 4")
+    response = await client.post(
+        "/api/v1/compliance/questionnaires",
+        json={"title": "Should fail", "opportunity_id": str(uuid.uuid4())},
+    )
+    assert response.status_code == 404
+
+
+async def test_questionnaire_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-quest1@example.com", "Cross Questionnaire Org 1")
+    questionnaire_id = await _create_questionnaire(client, "Org 1 questionnaire")
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(
+        other_client, "cross-quest2@example.com", "Cross Questionnaire Org 2"
+    )
+
+    response = await other_client.get(
+        f"/api/v1/compliance/questionnaires/{questionnaire_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

@@ -24,6 +24,8 @@ import type {
   Framework,
   LegalBasis,
   ProcessingActivity,
+  Questionnaire,
+  QuestionnaireSource,
   Risk,
   Severity,
   Vendor,
@@ -180,6 +182,85 @@ function VendorsSection() {
                   <SeverityBadge severity={vendor.risk_tier} />
                   <StatusBadge status={vendor.status} />
                 </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuestionnairesSection() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [source, setSource] = useState<QuestionnaireSource>("internal_template");
+
+  const { data: questionnaires } = useQuery<Questionnaire[]>({
+    queryKey: ["compliance", "questionnaires"],
+    queryFn: () => apiFetch<Questionnaire[]>("/api/v1/compliance/questionnaires"),
+  });
+
+  const createQuestionnaire = useMutation({
+    mutationFn: () =>
+      apiFetch<Questionnaire>("/api/v1/compliance/questionnaires", {
+        method: "POST",
+        body: { title, source },
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setSource("internal_template");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "questionnaires"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Questionnaires
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="Questionnaire title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <select
+            className={selectClassName}
+            value={source}
+            onChange={(e) => setSource(e.target.value as QuestionnaireSource)}
+          >
+            <option value="internal_template">Internal template</option>
+            <option value="customer_provided">Customer provided</option>
+          </select>
+          <Button
+            disabled={!title.trim() || createQuestionnaire.isPending}
+            onClick={() => createQuestionnaire.mutate()}
+          >
+            Create questionnaire
+          </Button>
+        </CardContent>
+      </Card>
+      {questionnaires?.length === 0 && (
+        <p className="text-sm text-neutral-500">No questionnaires yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {questionnaires?.map((questionnaire) => (
+          <Link
+            key={questionnaire.id}
+            href={`/compliance/questionnaires/${questionnaire.id}`}
+          >
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{questionnaire.title}</div>
+                  <div className="text-xs text-neutral-400">
+                    {questionnaire.source.replace(/_/g, " ")}
+                  </div>
+                </div>
+                <StatusBadge status={questionnaire.status} />
               </CardContent>
             </Card>
           </Link>
@@ -711,6 +792,7 @@ export default function CompliancePage() {
       <ControlsSection />
       <RisksSection />
       <VendorsSection />
+      <QuestionnairesSection />
       <AISystemsSection />
       <AIIncidentsSection />
       <ProcessingActivitiesSection />

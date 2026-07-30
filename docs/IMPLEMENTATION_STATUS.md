@@ -2,7 +2,7 @@
 
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
-Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents), Privacy (RoPA/DPIA/DSAR), and Vendor Risk Compliance extensions that together give a fourth Phase 8 scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires/Audits/Trust Center/Enterprise Sales Security Review/Data Transfers next)
+Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8's three Cross-Module Intelligence slices plus AI Governance (AI System Inventory + AI Incidents), Privacy (RoPA/DPIA/DSAR), and Vendor Risk Compliance extensions that together give a fourth Phase 8 scenario two of its steps; Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; Compliance/Trust program in progress: Vendor Risk done, Security Questionnaires done, Audits/Trust Center/Enterprise Sales Security Review/Data Transfers next)
 
 ## Platform
 
@@ -81,10 +81,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] `/api/v1/compliance/vendors` routes — create/list/detail (with assessments + evidence)/status/assessments; tenant-isolated, RBAC-gated via `compliance.vendors.manage` (added to the existing `COMPLIANCE_PERMISSIONS` bundle — `compliance_manager`/`dpo` get it automatically)
 - [x] Frontend: Vendors section on `/compliance` (create form, list) + `/compliance/vendors/[id]` detail (status dropdown, assessment form, assessment history, evidence list)
 - [x] Seed script: 1 low-risk vendor, 1 vendor with a critical assessment + linked risk
+- [x] Security Questionnaires: `Questionnaire`/`QuestionnaireQuestion`/`QuestionnaireAnswer` models + migration; every question gets an atomically-created `status="missing"` answer row; `Questionnaire.opportunity_id` is a forward-looking nullable FK to `sales_opportunities` for the Sales Security Review slice
+- [x] Answer drafting: `suggest_questionnaire_answer` tries an org-wide exact-text match against previously-approved answers first (`source_type="reused_from_library"`), then falls back to a live `app.ai.copilot.ask_copilot` call (`source_type="ai_suggested"`, citations stored) — always lands as `status="draft"`, never auto-approved (tested, ADR-0032)
+- [x] `/api/v1/compliance/questionnaires` routes — create/list/detail (questions + answers)/status/add-question/suggest-answer/update-answer; tenant-isolated, RBAC-gated via `compliance.questionnaires.manage` (added to the existing `COMPLIANCE_PERMISSIONS` bundle)
+- [x] Frontend: Questionnaires section on `/compliance` (create form, list) + `/compliance/questionnaires/[id]` detail (status dropdown, missing-answer count banner, add-question form, per-question suggest/save-draft/approve actions)
+- [x] Seed script: 1 questionnaire with 1 approved answer + 1 missing answer
 - [ ] Framework/evidence versioning — not modeled
 - [ ] Audits (auditor portal), regulatory intelligence feed — not started
 - [ ] Data transfers (the remaining Privacy sub-feature) — not started
-- [ ] Security questionnaires, Trust Center — not started
+- [ ] Trust Center — not started
 
 ## Security
 
@@ -203,15 +208,15 @@ Last updated: 2026-07-29 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] Auth flow tests (8 tests, passing)
 - [x] Knowledge module tests (7 tests: chunking, ingestion, unsupported format, tenant isolation)
 - [x] Copilot tests (7 tests: cosine similarity, prompt injection framing, insufficient-evidence, retrieval + citations, tenant isolation)
-- [x] Compliance tests (45 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests, 12 Privacy tests, 8 AI Incident tests — see prior entries for detail — plus 7 Vendor Risk tests: RBAC grant/denial, the critical-assessment→linked-Risk hook, the negative case for low risk, the vendor status lifecycle, evidence attaching to a vendor and appearing in its detail response, and tenant isolation)
+- [x] Compliance tests (52 tests: catalog, RBAC grant/denial, cross-module task creation, tenant isolation, risk lifecycle, 9 AI System Inventory tests, 12 Privacy tests, 8 AI Incident tests, 7 Vendor Risk tests — see prior entries for detail — plus 7 Security Questionnaire tests: RBAC grant/denial, question/answer creation, the honest no-Knowledge-evidence AI-suggestion path (a real `ask_copilot` call against an empty Knowledge base), cross-questionnaire library reuse of a manually-approved answer, the questionnaire status lifecycle, and tenant isolation for both a foreign `opportunity_id` and a questionnaire from another org)
 - [x] Security tests (10 tests: RBAC grant/denial, cross-module risk creation, cross-module task creation + owner notification, tenant isolation, status workflows)
 - [x] Sales tests (11 tests: RBAC grant/denial, suppression blocks send, resend conflict, tenant isolation, opportunity lifecycle, closed_won creates customer+task, idempotent reopen/re-win, no-contact skip)
 - [x] Support tests (10 tests: RBAC grant/denial, cross-module alert creation, ticket message thread, status transitions, tenant isolation, CSAT, knowledge article publish toggle)
 - [x] Automation tests (9 tests: RBAC grant/denial, draft/active step-edit gate, run-only-if-active gate, full run execution, human_approval pause + resume + decision, rejected-approval failure, tenant isolation)
 - [x] Cross-module intelligence tests (3 upsell-signal + 2 security-incident-chain tests, counted in their own modules' rows above, plus the 3 New Customer tests counted in Sales above)
 - [x] Integrations tests (50 tests: webhook RBAC/link/signature-verify/tenant-isolation from Phase 9 slice 1; OAuth provider-catalog honesty across all six providers with scope previews, RBAC denial, full start→callback→connected round trip against the mock adapter (proven generic via a second, non-HubSpot provider), expired/unknown-state/unknown-provider rejection, refresh/health/sync/disconnect lifecycle with the durable-sync split (`create_sync_run`/`execute_sync_run`) exercised directly including its failure path, an audit-trail assertion across the full OAuth lifecycle, tenant isolation; plus pure adapter unit tests for every provider's authorization-URL construction, scope preview, mock-fallback labeling, and the two no-refresh providers' explicit errors — no network, no live credentials needed)
-- [x] 164/164 total backend, ruff+mypy strict clean
-- [x] Frontend: 12 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, and 2 for Vendors (rendering with risk tier/status, adding a new vendor)
+- [x] 171/171 total backend, ruff+mypy strict clean
+- [x] Frontend: 14 Vitest + React Testing Library tests — 5 for `/settings/integrations`, 3 for Privacy sections, 2 for AI Incidents, 2 for Vendors (rendering with risk tier/status, adding a new vendor), and 2 for Questionnaires (rendering with source/status, creating a new questionnaire)
 - [ ] Playwright E2E
 - [ ] AI evaluation fixtures (Phase 3+)
 

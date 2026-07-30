@@ -38,6 +38,16 @@ creates a tracked consequence" hook shape (spec §80) for a fourth entity
 type: a `critical`/`high` vendor risk conclusion auto-creates a linked
 Compliance `Risk`, the same way a failed Control assessment auto-creates
 a Task. See docs/DECISIONS.md ADR-0031.
+
+`suggest_questionnaire_answer` reuses a previously-`approved` answer to
+an identically-worded question from the org's own answer library when
+one exists (`source_type="reused_from_library"`); otherwise it drafts a
+fresh answer via the existing AI Copilot (`app.ai.copilot.ask_copilot`,
+retrieval-grounded over the Knowledge base — spec §80, not a new AI
+pipeline), storing its citations and always as `status="draft"` — an
+AI-suggested or library-reused answer never auto-approves itself,
+consistent with spec F2 "no direct autonomous writes." See
+docs/DECISIONS.md ADR-0032.
 """
 
 from __future__ import annotations
@@ -45,6 +55,7 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
@@ -55,6 +66,9 @@ from app.compliance.models import (
     AISystem,
     Control,
     ControlAssessment,
+    Questionnaire,
+    QuestionnaireAnswer,
+    QuestionnaireQuestion,
     Risk,
     Vendor,
     VendorAssessment,
@@ -500,3 +514,165 @@ async def record_vendor_assessment(
         },
     )
     return assessment
+
+
+async def add_questionnaire_question(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    questionnaire: Questionnaire,
+    text: str,
+    category: str,
+    order_index: int,
+    actor_user_id: uuid.UUID | None,
+) -> QuestionnaireQuestion:
+    """Adds a question and its (initially empty) answer row in the same
+    call — every question has exactly one current answer from the
+    moment it exists, even before anyone has drafted one (spec §69's
+    "identify missing answers" step reads this as `status="missing"`)."""
+    question = QuestionnaireQuestion(
+        organization_id=organization_id,
+        questionnaire_id=questionnaire.id,
+        text=text,
+        category=category,
+        order_index=order_index,
+    )
+    db.add(question)
+    await db.flush()
+
+    db.add(
+        QuestionnaireAnswer(
+            organization_id=organization_id,
+            question_id=question.id,
+            status="missing",
+        )
+    )
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.questionnaire_question.added",
+        object_type="questionnaire_question",
+        object_id=str(question.id),
+        after_state={"questionnaire_id": str(questionnaire.id), "category": category},
+    )
+    return question
+
+
+async def _find_reusable_answer(
+    db: AsyncSession, *, organization_id: uuid.UUID, question_text: str
+) -> QuestionnaireAnswer | None:
+    """The org's own answer library: an approved answer to an
+    identically-worded question (case/whitespace-insensitive), from any
+    questionnaire. A real but simplified match — no fuzzy/semantic
+    matching yet, see docs/KNOWN_LIMITATIONS.md."""
+    normalized = question_text.strip().lower()
+    result = await db.execute(
+        select(QuestionnaireAnswer)
+        .join(QuestionnaireQuestion, QuestionnaireQuestion.id == QuestionnaireAnswer.question_id)
+        .where(
+            QuestionnaireAnswer.organization_id == organization_id,
+            QuestionnaireAnswer.status == "approved",
+        )
+        .order_by(QuestionnaireAnswer.updated_at.desc())
+    )
+    for candidate in result.scalars().all():
+        candidate_question = await db.get(QuestionnaireQuestion, candidate.question_id)
+        if candidate_question is not None and candidate_question.text.strip().lower() == normalized:
+            return candidate
+    return None
+
+
+async def suggest_questionnaire_answer(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    question: QuestionnaireQuestion,
+    answer: QuestionnaireAnswer,
+    actor_user_id: uuid.UUID | None,
+) -> QuestionnaireAnswer:
+    """Spec §69's "retrieve approved compliance and security answers" +
+    "AI Compliance/Security answers ... questions" steps: reuse an
+    approved answer from the org's own library when one already exists
+    for this exact question; otherwise draft a fresh one with the
+    existing AI Copilot, grounded in the Knowledge base. Always leaves
+    the result at `status="draft"` — never auto-approved."""
+    reusable = await _find_reusable_answer(
+        db, organization_id=organization_id, question_text=question.text
+    )
+    if reusable is not None:
+        answer.answer_text = reusable.answer_text
+        answer.status = "draft"
+        answer.source_type = "reused_from_library"
+        answer.citations = reusable.citations
+        answer.evidence_id = reusable.evidence_id
+        answer.control_id = reusable.control_id
+        action = "compliance.questionnaire_answer.reused_from_library"
+    else:
+        from app.ai.copilot import ask_copilot
+
+        copilot_answer = await ask_copilot(
+            db,
+            organization_id=organization_id,
+            requested_by=actor_user_id,
+            question=question.text,
+        )
+        answer.answer_text = copilot_answer.text
+        answer.status = "draft"
+        answer.source_type = "ai_suggested"
+        answer.citations = [
+            {
+                "document_id": str(c.document_id),
+                "chunk_id": str(c.chunk_id),
+                "chunk_index": c.chunk_index,
+                "score": c.score,
+            }
+            for c in copilot_answer.citations
+        ]
+        action = "compliance.questionnaire_answer.ai_suggested"
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action=action,
+        object_type="questionnaire_answer",
+        object_id=str(answer.id),
+        after_state={"source_type": answer.source_type},
+    )
+    return answer
+
+
+async def update_questionnaire_answer(
+    db: AsyncSession,
+    *,
+    answer: QuestionnaireAnswer,
+    answer_text: str | None,
+    status: str,
+    evidence_id: uuid.UUID | None,
+    control_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID | None,
+) -> QuestionnaireAnswer:
+    before_status = answer.status
+    if answer_text is not None:
+        answer.answer_text = answer_text
+        answer.source_type = "manual"
+    answer.status = status
+    if evidence_id is not None:
+        answer.evidence_id = evidence_id
+    if control_id is not None:
+        answer.control_id = control_id
+    answer.answered_by = actor_user_id
+
+    await record_event(
+        db,
+        organization_id=answer.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.questionnaire_answer.status_changed",
+        object_type="questionnaire_answer",
+        object_id=str(answer.id),
+        before_state={"status": before_status},
+        after_state={"status": status},
+    )
+    return answer

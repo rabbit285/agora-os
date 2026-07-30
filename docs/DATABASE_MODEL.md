@@ -429,6 +429,49 @@ updates the vendor's own `risk_tier`, via
 `record_assessment`'s "assessment creates a tracked consequence" hook
 shape for a fourth entity type (ADR-0031).
 
+```text
+questionnaires             -- security questionnaires (spec §12/§67 "Security Questionnaires")
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  title TEXT NOT NULL
+  source TEXT NOT NULL DEFAULT 'internal_template'   -- customer_provided|internal_template
+  status TEXT NOT NULL DEFAULT 'draft'   -- draft|in_progress|completed
+  opportunity_id UUID FK sales_opportunities NULL   -- forward-looking link for Sales Security Review
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+questionnaire_questions
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  questionnaire_id UUID FK questionnaires NOT NULL
+  text TEXT NOT NULL
+  category TEXT NOT NULL DEFAULT 'compliance'   -- compliance|security
+  order_index INTEGER NOT NULL DEFAULT 0
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+questionnaire_answers
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  question_id UUID FK questionnaire_questions NOT NULL UNIQUE   -- one answer row per question
+  answer_text TEXT NULL
+  status TEXT NOT NULL DEFAULT 'missing'   -- draft|approved|missing
+  source_type TEXT NULL   -- ai_suggested|manual|reused_from_library
+  citations JSON NULL   -- copilot retrieval citations, when source_type='ai_suggested'
+  evidence_id UUID FK evidence NULL
+  control_id UUID FK controls NULL
+  answered_by UUID FK users NULL
+  created_at, updated_at
+```
+
+Every `questionnaire_questions` row gets its `questionnaire_answers` row
+created atomically (`status='missing'`) so a question is never without
+an answer record. `app/compliance/service.py::suggest_questionnaire_answer`
+tries an org-wide normalized-text match against previously-`approved`
+answers first (`source_type='reused_from_library'`), then falls back to
+a live `app.ai.copilot.ask_copilot` call (`source_type='ai_suggested'`,
+`citations` populated) — either way the result is always
+`status='draft'`, never auto-approved (ADR-0032).
+
 ## Tables (Phase 4 — Security)
 
 Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`

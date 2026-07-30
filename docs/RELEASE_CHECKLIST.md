@@ -188,6 +188,16 @@ Automation) now have a real, tested backbone.
 - [x] Backend tests: 164 passing total; ruff/mypy clean
 - [x] Frontend tests: 2 new Vitest tests (12 total) covering the Vendors section rendering and adding a new vendor
 
+## Phase 3 extension (Security Questionnaires) — added after the Vendor Risk slice
+
+- [x] Questionnaire, QuestionnaireQuestion, QuestionnaireAnswer models + migration — spec §12/§67 "Security Questionnaires" screen; every question gets an atomically-created `status="missing"` answer row; `Questionnaire.opportunity_id` is a forward-looking nullable FK to `sales_opportunities`
+- [x] Answer drafting reuses the existing `app.ai.copilot.ask_copilot` retrieve→ground→generate→cite path as a fallback after an org-wide exact-text match against previously-approved answers; always lands as `status="draft"`, never auto-approved (tested, ADR-0032)
+- [x] Tenant-isolated `/api/v1/compliance/questionnaires` API (RBAC via `compliance.questionnaires.manage`, added to the `COMPLIANCE_PERMISSIONS` bundle) + frontend (Questionnaires section on `/compliance`, `/compliance/questionnaires/[id]` detail with status workflow, missing-answer banner, add-question form, per-question suggest/save-draft/approve actions)
+- [x] Seed script: 1 questionnaire with 1 approved answer + 1 missing answer
+- [x] Backend tests: 171 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (14 total) covering the Questionnaires section rendering and creating a new questionnaire
+- [x] Live Docker smoke test: created a second questionnaire with an identically-worded question and confirmed live reuse (`source_type="reused_from_library"`); confirmed the honest AI-Copilot fallback path on a genuinely novel question (with real retrieval citations against the seeded Knowledge document); confirmed manual answer approval and questionnaire status transition to `completed`; confirmed the full `compliance.questionnaire*` audit trail in Postgres; confirmed both `/compliance` (Questionnaires section) and `/compliance/questionnaires/[id]` return HTTP 200
+
 See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)

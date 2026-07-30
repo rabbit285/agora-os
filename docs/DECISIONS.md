@@ -803,3 +803,60 @@ was added to that bundle), the critical-assessment-creates-risk hook,
 the negative case for low risk, the vendor status lifecycle, evidence
 attaching to a vendor and appearing in its detail response, and tenant
 isolation.
+
+## ADR-0032 — Security Questionnaires reuse AI Copilot for drafting, with an org-wide answer library and a mandatory human-approval gate
+
+**Decision**: `Questionnaire` / `QuestionnaireQuestion` /
+`QuestionnaireAnswer` (`app/compliance/models.py`, spec §12/§67's
+"Security Questionnaires" screen) model a customer-provided or internal
+security/compliance questionnaire as a tenant-scoped container of
+questions, each with exactly one answer row (`question_id` unique FK)
+created atomically with the question so a question is never in a state
+without an answer record — its `status` is simply `"missing"` until
+someone answers it. `Questionnaire.opportunity_id` is a deliberately
+forward-looking nullable FK to `sales_opportunities`, unused by this
+slice but present now so the not-yet-built Enterprise Sales Security
+Review can create or import a questionnaire against a real opportunity
+without a later migration.
+
+`suggest_questionnaire_answer` gives each question two possible sources
+for a draft answer, tried in order: (1) `_find_reusable_answer`, a
+normalized-text exact match (`strip().lower()`) against every
+previously-`approved` answer in the organization — the simplest possible
+"we've answered this exact question before" reuse, deliberately not
+fuzzy or embedding-based; (2) if no match, a live call to the existing
+`app.ai.copilot.ask_copilot` (retrieve → ground → generate → cite over
+the Knowledge base) — no new AI pipeline is built for this feature.
+Either path always writes `status="draft"`: an AI-suggested or
+library-reused answer is never auto-approved. A human must call
+`update_questionnaire_answer` to move it to `"approved"`, at which point
+`source_type` becomes `"manual"` if the text was edited. This is the
+same human-in-the-loop discipline (spec F2, "no direct autonomous
+writes") already enforced for AISystem/DPIA Approval gates — answering a
+customer's security questionnaire incorrectly is a customer-trust and
+contractual-risk decision, not something an LLM draft should finalize
+unattended.
+
+RBAC adds a single new permission, `compliance.questionnaires.manage`,
+appended to the existing `COMPLIANCE_PERMISSIONS` bundle so
+`compliance_manager`/`dpo` roles get it automatically.
+
+**Why**: Reusing `ask_copilot` rather than building a bespoke
+questionnaire-answering pipeline keeps exactly one grounded-generation
+code path in the system, and its existing honest "I don't have any
+indexed documents for this" fallback (proven live against a
+zero-Knowledge-document org) means the AI path needed no mocking to test
+truthfully — a fresh org's `suggest-answer` call is a real,
+deterministic assertion, not a stubbed one. The org-wide answer library
+turns previously-approved, human-verified answers into the
+highest-trust source for a new identical question, ahead of asking the
+AI to regenerate an answer that a human has already vetted; this was
+proven live, not just in the test suite — creating a second
+questionnaire with an identical question after approving the first
+reused it with `source_type="reused_from_library"` against the running
+Docker stack. Tested in `tests/test_compliance.py`: RBAC denial for
+`employee`, questionnaire + question creation, the honest
+no-Knowledge-evidence AI-suggestion path, cross-questionnaire library
+reuse of a manually-approved answer, the questionnaire status
+lifecycle, and tenant isolation (both a foreign `opportunity_id` and a
+questionnaire from another org are rejected).

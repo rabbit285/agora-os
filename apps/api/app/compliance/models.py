@@ -54,6 +54,18 @@ tracked consequence" hook shape `record_assessment` established for
 Control (spec §80), reused for a fourth entity type. See
 app.compliance.service.record_vendor_assessment and docs/DECISIONS.md
 ADR-0031.
+
+`Questionnaire` / `QuestionnaireQuestion` / `QuestionnaireAnswer` add
+spec §12/§67's "Questionnaires" screen. `Questionnaire.opportunity_id`
+is the forward-looking link the Enterprise Sales Security Review (spec
+§69) will use. Each answer either reuses a previously-`approved` answer
+from the org's own answer library (`source_type="reused_from_library"`)
+or is drafted by the existing AI Copilot (`app.ai.copilot.ask_copilot`,
+retrieval-grounded over the Knowledge base) as `source_type=
+"ai_suggested"` — never auto-approved, consistent with this build's
+human-in-the-loop discipline everywhere an AI-authored artifact could
+reach a customer. See app.compliance.service.suggest_questionnaire_answer
+and docs/DECISIONS.md ADR-0032.
 """
 
 from __future__ import annotations
@@ -439,3 +451,78 @@ class VendorAssessment(UUIDPrimaryKeyMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Questionnaire(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A customer or internal security/compliance questionnaire (spec
+    §12/§67 "Questionnaires"). `opportunity_id` is the forward-looking
+    link the Enterprise Sales Security Review (spec §69) creates/imports
+    a Questionnaire against."""
+
+    __tablename__ = "questionnaires"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # customer_provided | internal_template
+    source: Mapped[str] = mapped_column(String(30), default="internal_template")
+    # draft | in_progress | completed
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_opportunities.id"), nullable=True, index=True
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class QuestionnaireQuestion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "questionnaire_questions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    questionnaire_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("questionnaires.id"), nullable=False, index=True
+    )
+    text: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # compliance | security
+    category: Mapped[str] = mapped_column(String(20), default="compliance")
+    order_index: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class QuestionnaireAnswer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The current answer to a QuestionnaireQuestion. One-to-one with the
+    question — re-answering replaces this row's fields rather than
+    accumulating a history, since only the current answer matters for
+    what goes into a trust package (spec §69)."""
+
+    __tablename__ = "questionnaire_answers"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("questionnaire_questions.id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    answer_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # draft | approved | missing
+    status: Mapped[str] = mapped_column(String(20), default="missing")
+    # ai_suggested | manual | reused_from_library
+    source_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    citations: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("evidence.id"), nullable=True
+    )
+    control_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True
+    )
+    answered_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
