@@ -24,6 +24,14 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """spec §53 multi-tenancy "Support:" tier (Organization/Legal Entity/
+    Business Unit/Team) — distinct from that same section's "Future:" tier
+    (parent organization / subsidiaries / agency-consultant multi-client
+    mode), which remains genuinely unbuilt, disclosed in
+    KNOWN_LIMITATIONS.md. Every organization gets exactly one `is_default`
+    entity at signup (see `app.identity.service`); archival uses
+    `is_active`, never a destructive delete (spec §73)."""
+
     __tablename__ = "legal_entities"
     __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_legal_entity_org_name"),)
 
@@ -33,6 +41,7 @@ class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     is_default: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
 
 
 class Team(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -42,7 +51,11 @@ class Team(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
+    legal_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):

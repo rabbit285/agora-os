@@ -320,6 +320,18 @@ implied to work.
   (same log-only dev adapter as password reset) — WebAuthn/hardware-key
   MFA is not implemented, only TOTP.
 - **No SSO/SAML/SCIM.** Reserved for Phase 10 per the spec.
+- **Multi-entity (spec §53) is real for its "Support:" tier, not its
+  "Future:" tier.** `LegalEntity`/`Team` have full CRUD
+  (`/organizations/current/legal-entities`, `/teams`; migration
+  `3b81902c0a1d`), RBAC-gated (`org.entities.manage`), audited, with
+  archival instead of destructive delete and an enforced exactly-one-
+  default-entity invariant — fixed 2026-07-30, completeness-audit backlog
+  PLAT-16. What remains genuinely unbuilt, per that same spec section's
+  own separate "Future:" marker (PLAT-17): `Organization` has no parent-
+  organization FK (no subsidiary hierarchy), and there is no
+  agency/consultant multi-client mode (one login managing several client
+  organizations) — both are spec-deferred product-roadmap items, not
+  gaps in what was attempted.
 
 ## Trust and progressive access model (spec §B)
 

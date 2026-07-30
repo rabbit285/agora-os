@@ -46,6 +46,23 @@ export type Membership = {
   roles: string[];
 };
 
+export type LegalEntity = {
+  id: string;
+  name: string;
+  country: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type Team = {
+  id: string;
+  name: string;
+  legal_entity_id: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
 export type Invitation = {
   id: string;
   email: string;

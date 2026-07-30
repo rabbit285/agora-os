@@ -1533,3 +1533,82 @@ would be the same `OAuthConnectorAdapter` shape already proven seven
 times over, adding no new pattern, and — like all seven built providers —
 none can be exercised end to end in this environment regardless, since no
 real developer app exists for any of them here.
+
+## ADR-0042 — audit_events immutability is enforced with a Postgres trigger, not a role-based REVOKE, because the app's DB role owns the table
+
+**Decision**: `app/audit/models.py`'s docstring previously claimed the
+migration that creates `audit_events` also `REVOKE`s `UPDATE`/`DELETE`
+from the application database role. Grepping every migration confirmed
+this was never actually true (finding A4) — but the deeper problem,
+found while implementing the real fix, is that a plain `REVOKE` would not
+have worked even if added: this codebase's single Postgres role (`agora`
+in local/dev, whatever role Alembic connects as in any real deployment)
+both *owns* every table it creates via migrations *and* is the role the
+application connects as at runtime. Postgres table owners bypass ordinary
+`GRANT`/`REVOKE` ACL checks entirely — `REVOKE UPDATE ON audit_events
+FROM agora` is a silent no-op against a role that owns the table, not an
+enforced restriction. Splitting into a separate lower-privileged runtime
+role (owner-role runs migrations, a second `GRANT SELECT, INSERT`-only
+role serves the API/worker at runtime) would fix this properly but is a
+real infra restructuring — new role bootstrap, a second connection
+string, docs/CI implications — disproportionate to what spec §59's
+"Audit logs" bullet actually demands.
+
+Migration `7f2a9c1d4e6b` instead adds a `BEFORE UPDATE OR DELETE FOR EACH
+ROW` trigger (`prevent_audit_event_mutation`) that unconditionally
+raises. This achieves the same real goal — the database itself refuses to
+mutate a written audit row, not just an application-code convention — via
+a mechanism triggers are specifically designed for: firing regardless of
+which role issues the statement, including the owner, since a trigger
+isn't a privilege check. Live-verified directly against Postgres (not
+just pytest) with a raw `psql` `UPDATE`/`DELETE` against a real
+`audit_events` row: both rejected with the trigger's own error message.
+`tests/test_audit_events_immutable.py` covers the same behavior in
+pytest, but is dialect-gated to skip on the SQLite in-memory database
+this test suite actually runs against (`tests/conftest.py`) — SQLite has
+no `CREATE TRIGGER ... LANGUAGE plpgsql`, and this suite never runs
+Alembic migrations at all (`Base.metadata.create_all` instead), so the
+trigger simply doesn't exist in the test database. Disclosed rather than
+silently non-functional: the skip message and the module docstring both
+say why, and the live Postgres verification is what actually proves the
+behavior.
+
+## ADR-0043 — Multi-entity gets real CRUD for spec §53's "Support:" tier; the same section's "Future:" tier stays deferred, because the spec text itself draws that line
+
+**Decision**: spec §53 (Multi-Tenancy) lists two tiers under one heading,
+and the completeness-audit finding for PLAT-16 had conflated them: a
+"Support:" tier (Organization, Legal Entity, Business Unit, Team — read
+as "build these now") and a separate "Future:" tier (parent organization,
+subsidiaries, agency/consultant multi-client mode — read as "not yet").
+`LegalEntity`/`Team` models already existed (created at signup — every
+org gets one default `LegalEntity`) but had zero CRUD endpoints, which is
+what PLAT-16 actually tracks; PLAT-17 was split out to separately track
+the "Future:" tier, which remains genuinely unbuilt and disclosed in
+`KNOWN_LIMITATIONS.md`, not silently dropped.
+
+`app/routers/organizations.py` gained full `LegalEntity`/`Team` CRUD
+(`POST`/`GET`/`PATCH`/`DELETE`) under `/organizations/current/legal-
+entities` and `/teams`, following the exact request/audit/permission
+shape the pre-existing `Invitation` endpoints in the same file already
+established. Two invariants worth calling out: (1) exactly one
+`LegalEntity` per organization can be `is_default` — promoting a new
+default demotes every other entity in the same request, and archiving
+the current default is rejected (409) rather than leaving an organization
+with zero default entities; (2) linking a `Team` to a `LegalEntity` from
+a *different* organization is rejected as 404 (not 403) — the same
+tenant-isolation-by-lookup pattern used everywhere else in this codebase
+(a cross-tenant id simply doesn't resolve, rather than leaking its
+existence via a 403). Archival (`is_active=False`) is used instead of a
+destructive delete on both models, per spec §73's database principle.
+`Team.legal_entity_id` is a new nullable FK (migration `3b81902c0a1d`,
+with the standard `server_default` backfill pattern for the two new
+NOT-NULL `is_active` columns on pre-existing rows). RBAC gained one new
+permission, `org.entities.manage`, granted only to `org_admin` — the same
+scope `org.settings.manage`/`org.users.manage` already use, deliberately
+not extended to `operations_manager` or any other role, since organization
+structure is an admin-level concern. 9 new tests cover the default-
+entity invariant, archival-of-default rejection, cross-tenant link
+rejection, and RBAC denial for a non-admin role; live-verified end to end
+against the running Docker stack including a direct `audit_events` query
+confirming every action recorded a real object id, not the class of bug
+finding A1 fixed earlier this session.

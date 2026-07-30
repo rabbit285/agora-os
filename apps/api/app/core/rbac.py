@@ -39,6 +39,7 @@ PERMISSIONS: dict[str, str] = {
     "core.approvals.decide": "Approve or reject pending approvals",
     "org.settings.manage": "Manage organization profile and settings",
     "org.users.manage": "Invite, suspend, and manage user memberships and roles",
+    "org.entities.manage": "Create and archive legal entities and teams",
     "compliance.controls.manage": "Create controls, map requirements, record assessments",
     "compliance.evidence.manage": "Attach and manage evidence",
     "compliance.risks.manage": "Create and update risks",

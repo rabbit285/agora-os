@@ -21,8 +21,8 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/onboarding/company` | [~] placeholder step |
-| `/onboarding/goals` | [ ] |
+| `/onboarding/company` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed `[~]` "placeholder step", which does not exist in the build output) |
+| `/onboarding/goals` | [ ] does not exist yet |
 | remaining onboarding steps (spec §68) | [ ] |
 
 ## CORE (app shell)
@@ -33,7 +33,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/copilot` | [x] retrieval-grounded Q&A with citations |
 | `/tasks` | [x] list + create |
 | `/approvals` | [x] list + approve/reject |
-| `/notifications` | [~] |
+| `/notifications` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed `[~]`, which does not exist in the build output) |
 | Global search (`/search`) | [x] real tenant-scoped search across 16 entity types, reachable from an always-visible top-nav box |
 | Global Create button | [ ] |
 
@@ -122,11 +122,11 @@ table rather than a fourth table.
 
 | Route | Status |
 |---|---|
-| `/settings/organization` | [x] |
+| `/settings/organization` | [x] name/slug profile; Legal Entities section (create, promote-to-default, archive) and Teams section (create, link to a legal entity, archive) — spec §53's "Support:" multi-tenancy tier |
 | `/settings/users` | [x] member list + invite-a-member form (email + role) + pending-invitations list with revoke |
 | `/settings/security` | [x] email verification status/resend, TOTP MFA enroll/confirm/disable |
-| `/settings/roles` | [~] read-only view |
-| `/settings/ai-providers` | [~] shows configured/not-configured state |
+| `/settings/roles` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed here as `[~]` "read-only view", which does not exist in the build output either) |
+| `/settings/ai-providers` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed here as `[~]` "shows configured/not-configured state", which does not exist in the build output either) |
 | `/settings/integrations` | [x] provider catalog for 7 OAuth providers (permission preview of requested scopes before Connect, Not-configured badge), OAuth connections (health/scopes/sync history, refresh/disconnect/sync-now — sync polls a durable Temporal job to completion), webhook connections (create, copy URL/secret, link/unlink a workflow, received events) |
 | all other settings sub-pages (spec §67 SETTINGS group) | [ ] |
 

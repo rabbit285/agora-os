@@ -392,12 +392,21 @@ after the change.
   Live-verified: an `employee` can create tasks/knowledge bases/ask Copilot but gets 403
   on Sales; a `read_only` user gets 403 on both new permissions. See
   `SPEC_TRACEABILITY_MATRIX.md` PLAT-05/PLAT-06.
-- **MISSING**: `LegalEntity` and `Team` models exist with zero CRUD endpoints (no
-  multi-entity support beyond the bare tables) — consistent with spec §53's own "Future:"
-  marker and §79's "Phase 10" placement, i.e. not yet attempted, not attempted-and-broken.
-- **AWS_EXCLUDED / not yet attempted, consistent with spec's own deferral**: SSO/SAML/SCIM
-  (spec §59, explicitly Phase 10), Agency/consultant multi-client mode (spec §53 "Future"),
-  regional hosting.
+- **[FIXED 2026-07-30]** ~~`LegalEntity` and `Team` models exist with zero CRUD endpoints
+  (no multi-entity support beyond the bare tables)~~ — spec §53 draws a real distinction
+  between a "Support:" tier (Organization/Legal Entity/Business Unit/Team — meant to be
+  built now) and a separate "Future:" tier (parent organization/subsidiaries/agency-
+  consultant multi-client mode — genuinely deferred); the earlier framing of this finding
+  conflated the two. The "Support:" tier is now real: full `LegalEntity`/`Team` CRUD
+  (`POST/GET/PATCH/DELETE` under `/organizations/current/legal-entities` and `/teams`),
+  RBAC-gated (`org.entities.manage`), audited, with archival instead of destructive delete
+  (spec §73), an enforced exactly-one-default-entity invariant, and cross-tenant entity
+  linking correctly rejected. A frontend section on `/settings/organization`. 9 tests;
+  live-verified. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-16.
+- **AWS_EXCLUDED / not yet attempted, consistent with spec's own "Future:" deferral in
+  §53**: parent organization / subsidiaries hierarchy, Agency/consultant multi-client mode
+  (tracked as PLAT-17), regional hosting. SSO/SAML/SCIM moved out of this bucket — see
+  below.
 - **MISSING**: Billing & entitlements, Reporting module, global Notification dispatch
   beyond in-app (`Notification.channel` is only ever constructed as `"in_app"` — grep
   confirmed across every construction site; no email/Slack/Teams/webhook dispatch adapter

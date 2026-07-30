@@ -62,6 +62,48 @@ class OrganizationSettingsUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class LegalEntityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+
+
+class LegalEntityUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+    is_default: bool | None = None
+
+
+class LegalEntityOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    country: str | None
+    is_default: bool
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TeamCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    legal_entity_id: uuid.UUID | None = None
+
+
+class TeamUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    legal_entity_id: uuid.UUID | None = None
+
+
+class TeamOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    legal_entity_id: uuid.UUID | None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MembershipOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

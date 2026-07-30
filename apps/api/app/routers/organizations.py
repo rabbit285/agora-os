@@ -9,8 +9,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.core.invitations import create_invitation
-from app.core.models import Invitation, Membership, MembershipRole, Organization, Role
-from app.core.schemas import MembershipOut, OrganizationSettingsOut, OrganizationSettingsUpdate
+from app.core.models import (
+    Invitation,
+    LegalEntity,
+    Membership,
+    MembershipRole,
+    Organization,
+    Role,
+    Team,
+)
+from app.core.schemas import (
+    LegalEntityCreate,
+    LegalEntityOut,
+    LegalEntityUpdate,
+    MembershipOut,
+    OrganizationSettingsOut,
+    OrganizationSettingsUpdate,
+    TeamCreate,
+    TeamOut,
+    TeamUpdate,
+)
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.identity.schemas import InvitationCreate, InvitationOut
@@ -143,3 +161,219 @@ async def revoke_invitation_endpoint(
     await db.commit()
     await db.refresh(invitation)
     return invitation
+
+
+# --- Multi-entity (spec §53's "Support:" tier) -----------------------------
+
+
+async def _get_org_legal_entity(
+    db: AsyncSession, entity_id: uuid.UUID, organization_id: uuid.UUID
+) -> LegalEntity:
+    entity = await db.get(LegalEntity, entity_id)
+    if entity is None or entity.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal entity not found")
+    return entity
+
+
+@router.get("/current/legal-entities", response_model=list[LegalEntityOut])
+async def list_legal_entities(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> list[LegalEntity]:
+    result = await db.execute(
+        select(LegalEntity)
+        .where(LegalEntity.organization_id == context.organization_id)
+        .order_by(LegalEntity.created_at)
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/current/legal-entities", response_model=LegalEntityOut, status_code=status.HTTP_201_CREATED
+)
+async def create_legal_entity(
+    payload: LegalEntityCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> LegalEntity:
+    entity = LegalEntity(
+        organization_id=context.organization_id, name=payload.name, country=payload.country
+    )
+    db.add(entity)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.legal_entity.created",
+        object_type="legal_entity",
+        object_id=str(entity.id),
+        after_state={"name": entity.name, "country": entity.country},
+    )
+    await db.commit()
+    await db.refresh(entity)
+    return entity
+
+
+@router.patch("/current/legal-entities/{entity_id}", response_model=LegalEntityOut)
+async def update_legal_entity(
+    entity_id: uuid.UUID,
+    payload: LegalEntityUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> LegalEntity:
+    entity = await _get_org_legal_entity(db, entity_id, context.organization_id)
+    before_state = {"name": entity.name, "country": entity.country, "is_default": entity.is_default}
+    if payload.name is not None:
+        entity.name = payload.name
+    if payload.country is not None:
+        entity.country = payload.country
+    if payload.is_default is True:
+        # Exactly one default per organization — demote every other entity.
+        others = await db.execute(
+            select(LegalEntity).where(
+                LegalEntity.organization_id == context.organization_id,
+                LegalEntity.id != entity.id,
+            )
+        )
+        for other in others.scalars().all():
+            other.is_default = False
+        entity.is_default = True
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.legal_entity.updated",
+        object_type="legal_entity",
+        object_id=str(entity.id),
+        before_state=before_state,
+        after_state={"name": entity.name, "country": entity.country, "is_default": entity.is_default},
+    )
+    await db.commit()
+    await db.refresh(entity)
+    return entity
+
+
+@router.delete("/current/legal-entities/{entity_id}", response_model=LegalEntityOut)
+async def archive_legal_entity(
+    entity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> LegalEntity:
+    # Archival, not destructive delete (spec §73).
+    entity = await _get_org_legal_entity(db, entity_id, context.organization_id)
+    if entity.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot archive the default legal entity — set another one as default first",
+        )
+    entity.is_active = False
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.legal_entity.archived",
+        object_type="legal_entity",
+        object_id=str(entity.id),
+    )
+    await db.commit()
+    await db.refresh(entity)
+    return entity
+
+
+async def _get_org_team(db: AsyncSession, team_id: uuid.UUID, organization_id: uuid.UUID) -> Team:
+    team = await db.get(Team, team_id)
+    if team is None or team.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    return team
+
+
+@router.get("/current/teams", response_model=list[TeamOut])
+async def list_teams(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> list[Team]:
+    result = await db.execute(
+        select(Team).where(Team.organization_id == context.organization_id).order_by(Team.created_at)
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/current/teams", response_model=TeamOut, status_code=status.HTTP_201_CREATED)
+async def create_team(
+    payload: TeamCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> Team:
+    if payload.legal_entity_id is not None:
+        await _get_org_legal_entity(db, payload.legal_entity_id, context.organization_id)
+    team = Team(
+        organization_id=context.organization_id,
+        name=payload.name,
+        legal_entity_id=payload.legal_entity_id,
+    )
+    db.add(team)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.team.created",
+        object_type="team",
+        object_id=str(team.id),
+        after_state={"name": team.name, "legal_entity_id": str(team.legal_entity_id or "")},
+    )
+    await db.commit()
+    await db.refresh(team)
+    return team
+
+
+@router.patch("/current/teams/{team_id}", response_model=TeamOut)
+async def update_team(
+    team_id: uuid.UUID,
+    payload: TeamUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> Team:
+    team = await _get_org_team(db, team_id, context.organization_id)
+    before_state = {"name": team.name, "legal_entity_id": str(team.legal_entity_id or "")}
+    if payload.name is not None:
+        team.name = payload.name
+    if "legal_entity_id" in payload.model_fields_set:
+        if payload.legal_entity_id is not None:
+            await _get_org_legal_entity(db, payload.legal_entity_id, context.organization_id)
+        team.legal_entity_id = payload.legal_entity_id
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.team.updated",
+        object_type="team",
+        object_id=str(team.id),
+        before_state=before_state,
+        after_state={"name": team.name, "legal_entity_id": str(team.legal_entity_id or "")},
+    )
+    await db.commit()
+    await db.refresh(team)
+    return team
+
+
+@router.delete("/current/teams/{team_id}", response_model=TeamOut)
+async def archive_team(
+    team_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.entities.manage")),
+) -> Team:
+    team = await _get_org_team(db, team_id, context.organization_id)
+    team.is_active = False
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.team.archived",
+        object_type="team",
+        object_id=str(team.id),
+    )
+    await db.commit()
+    await db.refresh(team)
+    return team
