@@ -16,17 +16,23 @@ Adoption") with two of its steps done. Phase 9 (Integrations) has a
 Webhook connector and a provider-neutral OAuth2 framework with six real
 (credential-gated) adapters.
 
-**Currently in progress**: the user asked to build out the remaining
-Compliance/Trust capabilities in this order: (1) Vendor Risk, (2) Security
-Questionnaires, (3) Audits, (4) Trust Center, (5) Enterprise Sales
-Security Review, (6) Data Transfers — each connected to existing
-Vendors/Risks/Controls/Evidence/Documents/Tasks/Approvals/Notifications/
-Sales Opportunities/AI Copilot/audit systems, with the Enterprise Sales
-Security Review implementing the full 10-step spec §69 flow. AWS
-deployment must wait for explicit approval — infra code may be prepared
-but no billable resources created.
+**This six-item sequence is now COMPLETE.** The user asked to build out
+the remaining Compliance/Trust capabilities in this order: (1) Vendor
+Risk, (2) Security Questionnaires, (3) Audits, (4) Trust Center, (5)
+Enterprise Sales Security Review, (6) Data Transfers — each connected to
+existing Vendors/Risks/Controls/Evidence/Documents/Tasks/Approvals/
+Notifications/Sales Opportunities/AI Copilot/audit systems, with the
+Enterprise Sales Security Review implementing the full 10-step spec §69
+flow. All six shipped with real models, migrations, domain logic, API
+endpoints, tenant isolation, RBAC, audit logging, frontend screens,
+validation, tests, seed data, and a live Docker smoke test each, plus a
+full documentation-set update and a commit per slice. AWS deployment
+constraint held throughout: no billable AWS resources were created; none
+of these six slices needed new AWS infrastructure, so the constraint
+never actually came into tension with the work.
 
-**Completed so far in this sequence**:
+**Summary of what shipped, in order** (full detail in each slice's own
+paragraph below and in `docs/DECISIONS.md` ADR-0031 through ADR-0036):
 
 **Vendor Risk** (`Vendor`/`VendorAssessment`, `app/compliance/models.py`,
 ADR-0031). A `high`/`critical` assessment conclusion reuses
@@ -142,34 +148,51 @@ questionnaire (from the Questionnaires slice), with 1 remediation task
 from the sync (its one question honestly still `draft` after the AI
 Copilot's demo-mode fallback, not fabricated as `approved`).
 
-All checks pass: **198 backend tests** (was 164 before Questionnaires,
-171, 179, 189 after Trust Center), ruff + mypy --strict clean; frontend
-eslint + tsc + production build clean; **21 frontend tests** (was 12,
-14, 16, 19), all passing. Live Docker smoke test for Enterprise Sales
-Security Review: confirmed the seeded review's imported questionnaire;
-created a high-value (150,000) opportunity and confirmed a real Approval
-opened automatically on start; added a question, synced, and confirmed
-a real AI-Copilot-suggested draft answer plus a linked remediation Task;
-confirmed clearing was refused (422) with the gap open, refused again
-(422) after manually approving the answer but before the Approval was
-granted, then succeeded once the Approval was granted via
-`/api/v1/approvals/{id}/decide` — generating a real trust-package File;
-confirmed the full `compliance.security_review.*` audit trail in
-Postgres; confirmed `/compliance`, `/compliance/security-reviews/[id]`,
-and `/sales/accounts/[id]` all return HTTP 200 (again required a `docker
-restart` of the `web` container — now confirmed on five separate
-slices; see "Machine-specific note" below).
+**Data Transfers** (`DataTransfer`, `app/compliance/models.py`,
+ADR-0036) — the sixth and last item. GDPR Chapter V (Articles 44-49),
+completing Privacy's four sub-features alongside RoPA/DPIA/DSAR, and
+extending `app.compliance` directly rather than becoming its own module
+(unlike Trust Center's special case) — reusing the existing
+`compliance.privacy.manage` permission with no new RBAC grant needed.
+`transfer_mechanism` follows GDPR's own vocabulary
+(`adequacy_decision`/`sccs`/`bcrs`/`derogation`); `create_data_transfer`
+auto-creates a linked Compliance `Risk` specifically for a `derogation`
+transfer — Article 49 derogations are meant to be exceptional, not a
+routine substitute for an adequacy decision or SCCs, making them the
+risk-bearing choice among the four mechanisms — the seventh reuse of
+`record_assessment`'s "creates a tracked consequence" hook shape.
+`processing_activity_id` is optional. Frontend: a Data Transfers section
+on `/compliance` (create form with a mechanism select, list with an
+inline per-row status dropdown, linked-risk indicator) — no dedicated
+detail page, matching the shape's simplicity (no nested child entities
+the way Questionnaire/Audit/SecurityReview have). Seed data: 1 SCC-backed
+transfer linked to the existing "Candidate application processing"
+activity, 1 derogation-based transfer with its linked Risk.
 
-**Remaining in this sequence**: Data Transfers (item 6 of 6, the last
-one). See "Next highest-priority task" below for the concrete plan.
+All checks pass: **206 backend tests** (was 164 before Questionnaires,
+171, 179, 189 after Trust Center, 198 after Enterprise Sales Security
+Review), ruff + mypy --strict clean; frontend eslint + tsc + production
+build clean; **23 frontend tests** (was 12, 14, 16, 19, 21), all
+passing. Live Docker smoke test for Data Transfers: confirmed the seeded
+transfers (one correctly linked to a real `ProcessingActivity`); created
+an adequacy-decision transfer and confirmed no Risk was created; created
+a derogation transfer and confirmed a real linked Risk appeared in the
+Risk Register with the expected title; confirmed the full
+`compliance.data_transfer.*` audit trail in Postgres (both `.created`
+and `.status_changed` actions); confirmed the status lifecycle
+(active → under_review → terminated); confirmed `/compliance` returns
+HTTP 200. No new dynamic route this time (no detail page), so the
+`web`-container-restart issue that affected the other five slices didn't
+apply here — restarted anyway as routine hygiene before the smoke test.
 
 ## Branch and commit
 
 Branch: `main`. Nineteen substantive commits through the Vendor Risk
 slice (Phase 1 through the AI Incidents slice, then that one), plus the
 Security Questionnaires commit, the Audits commit, the Trust Center
-commit, and now this session's Enterprise Sales Security Review commit
-on top. See `git log` for exact SHAs.
+commit, the Enterprise Sales Security Review commit, and now this
+session's Data Transfers commit on top — the sixth and last commit of
+this program. See `git log` for exact SHAs.
 
 ## Machine-specific note
 
@@ -212,72 +235,70 @@ contains `op.create_table(...)` before formatting/applying it, especially
 for a slice that introduces a genuinely new `app/<module>/` package
 rather than extending an existing one.
 
-## Exact commands already run (this session, Enterprise Sales Security Review slice)
+## Exact commands already run (this session, Data Transfers slice — the last of the six)
 
 ```bash
-# SecurityReview lives in app.compliance.models (already registered in
-# register_all_models.py), so no new registration step was needed this
-# time — unlike Trust Center's brand-new app.trust_center module.
+# DataTransfer lives in app.compliance.models (already registered in
+# register_all_models.py), so no new registration step was needed — same
+# as the Enterprise Sales Security Review slice, unlike Trust Center's
+# brand-new app.trust_center module.
 
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add security review tables"
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add data transfer tables"
 docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
 docker compose run --rm api alembic check   # confirms no drift
 
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 198 passed
+# -> 206 passed
 
-docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 6x total across sessions
+docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 7x total across sessions
 
 cd apps/web
 npx tsc --noEmit
 npx eslint .
-npx vitest run   # -> 21 passed
+npx vitest run   # -> 23 passed
 npm run build
 
-docker restart agora-origin-web-1   # pick up /compliance/security-reviews/[id]
+docker restart agora-origin-web-1   # routine hygiene; no new dynamic route this slice
 
-# live smoke test — full 10-step flow against a fresh high-value opportunity
-curl -s -b cookies.txt -X POST .../sales/accounts -d '{"name":"Smoke Test Enterprises"}'
-curl -s -b cookies.txt -X POST .../sales/opportunities -d '{"account_id":"...","title":"...","value":150000}'
-curl -s -b cookies.txt -X POST .../compliance/security-reviews -d '{"opportunity_id":"..."}'   # opens a real Approval (value >= 50,000)
-curl -s -b cookies.txt -X POST .../compliance/questionnaires/{qid}/questions -d '{...}'
-curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/sync   # suggests an answer, opens a remediation Task
-curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 422: gap still open
-curl -s -b cookies.txt -X PATCH .../compliance/questionnaires/{qid}/questions/{qqid}/answer -d '{"status":"approved",...}'
-curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 422: Approval still pending
-curl -s -b cookies.txt -X POST .../approvals/{approval_id}/decide -d '{"approve":true}'
-curl -s -b cookies.txt -X POST .../compliance/security-reviews/{id}/clear   # 200: cleared, trust package generated
-docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action FROM audit_events WHERE action LIKE 'compliance.security_review%';"
+# live smoke test
+curl -s -b cookies.txt -X POST .../compliance/data-transfers -d '{"recipient_name":"...","destination_country":"GB","transfer_mechanism":"adequacy_decision"}'   # no risk
+curl -s -b cookies.txt -X POST .../compliance/data-transfers -d '{"recipient_name":"...","destination_country":"IN","transfer_mechanism":"derogation","safeguards_description":"..."}'   # opens a real linked Risk
+curl -s -b cookies.txt .../compliance/risks   # confirm the derogation-linked Risk appears
+curl -s -b cookies.txt -X PATCH .../compliance/data-transfers/{id}/status -d '{"status":"under_review"}'
+curl -s -b cookies.txt -X PATCH .../compliance/data-transfers/{id}/status -d '{"status":"terminated"}'
+docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action FROM audit_events WHERE action LIKE 'compliance.data_transfer%';"
 ```
 
-## Next highest-priority task: Data Transfers (item 6 of 6, last in this sequence)
+## What's next
 
-- **Data Transfers**: `DataTransfer` (processing_activity_id nullable,
-  destination_country, transfer_mechanism: adequacy_decision|sccs|bcrs|
-  derogation, safeguards_description, status), extending Privacy exactly
-  like ProcessingActivity/DPIA/DSAR did (ADR-0029's pattern) — lives in
-  `app/compliance/models.py` alongside the rest of Privacy, not a new
-  module (unlike Trust Center's special case: Data Transfers has no
-  public/unauthenticated surface).
-- RBAC: likely `compliance.privacy.manage` already covers it (the
-  existing Privacy permission bundle), rather than minting a new
-  permission — Data Transfers is a Privacy sub-feature per spec §12, the
-  same reasoning ProcessingActivity/DPIA/DSAR already established.
-- Router endpoints on the existing `/api/v1/compliance` router; frontend:
-  a Data Transfers section on `/compliance` (create form, list) — a
-  detail page is optional given the shape's simplicity (no nested
-  child entities the way Questionnaire/Audit/SecurityReview have).
-- Full test/seed/smoke-test/doc/commit cycle, matching every prior slice
-  this session. This is the last of the six items — after it, do a final
-  full-sequence documentation pass (confirm `docs/IMPLEMENTATION_STATUS.md`'s
-  "5/6 done" framing becomes "6/6 done" and update the top-level summary
-  in every doc that still lists Data Transfers as remaining).
+**All six requested Compliance/Trust items are complete.** There is no
+further mandated work in this sequence — do not invent a seventh slice.
+If picking this build up in a new session with no new instructions from
+the user, the right move is to confirm the state above still holds
+(`git log`, `git status`, the resume commands below) and then ask the
+user what they want next, rather than assuming continuation.
 
-No AWS resources are to be created without explicit approval; only
-prepare infra-as-code where it naturally fits (Data Transfers doesn't
-inherently need new AWS infrastructure, so this constraint is unlikely
-to come up).
+Backlog items *outside* this six-item sequence that remain honestly
+unbuilt (see `docs/KNOWN_LIMITATIONS.md` and
+`docs/IMPLEMENTATION_PLAN.md` for the full, current list — this is not
+exhaustive):
+
+- **Compliance**: framework/evidence versioning, a regulatory
+  intelligence feed (external updates), a fuller auditor portal
+  (separate auditor login, an audit-scoped evidence-request workflow).
+- **Phase 8 (Cross-Module Intelligence)**: "New AI Tool Adoption" is
+  still partial (EU AI Act applicability/DPA review as distinct steps,
+  approved-use policy publication not implemented); no AI daily
+  briefing, business process discovery, AI recommendation engine, or
+  organization memory.
+- **Phase 9/10**: every OAuth provider beyond the existing six needs
+  real third-party credentials this environment doesn't have; SSO/SAML/
+  SCIM (Phase 10) hasn't started.
+- **AWS deployment**: infra-as-code may be prepared in advance, but no
+  billable AWS resources are to be created without the user's explicit
+  approval — this constraint was preserved throughout the six-item
+  sequence and remains in force for whatever comes next.
 
 ## Command to resume
 
@@ -286,6 +307,6 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (198 passed)
-cd ../../apps/web && npx vitest run   # confirm still green (21 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (206 passed)
+cd ../../apps/web && npx vitest run   # confirm still green (23 passed)
 ```

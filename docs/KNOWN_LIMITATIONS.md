@@ -66,8 +66,13 @@ implied to work.
   opportunity only — a deal that needs a second review after the first
   clears would need a new row type this build doesn't have (a real
   re-review workflow), and the trust package is a plain-text compilation
-  with no PDF formatting, letterhead, or e-signature. Still missing: data
-  transfers (the remaining Privacy sub-feature).
+  with no PDF formatting, letterhead, or e-signature. Data Transfers
+  (`DataTransfer`) also now exists — GDPR Chapter V, extending Privacy
+  directly (like RoPA/DPIA/DSAR) rather than a new module; a `derogation`
+  transfer auto-creates a linked Risk (ADR-0036). This completes all six
+  items of the Compliance/Trust program requested this session — see
+  `docs/RESUME_BUILD.md` for the full sequence and what (if anything) is
+  next.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —

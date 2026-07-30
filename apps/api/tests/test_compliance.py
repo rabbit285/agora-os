@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.compliance.models import ProcessingActivity
 from app.core.models import Membership, MembershipRole
 from app.core.rbac import get_system_role
 from app.identity.models import User
@@ -1511,6 +1512,196 @@ async def test_security_review_from_other_org_returns_not_found(client: AsyncCli
 
     response = await other_client.get(
         f"/api/v1/compliance/security-reviews/{review_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()
+
+
+# --- Data Transfers ---
+
+
+async def test_employee_role_cannot_create_data_transfer(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "transfer-emp1@example.com", "Transfer Employee Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=org_id,
+        email="employee-transfer@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "Should fail",
+            "destination_country": "US",
+            "transfer_mechanism": "sccs",
+        },
+    )
+    assert response.status_code == 403
+
+
+async def test_dpo_role_can_create_data_transfer(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "transfer-dpo1@example.com", "Transfer DPO Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="dpo-transfer@example.com", role_key="dpo"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "Acme Cloud US Inc",
+            "destination_country": "US",
+            "transfer_mechanism": "sccs",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "active"
+
+
+async def test_derogation_transfer_creates_linked_risk(client: AsyncClient) -> None:
+    await _signup(client, "transfer1@example.com", "Transfer Org 1")
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "One-off Consultant LLC",
+            "destination_country": "BR",
+            "transfer_mechanism": "derogation",
+            "safeguards_description": "Explicit one-time consent obtained from the data subject.",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["related_risk_id"] is not None
+
+    risks = await client.get("/api/v1/compliance/risks")
+    risk_titles = [r["title"] for r in risks.json()]
+    assert any("One-off Consultant LLC" in t for t in risk_titles)
+
+
+async def test_adequacy_decision_transfer_does_not_create_a_risk(client: AsyncClient) -> None:
+    await _signup(client, "transfer2@example.com", "Transfer Org 2")
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "Reliable UK Partner Ltd",
+            "destination_country": "GB",
+            "transfer_mechanism": "adequacy_decision",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["related_risk_id"] is None
+
+
+async def test_data_transfer_status_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "transfer3@example.com", "Transfer Org 3")
+    created = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "Transitioning Partner GmbH",
+            "destination_country": "DE",
+            "transfer_mechanism": "bcrs",
+        },
+    )
+    transfer_id = created.json()["id"]
+
+    updated = await client.patch(
+        f"/api/v1/compliance/data-transfers/{transfer_id}/status",
+        json={"status": "under_review"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "under_review"
+
+    terminated = await client.patch(
+        f"/api/v1/compliance/data-transfers/{transfer_id}/status",
+        json={"status": "terminated"},
+    )
+    assert terminated.status_code == 200
+    assert terminated.json()["status"] == "terminated"
+
+
+async def test_data_transfer_links_to_processing_activity(client: AsyncClient) -> None:
+    await _signup(client, "transfer4@example.com", "Transfer Org 4")
+    activity = await client.post(
+        "/api/v1/compliance/processing-activities",
+        json={
+            "name": "Customer support tickets",
+            "purpose": "Resolve support requests",
+            "legal_basis": "contract",
+            "data_subjects": "customers",
+            "retention_period": "2 years",
+        },
+    )
+    activity_id = activity.json()["id"]
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "processing_activity_id": activity_id,
+            "recipient_name": "Support Tooling Inc",
+            "destination_country": "US",
+            "transfer_mechanism": "sccs",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["processing_activity_id"] == activity_id
+
+
+async def test_data_transfer_rejects_processing_activity_from_another_org(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "transfer-cross1@example.com", "Transfer Cross Org 1")
+
+    other_org_activity = ProcessingActivity(
+        organization_id=uuid.uuid4(),
+        name="Other org activity",
+        purpose="irrelevant",
+        legal_basis="consent",
+        data_subjects="customers",
+        retention_period="1 year",
+    )
+    db_session.add(other_org_activity)
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "processing_activity_id": str(other_org_activity.id),
+            "recipient_name": "Should fail",
+            "destination_country": "US",
+            "transfer_mechanism": "sccs",
+        },
+    )
+    assert response.status_code == 404
+
+
+async def test_data_transfer_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-transfer1@example.com", "Cross Transfer Org 1")
+    created = await client.post(
+        "/api/v1/compliance/data-transfers",
+        json={
+            "recipient_name": "Org 1 recipient",
+            "destination_country": "US",
+            "transfer_mechanism": "sccs",
+        },
+    )
+    transfer_id = created.json()["id"]
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(
+        other_client, "cross-transfer2@example.com", "Cross Transfer Org 2"
+    )
+
+    response = await other_client.get(
+        f"/api/v1/compliance/data-transfers/{transfer_id}",
         headers={"X-Organization-Id": str(other_org_id)},
     )
     assert response.status_code == 404

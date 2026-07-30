@@ -458,6 +458,22 @@ export type SecurityReviewSyncResult = {
   tasks_created: number;
 };
 
+export type TransferMechanism = "adequacy_decision" | "sccs" | "bcrs" | "derogation";
+export type DataTransferStatus = "active" | "under_review" | "terminated";
+
+export type DataTransfer = {
+  id: string;
+  processing_activity_id: string | null;
+  recipient_name: string;
+  destination_country: string;
+  transfer_mechanism: TransferMechanism;
+  safeguards_description: string | null;
+  status: DataTransferStatus;
+  related_risk_id: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

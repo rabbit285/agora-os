@@ -24,6 +24,7 @@ from app.compliance.models import (
     Audit,
     Control,
     ControlMapping,
+    DataTransfer,
     Evidence,
     Framework,
     Policy,
@@ -38,6 +39,7 @@ from app.compliance.models import (
 from app.compliance.service import (
     add_questionnaire_question,
     create_ai_incident,
+    create_data_transfer,
     create_dpia,
     create_dsar,
     record_assessment,
@@ -206,6 +208,31 @@ async def seed() -> None:
         )
         if not existing_processing_activities:
             await _seed_demo_privacy_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        existing_data_transfers = (
+            (
+                await db.execute(
+                    select(DataTransfer).where(DataTransfer.organization_id == organization.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not existing_data_transfers:
+            candidate_activity = (
+                await db.execute(
+                    select(ProcessingActivity).where(
+                        ProcessingActivity.organization_id == organization.id,
+                        ProcessingActivity.name == "Candidate application processing",
+                    )
+                )
+            ).scalar_one_or_none()
+            await _seed_demo_data_transfer_data(
+                db,
+                organization_id=organization.id,
+                admin_id=admin.id,
+                processing_activity_id=candidate_activity.id if candidate_activity else None,
+            )
 
         existing_ai_incidents = (
             (
@@ -718,6 +745,48 @@ async def _seed_demo_privacy_data(
     logger.info(
         "Seeded demo privacy data (1 processing activity, 1 medium-risk DPIA, "
         "1 fulfilled DSAR, 1 open DSAR)"
+    )
+
+
+async def _seed_demo_data_transfer_data(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    admin_id: uuid.UUID,
+    processing_activity_id: uuid.UUID | None,
+) -> None:
+    """Seeds one SCC-backed transfer (no risk — a properly safeguarded
+    transfer) and one transfer relying on an Article 49 derogation
+    (auto-creates a linked Risk, ADR-0036) — completing Privacy's fourth
+    sub-feature alongside RoPA/DPIA/DSAR."""
+    await create_data_transfer(
+        db,
+        organization_id=organization_id,
+        processing_activity_id=processing_activity_id,
+        recipient_name="Applicant Tracking Systems Inc",
+        destination_country="US",
+        transfer_mechanism="sccs",
+        safeguards_description="EU Standard Contractual Clauses (2021 module) executed with "
+        "the processor.",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+    await create_data_transfer(
+        db,
+        organization_id=organization_id,
+        processing_activity_id=None,
+        recipient_name="Freelance Recruiter (one-off referral)",
+        destination_country="BR",
+        transfer_mechanism="derogation",
+        safeguards_description="Single candidate referral; explicit informed consent obtained.",
+        owner_id=admin_id,
+        actor_user_id=admin_id,
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo data transfer data (1 SCC-backed transfer, 1 derogation-based transfer "
+        "+ linked risk)"
     )
 
 

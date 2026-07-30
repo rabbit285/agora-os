@@ -48,7 +48,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + Trust Center management + security reviews + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
+| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + Trust Center management + security reviews + AI system inventory + AI incidents + RoPA/DPIA/DSAR + data transfers + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/vendors/[id]` | [x] detail: status workflow, risk assessment form, assessment history, evidence list |
 | `/compliance/questionnaires/[id]` | [x] detail: status workflow, missing-answer count banner, add-question form, per-question suggest-answer/save-draft/approve actions |

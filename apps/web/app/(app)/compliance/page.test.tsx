@@ -7,6 +7,7 @@ import type {
   AIIncident,
   AISystem,
   Audit,
+  DataTransfer,
   DPIA,
   DSAR,
   EvidenceRequest,
@@ -175,6 +176,19 @@ const SECURITY_REVIEW_FIXTURE: SecurityReview = {
   created_at: new Date().toISOString(),
 };
 
+const DATA_TRANSFER_FIXTURE: DataTransfer = {
+  id: "cccccccc-dddd-eeee-ffff-000000000000",
+  processing_activity_id: null,
+  recipient_name: "Applicant Tracking Systems Inc",
+  destination_country: "US",
+  transfer_mechanism: "sccs",
+  safeguards_description: "EU Standard Contractual Clauses executed with the processor.",
+  status: "active",
+  related_risk_id: null,
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -197,6 +211,7 @@ function mockRoutes(overrides: {
   evidenceRequests?: EvidenceRequest[];
   securityReviews?: SecurityReview[];
   opportunities?: SalesOpportunity[];
+  dataTransfers?: DataTransfer[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -234,6 +249,10 @@ function mockRoutes(overrides: {
     }
     if (path === "/api/v1/compliance/security-reviews") return overrides.securityReviews ?? [];
     if (path === "/api/v1/sales/opportunities") return overrides.opportunities ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/data-transfers") {
+      return { ...DATA_TRANSFER_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/data-transfers") return overrides.dataTransfers ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -538,6 +557,50 @@ describe("CompliancePage — Security Reviews section", () => {
       expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/security-reviews", {
         method: "POST",
         body: { opportunity_id: OPPORTUNITY_FIXTURE.id, questionnaire_id: null },
+      }),
+    );
+  });
+});
+
+describe("CompliancePage — Data Transfers section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders data transfers with their destination country and mechanism", async () => {
+    mockRoutes({ dataTransfers: [DATA_TRANSFER_FIXTURE] });
+    renderPage();
+
+    expect(
+      await screen.findByText("Applicant Tracking Systems Inc"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("US · sccs")).toBeInTheDocument();
+  });
+
+  it("logs a new data transfer with the entered recipient and mechanism", async () => {
+    mockRoutes({});
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(
+      await screen.findByPlaceholderText("Recipient name"),
+      "New Recipient GmbH",
+    );
+    await user.type(screen.getByPlaceholderText("Destination country (e.g. US)"), "de");
+    await user.selectOptions(
+      screen.getByDisplayValue("Standard Contractual Clauses"),
+      "derogation",
+    );
+    await user.click(screen.getByRole("button", { name: "Log transfer" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/data-transfers", {
+        method: "POST",
+        body: {
+          recipient_name: "New Recipient GmbH",
+          destination_country: "DE",
+          transfer_mechanism: "derogation",
+        },
       }),
     );
   });

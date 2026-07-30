@@ -218,7 +218,7 @@ Automation) now have a real, tested backbone.
 - [x] Frontend tests: 3 new Vitest tests (19 total) covering Trust Center item rendering, saving an item, and fulfilling an evidence request
 - [x] Live Docker smoke test: confirmed the public endpoint returns real data with **zero cookies sent**; confirmed a 404 for an unknown org slug; submitted a public evidence request with no auth and confirmed a real linked Task via `/api/v1/tasks`; confirmed authenticated management list/fulfill endpoints; confirmed the full `trust_center.*` audit trail in Postgres including anonymous (`actor_user_id IS NULL`) rows; confirmed both `/compliance` and `/trust/acme-ai-technologies` return HTTP 200
 
-## Phase 8 (Enterprise Sales Security Review) — added after the Trust Center slice, completes spec §69's five named cross-module scenarios
+## Phase 8 (Enterprise Sales Security Review) — added after the Trust Center slice, the fourth of spec §69's five named cross-module scenarios
 
 - [x] `SecurityReview` model + migration (`app/compliance/models.py`) — one row per Sales Opportunity (unique, 409 on a second attempt); starting a review creates/imports a `Questionnaire` and moves `Opportunity.stage` to a new `security_review` value, setting `is_deal_blocker=True` — the payoff for `Questionnaire.opportunity_id` existing since ADR-0032 with no caller until now
 - [x] Materiality-threshold gate: an Opportunity at/above `SECURITY_REVIEW_MATERIALITY_THRESHOLD` (50,000) opens a real `core.Approval` at start, reusing the same primitive the AI System Inventory/DPIA gates use; clearing is refused until it's granted (tested, ADR-0035)
@@ -230,7 +230,17 @@ Automation) now have a real, tested backbone.
 - [x] Frontend tests: 2 new Vitest tests (21 total) covering the Security Reviews section rendering and starting a new review
 - [x] Live Docker smoke test: confirmed the seeded review (imported questionnaire); created a high-value opportunity and confirmed a real Approval opened on start; confirmed sync suggests an answer and opens a remediation task; confirmed clear is refused (422) both for open gaps and, after resolving them, for the still-pending Approval; confirmed clear succeeds once the Approval is granted, generating a real trust-package File; confirmed the full `compliance.security_review.*` audit trail in Postgres; confirmed `/compliance`, `/compliance/security-reviews/[id]`, and `/sales/accounts/[id]` all return HTTP 200
 
-See `docs/RESUME_BUILD.md` for the next phase.
+## Phase 3 extension (Data Transfers) — added after the Enterprise Sales Security Review slice; the sixth and last item of this session's Compliance/Trust program
+
+- [x] `DataTransfer` model + migration (GDPR Chapter V, Articles 44-49) — the fourth and last Privacy sub-feature alongside RoPA/DPIA/DSAR, extending `app.compliance` directly (not a new module, unlike Trust Center) and reusing the existing `compliance.privacy.manage` permission (no new RBAC grant needed)
+- [x] Cross-module hook: a `transfer_mechanism="derogation"` transfer auto-creates a linked Compliance `Risk` — Article 49 derogations are meant to be exceptional, not routine, making them the risk-bearing choice among the four mechanisms; the seventh reuse of `record_assessment`'s hook shape (tested, ADR-0036)
+- [x] Tenant-isolated `/api/v1/compliance/data-transfers` API (create/list/detail/status) + frontend (Data Transfers section on `/compliance` with a mechanism-select create form and an inline status dropdown per row — no dedicated detail page, given the shape's simplicity)
+- [x] Seed script: 1 SCC-backed transfer linked to the seeded "Candidate application processing" activity, 1 derogation-based transfer + linked risk
+- [x] Backend tests: 206 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (23 total) covering the Data Transfers section rendering and logging a new transfer
+- [x] Live Docker smoke test: confirmed the seeded transfers (one linked to a real ProcessingActivity); created an adequacy-decision transfer and confirmed no risk was created; created a derogation transfer and confirmed a real linked Risk appeared in the Risk Register; confirmed the status lifecycle (active → under_review → terminated); confirmed the full `compliance.data_transfer.*` audit trail in Postgres; confirmed `/compliance` returns HTTP 200
+
+**This completes all six items of the Compliance/Trust program**: Vendor Risk, Security Questionnaires, Audits, Trust Center, Enterprise Sales Security Review, Data Transfers.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 

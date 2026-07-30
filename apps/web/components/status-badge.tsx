@@ -95,6 +95,7 @@ const STATUS_VARIANTS: Record<
   certified: "success",
   cleared: "success",
   security_review: "warning",
+  terminated: "destructive",
 };
 
 export function StatusBadge({ status }: { status: string }) {

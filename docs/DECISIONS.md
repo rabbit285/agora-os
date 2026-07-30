@@ -1038,3 +1038,52 @@ non-duplicating, a low-value review clearing without any Approval, a
 high-value review refused twice (once for gaps, once for the still-
 pending Approval after the gap is resolved) and then succeeding once the
 Approval is granted, and tenant isolation.
+
+## ADR-0036 — Data Transfers completes Privacy's four sub-features; an Article 49 derogation reuses the Risk-creation hook a seventh time
+
+**Decision**: `DataTransfer` (`app/compliance/models.py`, GDPR Chapter V,
+Articles 44-49) is the last of Privacy's four sub-features —
+`ProcessingActivity` (RoPA), `DPIA`, `DSAR`, and now international
+transfers — and, like the other three, extends `app.compliance` directly
+rather than becoming its own module (ADR-0029's precedent), unlike Trust
+Center's genuinely public surface (ADR-0034) or Enterprise Sales
+Security Review's cross-domain orchestration (ADR-0035). It reuses the
+existing `compliance.privacy.manage` permission rather than minting a
+new one — Data Transfers is a Privacy concern, not a distinct audience,
+the same reasoning that already applies to RoPA/DPIA/DSAR sharing that
+one permission.
+
+`transfer_mechanism` follows GDPR's own vocabulary
+(`adequacy_decision`/`sccs`/`bcrs`/`derogation` — Articles 45-49) rather
+than an invented scale. `create_data_transfer` auto-creates a linked
+Compliance `Risk` specifically when `transfer_mechanism="derogation"` —
+Article 49 derogations are meant to be exceptional, narrow-purpose
+exceptions to the transfer regime, not a routine substitute for an
+adequacy decision or SCCs, so relying on one is inherently the
+risk-bearing choice among the four mechanisms, the same way a
+`critical` AI incident or a `high`/`critical` vendor assessment is the
+risk-bearing case among their own scales. This is the seventh reuse of
+`record_assessment`'s "assessment creates a tracked consequence" hook
+shape (spec §80) in this build — `VendorAssessment` (4th),
+`AIIncident` (3rd, chronologically earlier but same shape),
+`AuditFinding` (5th, Task-creating), `SecurityReview`'s sync step (6th,
+many-Tasks-per-call), and now `DataTransfer` (7th) — each a genuinely
+different trigger condition mapped onto the same two shared primitives
+(Risk or Task), never a bespoke mechanism per entity type.
+`processing_activity_id` is optional, matching the reality that not
+every transfer traces to one specific catalogued `ProcessingActivity`.
+
+**Why**: Six new Compliance/Trust slices were requested to connect to
+"existing Vendors, Risks, Controls, Evidence, Documents, Tasks,
+Approvals, Notifications, Sales Opportunities, AI Copilot, and audit
+systems" — Data Transfers is the simplest of the six precisely because
+it needed no new primitive, no new module, and no new permission; it is
+the clearest demonstration that this build's shared-primitive discipline
+(spec §80) scales down as cleanly as it scales up to Enterprise Sales
+Security Review's full orchestration. Tested in `tests/test_compliance.py`:
+RBAC denial for `employee`, the `dpo` role's grant (proving the reused
+`compliance.privacy.manage` permission covers it with no new grant
+line), the derogation-creates-risk hook, the negative case for an
+adequacy-decision transfer, the status lifecycle, linking to an existing
+`ProcessingActivity`, rejecting one from another org, and tenant
+isolation.

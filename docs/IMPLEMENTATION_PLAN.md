@@ -123,10 +123,19 @@ while gaps or the Approval remain, and generates a real trust-package
 File (ADR-0035) — this is the scenario every other slice in this
 sequence was quietly built to support.
 
-Remaining: data transfers (Privacy's remaining sub-feature), regulatory
-intelligence feed. Each is a substantial feature attaching to the
-backbone above, not a blocker to it — see `docs/RESUME_BUILD.md` for
-suggested next-slice ordering.
+Also done: Data Transfers (`DataTransfer`, GDPR Chapter V), the fourth
+and last of Privacy's sub-features alongside RoPA/DPIA/DSAR, extending
+`app.compliance` directly rather than becoming its own module and
+reusing the existing `compliance.privacy.manage` permission. A
+`transfer_mechanism="derogation"` transfer auto-creates a linked Risk —
+Article 49 derogations are meant to be exceptional, not routine, making
+them the risk-bearing choice among the four transfer mechanisms — the
+seventh reuse of `record_assessment`'s hook shape (ADR-0036). This
+completes all six Compliance/Trust items requested this session.
+
+Remaining: regulatory intelligence feed (external updates), framework/
+evidence versioning. Each is a substantial feature attaching to the
+backbone above, not a blocker to it.
 
 ## Phase 4 — Security (backbone in progress)
 

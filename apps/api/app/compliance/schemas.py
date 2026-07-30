@@ -498,3 +498,31 @@ class SecurityReviewDetailOut(SecurityReviewOut):
 class SecurityReviewSyncResult(BaseModel):
     review: SecurityReviewDetailOut
     tasks_created: int
+
+
+class DataTransferCreate(BaseModel):
+    processing_activity_id: uuid.UUID | None = None
+    recipient_name: str = Field(min_length=1, max_length=300)
+    destination_country: str = Field(min_length=2, max_length=2)
+    transfer_mechanism: str = Field(pattern="^(adequacy_decision|sccs|bcrs|derogation)$")
+    safeguards_description: str | None = None
+    owner_id: uuid.UUID | None = None
+
+
+class DataTransferStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(active|under_review|terminated)$")
+
+
+class DataTransferOut(BaseModel):
+    id: uuid.UUID
+    processing_activity_id: uuid.UUID | None
+    recipient_name: str
+    destination_country: str
+    transfer_mechanism: str
+    safeguards_description: str | None
+    status: str
+    related_risk_id: uuid.UUID | None
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

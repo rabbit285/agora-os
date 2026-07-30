@@ -62,9 +62,10 @@ erDiagram
 | Domain | Key entities | Phase |
 |---|---|---|
 | Knowledge | ~~documents, document_chunks, knowledge_bases~~ (implemented — see below), entities, entity_relationships (not yet) | 2 |
-| Compliance | ~~frameworks, requirements, controls, evidence, risks, policies, vendors~~ (implemented — see below), audits, questionnaires, trust center, data transfers (not yet) | 3 |
+| Compliance | ~~frameworks, requirements, controls, evidence, risks, policies, vendors, audits, questionnaires, security_reviews~~ (all implemented — see below) | 3 |
+| Trust Center | ~~trust_center_items, trust_center_evidence_requests~~ (implemented, separate `app.trust_center` module — see below) | 3 |
 | AI Governance | ~~ai_systems, ai_assessments, ai_incidents~~ (implemented — see below) | 3 |
-| Privacy | ~~processing_activities, dpias, dsars~~ (implemented — see below), data_transfers (not yet) | 3 |
+| Privacy | ~~processing_activities, dpias, dsars, data_transfers~~ (all implemented — see below) | 3 |
 | Security | ~~security_assets, security_findings, security_alerts, security_incidents~~ (implemented — see below) | 4 |
 | Sales | ~~accounts, contacts, leads, opportunities, outreach_messages~~ (implemented — see below), sequences/campaigns (not yet) | 5 |
 | Support | ~~customers, tickets, ticket_messages, knowledge_articles, csat_responses~~ (implemented — see below), support_slas, support_qa_reviews (not yet) | 6 |
@@ -110,6 +111,8 @@ erDiagram
   ORGANIZATION ||--o{ PROCESSING_ACTIVITY : has
   ORGANIZATION ||--o{ DSAR : has
   PROCESSING_ACTIVITY ||--o{ DPIA : "assessed by"
+  PROCESSING_ACTIVITY ||--o{ DATA_TRANSFER : "may generate"
+  DATA_TRANSFER }o--o| RISK : "derogation mechanism creates"
   AI_SYSTEM }o--o| DPIA : "high/unacceptable risk creates"
   DPIA }o--o| APPROVAL : "directly-created high risk requires"
   AI_SYSTEM ||--o{ AI_INCIDENT : has
@@ -209,9 +212,18 @@ erDiagram
   item, not an ongoing risk (ADR-0033). The pre-seeded but
   previously-unused `auditor` system role gets its first real
   permission here.
+- **DataTransfer** — GDPR Chapter V (Articles 44-49), the fourth and
+  last of Privacy's sub-features alongside RoPA/DPIA/DSAR, extending
+  `app.compliance` directly rather than becoming its own module and
+  reusing the existing `compliance.privacy.manage` permission. A
+  `transfer_mechanism="derogation"` transfer auto-creates a linked
+  **Risk** — Article 49 derogations are meant to be exceptional, not a
+  routine transfer basis, making them the risk-bearing choice among the
+  four mechanisms — the seventh reuse of `record_assessment`'s hook
+  shape (ADR-0036).
 
-Not modeled yet: framework/evidence versioning, data transfers (the
-remaining Privacy sub-feature) — each a substantial feature attaching to
+Not modeled yet: framework/evidence versioning, regulatory updates
+(external intelligence feed) — each a substantial feature attaching to
 this backbone, not blocking it. See `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 3 extension entities (implemented — Trust Center)

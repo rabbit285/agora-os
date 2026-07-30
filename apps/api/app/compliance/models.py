@@ -9,10 +9,9 @@ Evidence, Risk, Policy — is tenant-scoped.
 
 Deliberately not modeled yet (see docs/KNOWN_LIMITATIONS.md): framework
 versioning, evidence versioning, regulatory updates (external
-intelligence feed), data transfers. Each is a substantial feature in its
-own right; this slice ships the backbone they would all attach to.
-(Trust Center lives in `app.trust_center`, not here — see that module's
-docstring for why.)
+intelligence feed). Each is a substantial feature in its own right; this
+slice ships the backbone they would all attach to. (Trust Center lives
+in `app.trust_center`, not here — see that module's docstring for why.)
 
 `AISystem` / `AIAssessment` add the spec §12 "AI System Inventory" / "AI
 Risk Assessment" screens (EU AI Act governance). `AISystem.approval_id`
@@ -100,6 +99,17 @@ pending Approval remain, and generates a real trust package `core.File`
 placeholder. See app.compliance.service.start_security_review /
 sync_security_review / clear_security_review and docs/DECISIONS.md
 ADR-0035.
+
+`DataTransfer` completes Privacy's four sub-features (RoPA, DPIAs,
+DSARs, and now international transfers — GDPR Chapter V, Articles
+44-49), extending Privacy exactly like `ProcessingActivity`/`DPIA`/`DSAR`
+did rather than becoming a new module (ADR-0029's precedent) — reusing
+`compliance.privacy.manage` rather than minting a new permission. A
+transfer relying on an Article 49 derogation — meant to be exceptional,
+not a routine transfer mechanism — auto-creates a linked Compliance
+`Risk`, the seventh reuse of this build's "creates a tracked consequence"
+hook shape (spec §80). See app.compliance.service.create_data_transfer
+and docs/DECISIONS.md ADR-0036.
 """
 
 from __future__ import annotations
@@ -646,3 +656,35 @@ class SecurityReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # in_progress | blocked | cleared
     status: Mapped[str] = mapped_column(String(20), default="in_progress")
     is_deal_blocker: Mapped[bool] = mapped_column(default=True)
+
+
+class DataTransfer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """An international transfer of personal data outside the EEA (GDPR
+    Chapter V, Articles 44-49) — optionally tied to the `ProcessingActivity`
+    that generates the data being transferred. A `derogation`-based
+    transfer auto-creates a linked Compliance `Risk` — see
+    app.compliance.service.create_data_transfer."""
+
+    __tablename__ = "data_transfers"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    processing_activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("processing_activities.id"), nullable=True, index=True
+    )
+    recipient_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # ISO 3166-1 alpha-2, same convention as LegalEntity.country
+    destination_country: Mapped[str] = mapped_column(String(2), nullable=False)
+    # adequacy_decision | sccs | bcrs | derogation (GDPR Articles 45-49)
+    transfer_mechanism: Mapped[str] = mapped_column(String(30), nullable=False)
+    safeguards_description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # active | under_review | terminated
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    # Cross-module hook: set when transfer_mechanism is "derogation".
+    related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

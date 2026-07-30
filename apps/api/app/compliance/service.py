@@ -73,6 +73,13 @@ shape (spec §80), producing many Tasks per review rather than one.
 Clearing is refused while gaps or a pending Approval remain (mirroring
 `decide_ai_system_status`'s gate, ADR-0027) and generates a real trust
 package `core.File`. See docs/DECISIONS.md ADR-0035.
+
+`create_data_transfer` completes Privacy's four sub-features, extending
+it exactly like `create_dsar`/`create_dpia` did rather than becoming a
+new module. A `derogation`-mechanism transfer (GDPR Article 49 — meant
+to be exceptional, not routine) auto-creates a linked Compliance `Risk`,
+a seventh reuse of the "creates a tracked consequence" hook shape (spec
+§80). See docs/DECISIONS.md ADR-0036.
 """
 
 from __future__ import annotations
@@ -93,6 +100,7 @@ from app.compliance.models import (
     AuditFinding,
     Control,
     ControlAssessment,
+    DataTransfer,
     Evidence,
     Questionnaire,
     QuestionnaireAnswer,
@@ -1092,3 +1100,81 @@ async def update_security_review_status(
         after_state={"status": new_status},
     )
     return review
+
+
+async def create_data_transfer(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    processing_activity_id: uuid.UUID | None,
+    recipient_name: str,
+    destination_country: str,
+    transfer_mechanism: str,
+    safeguards_description: str | None,
+    owner_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID | None,
+) -> DataTransfer:
+    transfer = DataTransfer(
+        organization_id=organization_id,
+        processing_activity_id=processing_activity_id,
+        recipient_name=recipient_name,
+        destination_country=destination_country,
+        transfer_mechanism=transfer_mechanism,
+        safeguards_description=safeguards_description,
+        owner_id=owner_id,
+    )
+    db.add(transfer)
+    await db.flush()
+
+    if transfer_mechanism == "derogation":
+        risk = Risk(
+            organization_id=organization_id,
+            title=f"Data transfer to {recipient_name} ({destination_country}) relies on a "
+            "GDPR Article 49 derogation",
+            description=safeguards_description
+            or "No adequacy decision, SCCs, or BCRs in place — Article 49 derogations are "
+            "meant to be exceptional, not a routine transfer basis.",
+            category="data_transfer",
+            likelihood="medium",
+            impact="high",
+            owner_id=owner_id,
+        )
+        db.add(risk)
+        await db.flush()
+        transfer.related_risk_id = risk.id
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.data_transfer.created",
+        object_type="data_transfer",
+        object_id=str(transfer.id),
+        after_state={
+            "transfer_mechanism": transfer_mechanism,
+            "related_risk_id": str(transfer.related_risk_id) if transfer.related_risk_id else None,
+        },
+    )
+    return transfer
+
+
+async def update_data_transfer_status(
+    db: AsyncSession,
+    *,
+    transfer: DataTransfer,
+    new_status: str,
+    actor_user_id: uuid.UUID | None,
+) -> DataTransfer:
+    before_status = transfer.status
+    transfer.status = new_status
+    await record_event(
+        db,
+        organization_id=transfer.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.data_transfer.status_changed",
+        object_type="data_transfer",
+        object_id=str(transfer.id),
+        before_state={"status": before_status},
+        after_state={"status": new_status},
+    )
+    return transfer

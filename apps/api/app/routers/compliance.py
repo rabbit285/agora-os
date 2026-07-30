@@ -18,6 +18,7 @@ from app.compliance.models import (
     Control,
     ControlAssessment,
     ControlMapping,
+    DataTransfer,
     Evidence,
     Framework,
     Policy,
@@ -53,6 +54,9 @@ from app.compliance.schemas import (
     ControlCreate,
     ControlDetailOut,
     ControlOut,
+    DataTransferCreate,
+    DataTransferOut,
+    DataTransferStatusUpdate,
     DPIACreate,
     DPIAOut,
     DPIAStatusUpdate,
@@ -95,6 +99,7 @@ from app.compliance.service import (
     add_questionnaire_question,
     clear_security_review,
     create_ai_incident,
+    create_data_transfer,
     create_dpia,
     create_dsar,
     decide_ai_system_status,
@@ -109,6 +114,7 @@ from app.compliance.service import (
     sync_security_review,
     update_ai_incident_status,
     update_audit_finding_status,
+    update_data_transfer_status,
     update_dsar_status,
     update_questionnaire_answer,
     update_security_review_status,
@@ -720,6 +726,78 @@ async def update_dsar_status_endpoint(
     await db.commit()
     await db.refresh(dsar)
     return dsar
+
+
+@router.get("/data-transfers", response_model=list[DataTransferOut])
+async def list_data_transfers(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[DataTransfer]:
+    result = await db.execute(
+        select(DataTransfer)
+        .where(DataTransfer.organization_id == context.organization_id)
+        .order_by(DataTransfer.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/data-transfers", response_model=DataTransferOut, status_code=status.HTTP_201_CREATED)
+async def create_data_transfer_endpoint(
+    payload: DataTransferCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DataTransfer:
+    if payload.processing_activity_id is not None:
+        await _get_org_processing_activity(
+            db, payload.processing_activity_id, context.organization_id
+        )
+    transfer = await create_data_transfer(
+        db,
+        organization_id=context.organization_id,
+        processing_activity_id=payload.processing_activity_id,
+        recipient_name=payload.recipient_name,
+        destination_country=payload.destination_country,
+        transfer_mechanism=payload.transfer_mechanism,
+        safeguards_description=payload.safeguards_description,
+        owner_id=payload.owner_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(transfer)
+    return transfer
+
+
+async def _get_org_data_transfer(
+    db: AsyncSession, transfer_id: uuid.UUID, organization_id: uuid.UUID
+) -> DataTransfer:
+    transfer = await db.get(DataTransfer, transfer_id)
+    if transfer is None or transfer.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Data transfer not found")
+    return transfer
+
+
+@router.get("/data-transfers/{transfer_id}", response_model=DataTransferOut)
+async def get_data_transfer(
+    transfer_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DataTransfer:
+    return await _get_org_data_transfer(db, transfer_id, context.organization_id)
+
+
+@router.patch("/data-transfers/{transfer_id}/status", response_model=DataTransferOut)
+async def update_data_transfer_status_endpoint(
+    transfer_id: uuid.UUID,
+    payload: DataTransferStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DataTransfer:
+    transfer = await _get_org_data_transfer(db, transfer_id, context.organization_id)
+    transfer = await update_data_transfer_status(
+        db, transfer=transfer, new_status=payload.status, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(transfer)
+    return transfer
 
 
 @router.get("/ai-incidents", response_model=list[AIIncidentOut])

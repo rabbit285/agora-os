@@ -352,6 +352,19 @@ dsars                      -- Data Subject Access Requests (GDPR Art. 15-20)
   assigned_to UUID FK users NULL
   created_at, updated_at
 
+data_transfers             -- international transfers of personal data (GDPR Art. 44-49)
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  processing_activity_id UUID FK processing_activities NULL
+  recipient_name TEXT NOT NULL
+  destination_country CHAR(2) NOT NULL
+  transfer_mechanism TEXT NOT NULL   -- adequacy_decision|sccs|bcrs|derogation
+  safeguards_description TEXT NULL
+  status TEXT NOT NULL DEFAULT 'active'   -- active|under_review|terminated
+  related_risk_id UUID FK risks NULL   -- cross-module hook, see below
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
 ai_incidents               -- AI Governance incidents (EU AI Act Art. 73 "serious incident")
   id UUID PK
   organization_id UUID FK organizations NOT NULL
@@ -365,6 +378,18 @@ ai_incidents               -- AI Governance incidents (EU AI Act Art. 73 "seriou
   owner_id UUID FK users NULL
   created_at, updated_at
 ```
+
+A `data_transfers` row with `transfer_mechanism = 'derogation'`
+automatically creates a linked `risks` row, via
+`app/compliance/service.py::create_data_transfer` — GDPR Article 49
+derogations are meant to be exceptional, not a routine transfer basis,
+so relying on one is the risk-bearing choice among the four mechanisms.
+This is the seventh reuse of `record_assessment`'s "assessment creates a
+tracked consequence" hook shape (spec §80) (ADR-0036). `DataTransfer`
+completes Privacy's four sub-features (RoPA, DPIA, DSAR, transfers),
+extending `app.compliance` directly like the other three rather than
+becoming its own module — reusing the existing `compliance.privacy.manage`
+permission, no new grant needed.
 
 A failed `control_assessments` row (`status = 'fail'`) automatically
 creates a `core.tasks` row (`module = 'compliance'`) via

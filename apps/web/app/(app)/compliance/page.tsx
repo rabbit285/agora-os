@@ -18,6 +18,8 @@ import type {
   AISystem,
   Audit,
   Control,
+  DataTransfer,
+  DataTransferStatus,
   DPIA,
   DPIARiskLevel,
   DSAR,
@@ -32,6 +34,7 @@ import type {
   SalesOpportunity,
   SecurityReview,
   Severity,
+  TransferMechanism,
   TrustCenterCategory,
   TrustCenterItem,
   TrustCenterItemStatus,
@@ -1121,6 +1124,135 @@ function DSARSection() {
   );
 }
 
+function DataTransfersSection() {
+  const queryClient = useQueryClient();
+  const [recipientName, setRecipientName] = useState("");
+  const [destinationCountry, setDestinationCountry] = useState("");
+  const [transferMechanism, setTransferMechanism] = useState<TransferMechanism>("sccs");
+
+  const { data: transfers } = useQuery<DataTransfer[]>({
+    queryKey: ["compliance", "data-transfers"],
+    queryFn: () => apiFetch<DataTransfer[]>("/api/v1/compliance/data-transfers"),
+  });
+
+  const createTransfer = useMutation({
+    mutationFn: () =>
+      apiFetch<DataTransfer>("/api/v1/compliance/data-transfers", {
+        method: "POST",
+        body: {
+          recipient_name: recipientName,
+          destination_country: destinationCountry.toUpperCase(),
+          transfer_mechanism: transferMechanism,
+        },
+      }),
+    onSuccess: () => {
+      setRecipientName("");
+      setDestinationCountry("");
+      setTransferMechanism("sccs");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "data-transfers"] });
+      queryClient.invalidateQueries({ queryKey: ["compliance", "risks"] });
+    },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status: newStatus }: { id: string; status: DataTransferStatus }) =>
+      apiFetch(`/api/v1/compliance/data-transfers/${id}/status`, {
+        method: "PATCH",
+        body: { status: newStatus },
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["compliance", "data-transfers"] }),
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Data Transfers
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-col gap-2 pt-6">
+          <div className="flex flex-wrap gap-2">
+            <Input
+              placeholder="Recipient name"
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+              className="min-w-[200px] flex-1"
+            />
+            <Input
+              placeholder="Destination country (e.g. US)"
+              value={destinationCountry}
+              onChange={(e) => setDestinationCountry(e.target.value)}
+              maxLength={2}
+              className="w-40"
+            />
+            <select
+              className={selectClassName}
+              value={transferMechanism}
+              onChange={(e) => setTransferMechanism(e.target.value as TransferMechanism)}
+            >
+              <option value="adequacy_decision">Adequacy decision</option>
+              <option value="sccs">Standard Contractual Clauses</option>
+              <option value="bcrs">Binding Corporate Rules</option>
+              <option value="derogation">Article 49 derogation</option>
+            </select>
+            <Button
+              disabled={
+                !recipientName.trim() ||
+                destinationCountry.trim().length !== 2 ||
+                createTransfer.isPending
+              }
+              onClick={() => createTransfer.mutate()}
+            >
+              Log transfer
+            </Button>
+          </div>
+          <p className="text-xs text-neutral-400">
+            A transfer relying on an Article 49 derogation automatically creates a linked Risk
+            in the Risk Register.
+          </p>
+        </CardContent>
+      </Card>
+      {transfers?.length === 0 && (
+        <p className="text-sm text-neutral-500">No data transfers recorded yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {transfers?.map((transfer) => (
+          <Card key={transfer.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <div className="font-medium text-neutral-900">{transfer.recipient_name}</div>
+                <div className="text-xs text-neutral-400">
+                  {transfer.destination_country} · {transfer.transfer_mechanism.replace(/_/g, " ")}
+                </div>
+                {transfer.related_risk_id && (
+                  <div className="text-xs text-red-600">Linked risk created</div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  className={selectClassName}
+                  value={transfer.status}
+                  onChange={(e) =>
+                    updateStatus.mutate({
+                      id: transfer.id,
+                      status: e.target.value as DataTransferStatus,
+                    })
+                  }
+                >
+                  <option value="active">Active</option>
+                  <option value="under_review">Under review</option>
+                  <option value="terminated">Terminated</option>
+                </select>
+                <StatusBadge status={transfer.status} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FrameworksSection() {
   const { data: frameworks } = useQuery<Framework[]>({
     queryKey: ["compliance", "frameworks"],
@@ -1162,6 +1294,7 @@ export default function CompliancePage() {
       <ProcessingActivitiesSection />
       <DPIASection />
       <DSARSection />
+      <DataTransfersSection />
       <FrameworksSection />
     </div>
   );
