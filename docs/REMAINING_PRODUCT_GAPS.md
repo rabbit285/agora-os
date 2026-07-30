@@ -81,34 +81,40 @@ append-only) — but breaks the ability to correlate an audit-log entry back to 
 resource it concerns for these 8 event types, which is a real defect against the audit
 trail requirement (spec §57, §93).
 
-### A2. `docs/KNOWN_LIMITATIONS.md` overstates completeness of 3 of spec §69's 5 named cross-module scenarios
+### A2. [FIXED — 2026-07-30, documentation only] `docs/KNOWN_LIMITATIONS.md` overstates completeness of 3 of spec §69's 5 named cross-module scenarios
 
-`KNOWN_LIMITATIONS.md` states "four of the five [§69] scenarios are now fully
+`KNOWN_LIMITATIONS.md` stated "four of the five [§69] scenarios are now fully
 implemented." Direct comparison against the spec's literal step lists (§69, lines
 6599-6760) shows:
 
 | Scenario | Spec steps | Steps actually implemented | 
 |---|---|---|
-| Enterprise Sales Security Review | 10 | 10 (minus one sub-step: "Sales Copilot drafts follow-up") — genuinely near-complete |
+| Enterprise Sales Security Review | 10 | 9 (minus one sub-step: "Sales Copilot drafts follow-up") — genuinely near-complete |
 | New AI Tool Adoption | 9 | 4 — already correctly flagged as partial in KNOWN_LIMITATIONS.md |
-| Security Incident Response | 9 | 3 (create incident → link risk → create response task) |
-| New Customer Onboarding | 8 | 2 (create Customer → create onboarding Task; no welcome email, billing update, or scheduled check-in beyond the one task) |
-| Support Upsell Signal | 4 | 2 (flag ticket → create Lead; no Sales Copilot involvement, no notification to account owner) |
+| Security Incident Response | 9 | 3 (create incident → link risk → create response task; the incident workspace's Affected-Assets/Evidence features exist but as manual actions, not automatic reactions in *this* chain) |
+| New Customer Onboarding | 8 | 2 (create Customer → create onboarding Task; no welcome email, billing update, support-profile creation, or scheduled check-in) |
+| Support Upsell Signal | 4 | 2 (flag ticket → create Lead → notify the linked account owner; no Opportunity-suggestion artifact, no AI-generated account brief) |
 
 What **is** built for Security Incident, New Customer, and Support Upsell Signal is real,
 tested, non-fake code (confirmed both by subagent code reading and, for New Customer, by
 this audit's own live `close_opportunity_won` idempotency test) — it is a genuine subset
-of each scenario, not vaporware. The gap is specifically that the product doc's own
-completeness claim ("fully implemented") is inaccurate relative to the spec's literal text
-for 3 of the 4 scenarios it claims are done.
+of each scenario, not vaporware. The gap was specifically that the product doc's own
+completeness claim ("fully implemented") was inaccurate relative to the spec's literal text
+for 3 of the 4 scenarios it claimed were done.
 
-**Exact missing work**: correct `docs/KNOWN_LIMITATIONS.md`'s claim, and either (a)
-implement the remaining named steps (welcome email, billing update, scheduled check-in,
-full incident timeline/communication steps, Sales Copilot follow-up drafting, upsell
-notification to account owner) or (b) explicitly document them as deferred per-step,
-matching the honesty standard the rest of that document otherwise holds to.
+**Fix applied (2026-07-30)**: `KNOWN_LIMITATIONS.md`'s Cross-Module Intelligence bullet was
+rewritten with the exact per-scenario step count and named missing steps above (option (b)
+from the original finding — explicit per-step disclosure), rather than a blanket "fully
+implemented" claim. Implementing the remaining named steps themselves (welcome email —
+blocked on the same no-SMTP-provider capability boundary as Automation's `send_email` step;
+billing update — blocked on the Billing module, tracked separately as PLAT-19; a formal
+GDPR-breach Compliance assessment step; Sales Copilot follow-up drafting; an Opportunity-
+suggestion artifact; AI-generated account briefs) remains open, deliberately deferred in
+favor of the larger MISSING-status gaps elsewhere in this document (Billing, Reporting,
+Business Intelligence layer, etc.) — these are scenario-depth refinements on top of
+features that already work in their base form, not zero-code gaps.
 
-### A3. `docs/ROUTES_AND_SCREENS.md` lists 8 routes as `[~]`/scaffolded that do not exist in the actual build
+### A3. [PARTIALLY FIXED — 2026-07-30] `docs/ROUTES_AND_SCREENS.md` lists 8 routes as `[~]`/scaffolded that do not exist in the actual build
 
 Confirmed via a fresh `npm run build` route table (this audit) cross-checked against the
 doc: `/onboarding/company`, `/onboarding/goals`, `/notifications`, `/settings/roles`,
@@ -119,8 +125,15 @@ exists, but none produced a route in the Next.js build output (33 real routes, l
 it means the doc cannot be trusted as a completeness source — which is exactly why this
 audit re-derived route status from the live build rather than from the doc.
 
-**Exact missing work**: update `ROUTES_AND_SCREENS.md` to `[ ]` for all 8, or build the
-pages.
+**Fix applied so far (2026-07-30)**: 2 of the 8 (`/invite/[token]`, `/verify-email/[token]`,
+plus the MFA-challenge screen — 3 of the 8) were already built in an earlier cluster this
+session (PLAT-13/14/15) and are correctly `[x]` now. The remaining 5
+(`/onboarding/company`, `/onboarding/goals`, `/settings/roles`, `/settings/ai-providers`,
+`/notifications`) have been relabeled `[ ]` with an inline correction note — the doc no
+longer overstates their status — but the pages themselves are still not built; that's
+tracked as separate, still-open work (onboarding wizard spec §68, roles/AI-providers
+management UIs, notification dispatch + inbox page), not closed by this documentation fix
+alone.
 
 ### A4. `apps/api/app/audit/models.py` docstring claims a DB-level `REVOKE UPDATE/DELETE` on `audit_events` that does not exist
 

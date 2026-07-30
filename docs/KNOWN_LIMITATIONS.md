@@ -141,20 +141,46 @@ implied to work.
   account's owner (or the flagging agent if there's no linked Sales
   Account or no account owner), but does not auto-create an Opportunity —
   that conversion is left to a human sales rep (ADR-0022).
-- **Cross-Module Intelligence (Phase 8)**: four of spec §69's five named
-  cross-module scenarios are now fully implemented ("Support Upsell
-  Signal", the "Security Incident" chain, "New Customer", and now
-  "Enterprise Sales Security Review" — `SecurityReview`, ADR-0035),
-  plus a partial fifth: "New AI Tool Adoption" now has its
-  register→Approval gate hook (ADR-0027) and its Privacy-assessment step
-  (an auto-created DPIA, ADR-0029, both counted under Compliance above),
-  but not the rest of that scenario's chain — EU AI Act
-  applicability/DPA review as distinct steps, approved-use policy
-  publication. No AI daily briefing, business process discovery, AI
-  recommendation engine, or organization memory exist either. The
-  Security Incident chain's Task/Notification are only created for
-  `critical`-severity incidents, same gate as the pre-existing Risk
-  link — there's no separate configurable threshold.
+- **Cross-Module Intelligence (Phase 8), corrected 2026-07-30 (finding
+  A2 — this section previously overstated 3 of the 5 scenarios as "fully
+  implemented")**: comparing each scenario's real step count against
+  spec §69's literal step list —
+  - **Enterprise Sales Security Review** (10 steps): 9 of 10 real
+    (`SecurityReview`, ADR-0035) — genuinely near-complete. Missing: step
+    9, "Sales Copilot drafts follow-up."
+  - **New AI Tool Adoption** (9 steps): 4 of 9 real — vendor
+    request→Approval gate (ADR-0027) and an auto-created Privacy DPIA
+    (ADR-0029, counted under Compliance above). Missing: security
+    assessment, EU AI Act applicability and DPA review as distinct
+    steps, the AI risk assessment step itself (as opposed to the DPIA),
+    and approved-use policy publication.
+  - **Security Incident** (9 steps): 3 of 9 real — create incident, link
+    a Risk (personal-data-impact-adjacent, not a formal GDPR breach
+    assessment), create a response Task (only for `critical` severity,
+    no separate configurable threshold). The incident workspace built
+    separately (spec §19, ADR-0037) adds real Affected-Assets linking
+    and an Evidence tab, but neither is *automatically* triggered by
+    this scenario's chain — both are manual actions available on the
+    incident page, not steps 3 ("finds affected assets")/9 ("preserves
+    evidence") of this specific automated reaction chain. Missing as
+    automatic reactions: AI summary, a formal Compliance GDPR-breach-
+    obligations assessment, notifying the responsible team, and
+    generating draft communications.
+  - **New Customer** (8 steps): 2 of 8 real — create Customer, create an
+    onboarding Task. Missing: welcome email (no SMTP/SES path exists
+    anywhere in this build, same capability boundary as Automation's
+    `send_email` step), billing update (no Billing module exists),
+    support-profile creation, additional internal tasks, and a scheduled
+    check-in.
+  - **Support Upsell Signal** (4 steps): 2 of 4 real — create a Sales
+    Lead, notify the linked account's owner (or the flagging agent if
+    none). Missing: an explicit Opportunity *suggestion* as its own
+    artifact (a human still converts the Lead manually, ADR-0022) and an
+    AI-generated account brief.
+
+  No AI daily briefing, business process discovery, AI recommendation
+  engine, or organization memory exist either (spec §86-90, tracked
+  separately as BIZ-01 through BIZ-05).
 - **Automation**: execution is now Temporal-durable (`WorkflowRunWorkflow`,
   spec §61) — `app.automation.service.start_run` only creates the
   `WorkflowRun` row; a real worker executes it. All 24 of spec §39's named
