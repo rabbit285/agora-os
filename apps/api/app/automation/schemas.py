@@ -6,11 +6,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-SUPPORTED_STEP_TYPES = {"create_task", "send_notification", "human_approval"}
+SUPPORTED_STEP_TYPES = {"create_task", "send_notification", "human_approval", "export_data"}
 
 
 class WorkflowStep(BaseModel):
-    step_type: Literal["create_task", "send_notification", "human_approval"]
+    step_type: Literal["create_task", "send_notification", "human_approval", "export_data"]
     config: dict[str, Any] = Field(default_factory=dict)
 
 

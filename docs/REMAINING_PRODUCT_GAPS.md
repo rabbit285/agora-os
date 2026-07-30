@@ -175,14 +175,28 @@ claim a protection that isn't there.
 
 - **PARTIAL**: Only 3 of 8 named frameworks (GDPR, EU AI Act, ISO 27001) have seeded
   catalog content; the remaining 5 have no requirement/control catalog.
-- **MISSING (frontend)**: `Policy` has a complete backend (model, service, API, RBAC
-  permission, audit event) but zero frontend page.
-- **MISSING (frontend)**: standalone Evidence Library page, framework-specific
-  (GDPR/EU-AI-Act individual) dashboards, standalone Data Inventory/RoPA detail view
-  (list-only today), Regulatory Intelligence.
-- **MISSING**: spec §91 "Compliance as Governance Layer" — synchronous pre-action
-  permission checks **from** other modules **into** Compliance — has no implementation;
-  only the inverse pattern (Compliance reacting to events from other modules) exists.
+- **[FIXED 2026-07-30]** ~~`Policy` had a complete backend but zero frontend page~~ —
+  added `PATCH /compliance/policies/{id}/status` (draft/published) and a Policies
+  section on `/compliance` (create + publish toggle). Live-verified.
+- **[FIXED 2026-07-30, 2 of 3]** ~~Standalone Evidence Library page and framework-specific
+  dashboards were missing~~ — added a real file-upload Evidence Library section on
+  `/compliance` and a `GET /compliance/frameworks/{id}/dashboard` endpoint + FE page
+  showing each requirement's mapped controls, their status, and overall coverage %.
+  **Regulatory Intelligence remains unbuilt, disclosed rather than stubbed**: it would
+  need a live external feed of regulatory changes, and there is no such data source in
+  this build to back it honestly (spec §82 "No Fake Features" — better to leave it
+  undone than fabricate regulatory content). Standalone Data Inventory/RoPA detail view
+  also remains list-only.
+- **[FIXED 2026-07-30]** ~~spec §91 "Compliance as Governance Layer" (synchronous
+  pre-action checks FROM other modules INTO Compliance) had no implementation, only the
+  inverse (event-reaction) pattern~~ — `app/compliance/governance.py` adds one real,
+  pure decision function per spec §91's three named examples, live-verified for all
+  three: Sales (`check_contact_permission`, now the actual implementation behind
+  `send_outreach_message`'s suppression check, not just an inline field read), Support
+  (`check_customer_disclosure_permission`, a new 403 gate on agent ticket messages while
+  a deletion DSAR is pending), and Automation (`check_data_export_permission`, a new
+  `export_data` workflow step type that fails the run without an active on-file
+  `DataTransfer` for restricted/confidential data).
 - **CONFIRMED (not a gap)**: the Trust Center public endpoint
   (`apps/api/app/routers/trust_center.py`) genuinely has no `OrgContext` dependency —
   correctly, deliberately unauthenticated per spec B4.

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import type {
   AIIncident,
   AIRiskClassification,
@@ -24,9 +24,11 @@ import type {
   DPIARiskLevel,
   DSAR,
   DSARRequestType,
+  Evidence,
   EvidenceRequest,
   Framework,
   LegalBasis,
+  Policy,
   ProcessingActivity,
   Questionnaire,
   QuestionnaireSource,
@@ -1253,6 +1255,187 @@ function DataTransfersSection() {
   );
 }
 
+function PoliciesSection() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+
+  const { data: policies, isLoading, error } = useQuery<Policy[]>({
+    queryKey: ["compliance", "policies"],
+    queryFn: () => apiFetch<Policy[]>("/api/v1/compliance/policies"),
+  });
+
+  const createPolicy = useMutation({
+    mutationFn: () =>
+      apiFetch<Policy>("/api/v1/compliance/policies", { method: "POST", body: { title } }),
+    onSuccess: () => {
+      setTitle("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "policies"] });
+    },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiFetch<Policy>(`/api/v1/compliance/policies/${id}/status`, {
+        method: "PATCH",
+        body: { status },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["compliance", "policies"] }),
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Policies
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex gap-2 pt-6">
+          <Input
+            placeholder="Policy title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <Button disabled={!title.trim() || createPolicy.isPending} onClick={() => createPolicy.mutate()}>
+            Add policy
+          </Button>
+        </CardContent>
+      </Card>
+      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {error && <p className="text-sm text-red-600">Could not load policies.</p>}
+      {policies?.length === 0 && <p className="text-sm text-neutral-500">No policies yet.</p>}
+      <div className="flex flex-col gap-2">
+        {policies?.map((policy) => (
+          <Card key={policy.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div className="font-medium text-neutral-900">{policy.title}</div>
+              <div className="flex items-center gap-2">
+                <select
+                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                  value={policy.status}
+                  onChange={(e) => updateStatus.mutate({ id: policy.id, status: e.target.value })}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+                <StatusBadge status={policy.status} />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function uploadEvidenceFile(file: File, title: string): Promise<void> {
+  const { file_id, upload_url } = await apiFetch<{ file_id: string; upload_url: string }>(
+    "/api/v1/files/upload-url",
+    {
+      method: "POST",
+      body: {
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        classification: "internal",
+      },
+    },
+  );
+
+  const putResponse = await fetch(upload_url, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!putResponse.ok) {
+    throw new Error(`Upload to storage failed with status ${putResponse.status}`);
+  }
+
+  await apiFetch("/api/v1/compliance/evidence", {
+    method: "POST",
+    body: { file_id, title: title || file.name },
+  });
+}
+
+function EvidenceLibrarySection() {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const { data: evidence, isLoading, error } = useQuery<Evidence[]>({
+    queryKey: ["compliance", "evidence"],
+    queryFn: () => apiFetch<Evidence[]>("/api/v1/compliance/evidence"),
+  });
+
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadEvidenceFile(file, title),
+    onSuccess: () => {
+      setTitle("");
+      setUploadError(null);
+      queryClient.invalidateQueries({ queryKey: ["compliance", "evidence"] });
+    },
+    onError: (err) => setUploadError(err instanceof ApiError ? err.message : "Upload failed"),
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Evidence Library
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center gap-2 pt-6">
+          <Input
+            placeholder="Evidence title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="max-w-xs"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) upload.mutate(file);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            disabled={upload.isPending}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {upload.isPending ? "Uploading…" : "Upload evidence"}
+          </Button>
+          {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+        </CardContent>
+      </Card>
+      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {error && <p className="text-sm text-red-600">Could not load evidence.</p>}
+      {evidence?.length === 0 && (
+        <p className="text-sm text-neutral-500">No evidence uploaded yet.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {evidence?.map((item) => (
+          <Card key={item.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <div className="font-medium text-neutral-900">{item.title}</div>
+              <div className="flex gap-2">
+                {item.control_id && <Badge variant="secondary">linked to control</Badge>}
+                {item.vendor_id && <Badge variant="secondary">linked to vendor</Badge>}
+                {item.valid_until && (
+                  <Badge variant="outline">
+                    valid until {new Date(item.valid_until).toLocaleDateString()}
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FrameworksSection() {
   const { data: frameworks } = useQuery<Framework[]>({
     queryKey: ["compliance", "frameworks"],
@@ -1266,9 +1449,11 @@ function FrameworksSection() {
       </h2>
       <div className="flex flex-wrap gap-2">
         {frameworks?.map((framework) => (
-          <Badge key={framework.id} variant="secondary">
-            {framework.name}
-          </Badge>
+          <Link key={framework.id} href={`/compliance/frameworks/${framework.id}`}>
+            <Badge variant="secondary" className="cursor-pointer hover:bg-neutral-300">
+              {framework.name}
+            </Badge>
+          </Link>
         ))}
       </div>
     </div>
@@ -1295,6 +1480,8 @@ export default function CompliancePage() {
       <DPIASection />
       <DSARSection />
       <DataTransfersSection />
+      <PoliciesSection />
+      <EvidenceLibrarySection />
       <FrameworksSection />
     </div>
   );

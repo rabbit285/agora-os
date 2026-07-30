@@ -3,13 +3,14 @@
 `send_outreach_message` ships the Phase 5 cross-module hook (spec
 section 91: "Sales AI asks: Can we contact this prospect? Compliance
 checks: jurisdiction, data source, marketing basis, opt-out, suppression,
-organization policy"). The check implemented here is deliberately the
-simplest real instance of that principle — a per-contact suppression flag
-— rather than the full jurisdiction/consent/marketing-basis engine the
-spec describes; see docs/KNOWN_LIMITATIONS.md for what's not covered yet.
-No real email/LinkedIn provider is wired up (spec's progressive trust
-model — connectors come later), so "sending" only ever transitions this
-row's status; the compliance gate is real regardless.
+organization policy"). The actual decision now lives in
+`app.compliance.governance.check_contact_permission` (Compliance as
+Governance Layer, spec §91) — this function calls out to it synchronously
+rather than checking the suppression flag inline, so the "Sales asks
+Compliance" relationship is an explicit, real function call, not
+duplicated logic. No real email/LinkedIn provider is wired up (spec's
+progressive trust model — connectors come later), so "sending" only ever
+transitions this row's status; the compliance gate is real regardless.
 
 `close_opportunity_won` ships the Phase 8 "New Customer" cross-module
 hook (spec section 69: "CRM deal won -> create customer -> create
@@ -38,11 +39,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance.governance import check_contact_permission
 from app.core.models import Task
 from app.sales.models import Account, Contact, Opportunity, OutreachMessage
 from app.support.models import Customer
-
-SUPPRESSED_REASON = "Contact is marked do-not-contact (opted out / suppressed)."
 
 
 async def send_outreach_message(
@@ -53,9 +53,10 @@ async def send_outreach_message(
     contact: Contact,
     actor_user_id: uuid.UUID | None,
 ) -> OutreachMessage:
-    if contact.do_not_contact:
+    decision = await check_contact_permission(db, organization_id=organization_id, contact=contact)
+    if not decision.allowed:
         message.status = "blocked"
-        message.blocked_reason = SUPPRESSED_REASON
+        message.blocked_reason = decision.reason
         policy_decision = "denied"
     else:
         message.status = "sent"

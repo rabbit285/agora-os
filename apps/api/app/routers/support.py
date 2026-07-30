@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance.governance import check_customer_disclosure_permission
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.support.models import CSATResponse, Customer, KnowledgeArticle, Ticket, TicketMessage
@@ -201,6 +202,26 @@ async def create_ticket_message(
     context: OrgContext = Depends(require_permission("support.tickets.manage")),
 ) -> TicketMessage:
     ticket = await _get_org_ticket(db, ticket_id, context.organization_id)
+
+    if payload.sender_type == "agent":
+        customer = await _get_org_customer(db, ticket.customer_id, context.organization_id)
+        decision = await check_customer_disclosure_permission(
+            db, organization_id=context.organization_id, customer=customer
+        )
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="support.ticket_message.disclosure_checked",
+            object_type="support_ticket",
+            object_id=str(ticket.id),
+            policy_decision="allowed" if decision.allowed else "denied",
+            after_state={"reason": decision.reason} if decision.reason else None,
+        )
+        if not decision.allowed:
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=decision.reason)
+
     message = TicketMessage(
         organization_id=context.organization_id,
         ticket_id=ticket.id,

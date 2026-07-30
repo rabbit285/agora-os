@@ -1,17 +1,18 @@
 # Route & API Inventory
 
 Audit date: 2026-07-30, updated same day after the Platform-foundation auth completion
-work (PLAT-13/14/15) and the Knowledge-module completeness work (XLSX/HTML extraction,
-reranking, Knowledge Graph, Global Search — KNOW-03/06/07/08, PLAT-21). Frontend routes
-taken from a fresh `npm run build` (Next.js 16.2, Turbopack) — not from
-`docs/ROUTES_AND_SCREENS.md`, which was found to contain stale entries claiming
-placeholder pages that did not exist in the build at audit time (see
-`REMAINING_PRODUCT_GAPS.md` §A3; the ones that were genuinely missing at audit time have
-since been built and are listed below). Backend routes taken from a fresh
-`GET /openapi.json` fetch against the running dev API (port 8001, container
+work (PLAT-13/14/15), the Knowledge-module completeness work (XLSX/HTML extraction,
+reranking, Knowledge Graph, Global Search — KNOW-03/06/07/08, PLAT-21), and the
+Compliance completeness work (Policy publish, Evidence Library, Framework Dashboard,
+Compliance-as-Governance-Layer — COMP-05/17/18). Frontend routes taken from a fresh
+`npm run build` (Next.js 16.2, Turbopack) — not from `docs/ROUTES_AND_SCREENS.md`, which
+was found to contain stale entries claiming placeholder pages that did not exist in the
+build at audit time (see `REMAINING_PRODUCT_GAPS.md` §A3; the ones that were genuinely
+missing at audit time have since been built and are listed below). Backend routes taken
+from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (39 total, from `npm run build` output)
+## Frontend routes (40 total, from `npm run build` output)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -43,6 +44,7 @@ since been built and are listed below). Backend routes taken from a fresh
 | `/compliance/ai-incidents/[id]` | ƒ | — |
 | `/compliance/dpias/[id]` | ƒ | — |
 | `/compliance/dsars/[id]` | ƒ | — |
+| `/compliance/frameworks/[id]` | ƒ | Per-framework compliance dashboard — requirements, mapped controls, coverage % |
 | `/trust/[org_slug]` | ƒ | Genuinely public, no auth dependency |
 | `/security` | ○ | Assets + findings + alerts + incidents — 4 flat lists, not a dashboard |
 | `/security/incidents/[id]` | ƒ | — |
@@ -65,7 +67,7 @@ since been built and are listed below). Backend routes taken from a fresh
 produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
 challenge were also in this list at first-audit time; all 3 are now built — see above.)
 
-## Backend API surface (131 paths, from live `/openapi.json`)
+## Backend API surface (133 paths, from live `/openapi.json`)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -77,7 +79,7 @@ challenge were also in this list at first-audit time; all 3 are now built — se
 | `/ai/copilot` | 1 | `/ask` (real reranking now runs between retrieval and generation) |
 | `/knowledge` | 6 | documents (list/create/get/chunks) incl. real XLSX/HTML extraction, knowledge-bases, graph (entity-types, entity traversal) |
 | `/search` | 1 | tenant-scoped substring search across 16 entity types |
-| `/compliance` | 51 | by far the largest surface — controls, risks, evidence, policies, frameworks, vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
+| `/compliance` | 53 | by far the largest surface — controls, risks, evidence, policies (incl. publish status), frameworks (incl. per-framework dashboard), vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
 | `/security` | 8 | assets, findings, alerts, incidents |
 | `/sales` | 11 | accounts, contacts, leads, opportunities, outreach |
 | `/support` | 8 | customers, tickets, messages, knowledge-articles, csat, flag-upsell |
@@ -87,10 +89,11 @@ challenge were also in this list at first-audit time; all 3 are now built — se
 | `/health` | 2 | health, health/ready |
 
 **Cross-check against frontend**: every backend route group above has at least
-list/detail frontend usage EXCEPT: `Policy` (full CRUD API, zero FE), Support
-Knowledge Articles (full CRUD API, zero FE page), and the Compliance frameworks/
-requirements endpoints (used only internally to populate dropdowns, no standalone
-browse page).
+list/detail frontend usage EXCEPT Support Knowledge Articles (full CRUD API, zero FE
+page). (`Policy` and the Compliance frameworks/requirements endpoints previously had no
+standalone frontend usage — both fixed 2026-07-30: Policy via the Evidence-Library-style
+section on `/compliance`, frameworks via the new `/compliance/frameworks/[id]`
+dashboard.)
 
 **API-level gaps** (apply across the whole surface, not one module): no pagination
 parameters on any list endpoint observed in the schema; no `Idempotency-Key` header

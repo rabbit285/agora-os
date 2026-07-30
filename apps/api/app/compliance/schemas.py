@@ -24,6 +24,25 @@ class RequirementOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FrameworkDashboardControlOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    status: str
+
+
+class FrameworkDashboardRequirementOut(BaseModel):
+    id: uuid.UUID
+    reference_code: str
+    title: str
+    controls: list[FrameworkDashboardControlOut]
+
+
+class FrameworkDashboardOut(BaseModel):
+    framework: FrameworkOut
+    requirements: list[FrameworkDashboardRequirementOut]
+    coverage_percent: float
+
+
 class ControlCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str | None = None
@@ -124,6 +143,10 @@ class PolicyOut(BaseModel):
     status: str
     owner_id: uuid.UUID | None
     created_at: datetime
+
+
+class PolicyStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(draft|published)$")
 
     model_config = {"from_attributes": True}
 

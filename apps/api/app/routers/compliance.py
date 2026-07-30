@@ -65,9 +65,13 @@ from app.compliance.schemas import (
     DSARStatusUpdate,
     EvidenceCreate,
     EvidenceOut,
+    FrameworkDashboardControlOut,
+    FrameworkDashboardOut,
+    FrameworkDashboardRequirementOut,
     FrameworkOut,
     PolicyCreate,
     PolicyOut,
+    PolicyStatusUpdate,
     ProcessingActivityCreate,
     ProcessingActivityOut,
     QuestionnaireAnswerOut,
@@ -151,6 +155,73 @@ async def list_requirements(
         .order_by(Requirement.reference_code)
     )
     return list(result.scalars().all())
+
+
+@router.get("/frameworks/{framework_id}/dashboard", response_model=FrameworkDashboardOut)
+async def get_framework_dashboard(
+    framework_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> FrameworkDashboardOut:
+    """Framework-specific compliance dashboard (spec §67 "Compliance" screen
+    group): for each of this framework's requirements, which of this org's
+    own Controls map to it and their current assessment status — makes gaps
+    (a requirement with zero mapped controls) and unfinished work (mapped
+    but not yet `implemented`) visible per-framework, not just as one flat
+    control list."""
+    framework = await db.get(Framework, framework_id)
+    if framework is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework not found")
+
+    requirements = list(
+        (
+            await db.execute(
+                select(Requirement)
+                .where(Requirement.framework_id == framework_id)
+                .order_by(Requirement.reference_code)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    requirement_rows: list[FrameworkDashboardRequirementOut] = []
+    covered_count = 0
+    for requirement in requirements:
+        controls = list(
+            (
+                await db.execute(
+                    select(Control)
+                    .join(ControlMapping, ControlMapping.control_id == Control.id)
+                    .where(
+                        ControlMapping.requirement_id == requirement.id,
+                        Control.organization_id == context.organization_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if any(c.status == "implemented" for c in controls):
+            covered_count += 1
+        requirement_rows.append(
+            FrameworkDashboardRequirementOut(
+                id=requirement.id,
+                reference_code=requirement.reference_code,
+                title=requirement.title,
+                controls=[
+                    FrameworkDashboardControlOut(id=c.id, title=c.title, status=c.status)
+                    for c in controls
+                ],
+            )
+        )
+
+    coverage_percent = round(100 * covered_count / len(requirements), 1) if requirements else 0.0
+    return FrameworkDashboardOut(
+        framework=FrameworkOut.model_validate(framework),
+        requirements=requirement_rows,
+        coverage_percent=coverage_percent,
+    )
 
 
 @router.get("/controls", response_model=list[ControlOut])
@@ -426,6 +497,40 @@ async def create_policy(
         object_type="policy",
         object_id=str(policy.id),
         after_state={"title": policy.title},
+    )
+    await db.commit()
+    await db.refresh(policy)
+    return policy
+
+
+async def _get_org_policy(
+    db: AsyncSession, policy_id: uuid.UUID, organization_id: uuid.UUID
+) -> Policy:
+    policy = await db.get(Policy, policy_id)
+    if policy is None or policy.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    return policy
+
+
+@router.patch("/policies/{policy_id}/status", response_model=PolicyOut)
+async def update_policy_status(
+    policy_id: uuid.UUID,
+    payload: PolicyStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.policies.manage")),
+) -> Policy:
+    policy = await _get_org_policy(db, policy_id, context.organization_id)
+    before_status = policy.status
+    policy.status = payload.status
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.policy.status_changed",
+        object_type="policy",
+        object_id=str(policy.id),
+        before_state={"status": before_status},
+        after_state={"status": policy.status},
     )
     await db.commit()
     await db.refresh(policy)

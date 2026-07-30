@@ -12,6 +12,14 @@ caller (the `/runs/{id}/resume` route) re-invokes `advance_run`, which
 checks whether the linked Approval has since been decided through the
 ordinary `/api/v1/approvals/{id}/decide` endpoint and either continues,
 fails the run (rejected), or is a no-op (still pending).
+
+`export_data` is the Compliance-as-Governance-Layer cross-module hook
+(spec §91: "Automation asks: Can workflow export personal data?") — it
+calls `app.compliance.governance.check_data_export_permission`
+synchronously before "exporting" (this build has no real external export
+destination yet, so the step's effect is the permission check itself);
+a denial fails the run with the governance reason, exactly like a
+rejected `human_approval` step.
 """
 
 from __future__ import annotations
@@ -24,13 +32,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.automation.models import Workflow, WorkflowRun, WorkflowStepRun
+from app.compliance.governance import check_data_export_permission
 from app.core.models import Approval, Notification, Task
 from app.db.base import utcnow
 
 STEP_CREATE_TASK = "create_task"
 STEP_SEND_NOTIFICATION = "send_notification"
 STEP_HUMAN_APPROVAL = "human_approval"
-SUPPORTED_STEP_TYPES = {STEP_CREATE_TASK, STEP_SEND_NOTIFICATION, STEP_HUMAN_APPROVAL}
+STEP_EXPORT_DATA = "export_data"
+SUPPORTED_STEP_TYPES = {
+    STEP_CREATE_TASK,
+    STEP_SEND_NOTIFICATION,
+    STEP_HUMAN_APPROVAL,
+    STEP_EXPORT_DATA,
+}
 
 
 async def start_run(
@@ -187,6 +202,37 @@ async def advance_run(
                 after_state={"approval_id": str(approval.id)},
             )
             return run
+        elif step_type == STEP_EXPORT_DATA:
+            decision = await check_data_export_permission(
+                db,
+                organization_id=run.organization_id,
+                destination_country=config.get("destination_country", ""),
+                data_classification=config.get("data_classification", "internal"),
+            )
+            db.add(
+                WorkflowStepRun(
+                    organization_id=run.organization_id,
+                    run_id=run.id,
+                    step_index=index,
+                    step_type=step_type,
+                    status="succeeded" if decision.allowed else "failed",
+                    output={"allowed": decision.allowed, "reason": decision.reason},
+                )
+            )
+            if not decision.allowed:
+                run.status = "failed"
+                run.completed_at = utcnow()
+                await record_event(
+                    db,
+                    organization_id=run.organization_id,
+                    actor_user_id=actor_user_id,
+                    action="automation.run.failed",
+                    object_type="automation_workflow_run",
+                    object_id=str(run.id),
+                    policy_decision="denied",
+                    after_state={"reason": decision.reason},
+                )
+                return run
         else:
             raise ValueError(f"Unsupported step type: {step_type}")
 

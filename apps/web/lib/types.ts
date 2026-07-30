@@ -137,6 +137,34 @@ export type Framework = {
   description: string | null;
 };
 
+export type Policy = {
+  id: string;
+  title: string;
+  file_id: string | null;
+  status: "draft" | "published";
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type FrameworkDashboardControl = {
+  id: string;
+  title: string;
+  status: string;
+};
+
+export type FrameworkDashboardRequirement = {
+  id: string;
+  reference_code: string;
+  title: string;
+  controls: FrameworkDashboardControl[];
+};
+
+export type FrameworkDashboard = {
+  framework: Framework;
+  requirements: FrameworkDashboardRequirement[];
+  coverage_percent: number;
+};
+
 export type Requirement = {
   id: string;
   reference_code: string;
