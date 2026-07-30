@@ -405,3 +405,58 @@ class QuestionnaireQuestionDetailOut(QuestionnaireQuestionOut):
 
 class QuestionnaireDetailOut(QuestionnaireOut):
     questions: list[QuestionnaireQuestionDetailOut]
+
+
+class AuditCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    framework_id: uuid.UUID | None = None
+    auditor_name: str | None = None
+    scheduled_at: datetime | None = None
+    owner_id: uuid.UUID | None = None
+
+
+class AuditStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(planned|in_progress|completed)$")
+
+
+class AuditOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    framework_id: uuid.UUID | None
+    auditor_name: str | None
+    status: str
+    scheduled_at: datetime | None
+    completed_at: datetime | None
+    owner_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AuditFindingCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    severity: str = Field(pattern="^(low|medium|high|critical)$")
+    control_id: uuid.UUID | None = None
+
+
+class AuditFindingStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(open|remediated)$")
+
+
+class AuditFindingOut(BaseModel):
+    id: uuid.UUID
+    audit_id: uuid.UUID
+    control_id: uuid.UUID | None
+    title: str
+    description: str | None
+    severity: str
+    status: str
+    related_task_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AuditDetailOut(AuditOut):
+    findings: list[AuditFindingOut]

@@ -335,6 +335,38 @@ export type QuestionnaireDetail = Questionnaire & {
   questions: QuestionnaireQuestionDetail[];
 };
 
+export type AuditStatus = "planned" | "in_progress" | "completed";
+
+export type Audit = {
+  id: string;
+  title: string;
+  framework_id: string | null;
+  auditor_name: string | null;
+  status: AuditStatus;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  owner_id: string | null;
+  created_at: string;
+};
+
+export type FindingStatus = "open" | "remediated";
+
+export type AuditFinding = {
+  id: string;
+  audit_id: string;
+  control_id: string | null;
+  title: string;
+  description: string | null;
+  severity: Severity;
+  status: FindingStatus;
+  related_task_id: string | null;
+  created_at: string;
+};
+
+export type AuditDetail = Audit & {
+  findings: AuditFinding[];
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type SecurityAsset = {

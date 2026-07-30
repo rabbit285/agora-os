@@ -1153,3 +1153,154 @@ async def test_questionnaire_from_other_org_returns_not_found(client: AsyncClien
     )
     assert response.status_code == 404
     await other_client.aclose()
+
+
+# --- Audits ---
+
+
+async def _create_audit(client: AsyncClient, title: str) -> str:
+    response = await client.post("/api/v1/compliance/audits", json={"title": title})
+    assert response.status_code == 201, response.text
+    return response.json()["id"]  # type: ignore[no-any-return]
+
+
+async def test_employee_role_cannot_create_audit(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "audit-emp1@example.com", "Audit Employee Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-audit@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post("/api/v1/compliance/audits", json={"title": "Should fail"})
+    assert response.status_code == 403
+
+
+async def test_auditor_role_can_create_audit(client: AsyncClient, db_session: AsyncSession) -> None:
+    _, org_id = await _signup(client, "audit-auditor1@example.com", "Audit Auditor Org")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="auditor@example.com", role_key="auditor"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/audits",
+        json={"title": "Annual ISO 27001 audit", "auditor_name": "Deloitte"},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "planned"
+    assert body["auditor_name"] == "Deloitte"
+
+
+async def test_critical_finding_creates_remediation_task(client: AsyncClient) -> None:
+    await _signup(client, "audit1@example.com", "Audit Org 1")
+    audit_id = await _create_audit(client, "Q3 SOC 2 audit")
+
+    response = await client.post(
+        f"/api/v1/compliance/audits/{audit_id}/findings",
+        json={
+            "title": "Access reviews not performed quarterly",
+            "severity": "critical",
+            "description": "No evidence of quarterly access reviews for the last two quarters.",
+        },
+    )
+    assert response.status_code == 201, response.text
+    finding = response.json()
+    assert finding["related_task_id"] is not None
+    assert finding["status"] == "open"
+
+    tasks = await client.get("/api/v1/tasks")
+    matching = next(t for t in tasks.json() if t["id"] == finding["related_task_id"])
+    assert "Access reviews not performed quarterly" in matching["title"]
+    assert matching["module"] == "compliance"
+    assert matching["priority"] == "urgent"
+
+
+async def test_low_severity_finding_does_not_create_a_task(client: AsyncClient) -> None:
+    await _signup(client, "audit2@example.com", "Audit Org 2")
+    audit_id = await _create_audit(client, "Minor findings audit")
+
+    response = await client.post(
+        f"/api/v1/compliance/audits/{audit_id}/findings",
+        json={"title": "Minor documentation gap", "severity": "low"},
+    )
+    assert response.status_code == 201
+    assert response.json()["related_task_id"] is None
+
+
+async def test_finding_can_attach_to_a_control(client: AsyncClient) -> None:
+    await _signup(client, "audit3@example.com", "Audit Org 3")
+    audit_id = await _create_audit(client, "Control-linked audit")
+    control = await client.post(
+        "/api/v1/compliance/controls", json={"title": "Access control review"}
+    )
+    control_id = control.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/compliance/audits/{audit_id}/findings",
+        json={"title": "Control not evidenced", "severity": "medium", "control_id": control_id},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["control_id"] == control_id
+
+
+async def test_audit_and_finding_status_lifecycle(client: AsyncClient) -> None:
+    await _signup(client, "audit4@example.com", "Audit Org 4")
+    audit_id = await _create_audit(client, "Lifecycle test audit")
+
+    finding = await client.post(
+        f"/api/v1/compliance/audits/{audit_id}/findings",
+        json={"title": "Needs remediation", "severity": "medium"},
+    )
+    finding_id = finding.json()["id"]
+
+    remediated = await client.patch(
+        f"/api/v1/compliance/audits/{audit_id}/findings/{finding_id}/status",
+        json={"status": "remediated"},
+    )
+    assert remediated.status_code == 200
+    assert remediated.json()["status"] == "remediated"
+
+    in_progress = await client.patch(
+        f"/api/v1/compliance/audits/{audit_id}/status", json={"status": "in_progress"}
+    )
+    assert in_progress.status_code == 200
+    assert in_progress.json()["status"] == "in_progress"
+
+    completed = await client.patch(
+        f"/api/v1/compliance/audits/{audit_id}/status", json={"status": "completed"}
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["completed_at"] is not None
+
+    detail = await client.get(f"/api/v1/compliance/audits/{audit_id}")
+    assert detail.status_code == 200
+    assert len(detail.json()["findings"]) == 1
+
+
+async def test_audit_rejects_framework_from_another_org(client: AsyncClient) -> None:
+    await _signup(client, "audit5@example.com", "Audit Org 5")
+    response = await client.post(
+        "/api/v1/compliance/audits",
+        json={"title": "Should fail", "framework_id": str(uuid.uuid4())},
+    )
+    assert response.status_code == 404
+
+
+async def test_audit_from_other_org_returns_not_found(client: AsyncClient) -> None:
+    await _signup(client, "cross-audit1@example.com", "Cross Audit Org 1")
+    audit_id = await _create_audit(client, "Org 1 audit")
+
+    transport = ASGITransport(app=app)
+    other_client = AsyncClient(transport=transport, base_url="http://test")
+    _, other_org_id = await _signup(other_client, "cross-audit2@example.com", "Cross Audit Org 2")
+
+    response = await other_client.get(
+        f"/api/v1/compliance/audits/{audit_id}",
+        headers={"X-Organization-Id": str(other_org_id)},
+    )
+    assert response.status_code == 404
+    await other_client.aclose()

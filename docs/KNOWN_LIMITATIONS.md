@@ -43,8 +43,16 @@ implied to work.
   identical but worded differently will not match and will fall through
   to the AI Copilot path instead of reusing the human-approved answer; a
   future iteration could reuse Knowledge's embeddings for a similarity
-  match instead. Still missing: data transfers (the remaining Privacy
-  sub-feature), audits (auditor portal), and Trust Center.
+  match instead. Audits (`Audit`/`AuditFinding`) also now exist — a
+  `high`/`critical` finding auto-creates a remediation Task, reusing
+  `record_assessment`'s hook shape for a fifth entity type (ADR-0033);
+  the pre-seeded `auditor` system role got its first real permission.
+  This is audit-run *tracking*, not a full auditor portal — there is no
+  separate auditor-facing login/experience, evidence request workflow
+  scoped to an audit, or read-only external-auditor access; the
+  `auditor` role currently gets the same full manage permission an
+  internal user would. Still missing: data transfers (the remaining
+  Privacy sub-feature) and Trust Center.
 - **Security**: no cloud provider connectors (AWS/Azure/GCP), no identity
   provider connectors (Okta/Entra/Google Workspace), no vulnerability
   scanner ingestion, no incident timeline/evidence/playbook sub-objects —

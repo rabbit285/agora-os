@@ -48,10 +48,11 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/compliance` | [x] controls + risks + vendors + questionnaires + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
+| `/compliance` | [x] controls + risks + vendors + questionnaires + audits + AI system inventory + AI incidents + RoPA/DPIA/DSAR + frameworks overview |
 | `/compliance/controls/[id]` | [x] detail: requirements, assessments, evidence |
 | `/compliance/vendors/[id]` | [x] detail: status workflow, risk assessment form, assessment history, evidence list |
 | `/compliance/questionnaires/[id]` | [x] detail: status workflow, missing-answer count banner, add-question form, per-question suggest-answer/save-draft/approve actions |
+| `/compliance/audits/[id]` | [x] detail: status workflow, add-finding form, findings list with severity/status badges, mark-remediated action |
 | `/compliance/ai-systems/[id]` | [x] detail: status workflow, linked approval banner, assessments |
 | `/compliance/ai-incidents/[id]` | [x] detail: status workflow, linked risk banner, linked response task banner, link to the AI system |
 | `/compliance/dpias/[id]` | [x] detail: status workflow, linked approval banner (high-risk only), findings, link to a linked AI system |
@@ -60,8 +61,8 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 Not yet built (spec §67 lists these under Compliance): Framework-specific
 dashboards (GDPR/EU AI Act individual views), Evidence Library standalone
 page, a standalone Data Inventory/RoPA detail view (list-only today),
-Policies list page (API exists, no UI yet), Audits, Trust Center,
-Regulatory Intelligence.
+Policies list page (API exists, no UI yet), Trust Center, Regulatory
+Intelligence.
 
 ## SECURITY
 

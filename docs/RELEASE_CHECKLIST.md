@@ -198,6 +198,16 @@ Automation) now have a real, tested backbone.
 - [x] Frontend tests: 2 new Vitest tests (14 total) covering the Questionnaires section rendering and creating a new questionnaire
 - [x] Live Docker smoke test: created a second questionnaire with an identically-worded question and confirmed live reuse (`source_type="reused_from_library"`); confirmed the honest AI-Copilot fallback path on a genuinely novel question (with real retrieval citations against the seeded Knowledge document); confirmed manual answer approval and questionnaire status transition to `completed`; confirmed the full `compliance.questionnaire*` audit trail in Postgres; confirmed both `/compliance` (Questionnaires section) and `/compliance/questionnaires/[id]` return HTTP 200
 
+## Phase 3 extension (Audits) — added after the Security Questionnaires slice
+
+- [x] Audit, AuditFinding models + migration — spec §12/§67 "Audits" screen; an Audit groups many findings under one auditor engagement (optionally against a catalog Framework), a different shape from the single-judgement ControlAssessment/VendorAssessment/AIAssessment pattern
+- [x] Cross-module hook: a `high`/`critical` finding reuses `record_assessment`'s hook shape a fifth time, auto-creating a remediation `core.Task` — specifically the Task-creating half a `fail` ControlAssessment uses, not the Risk-creating half VendorAssessment/AIIncident use (tested, ADR-0033)
+- [x] Tenant-isolated `/api/v1/compliance/audits` API (RBAC via `compliance.audits.manage`, added to the `COMPLIANCE_PERMISSIONS` bundle, and granted to the pre-seeded but previously-unused `auditor` system role) + frontend (Audits section on `/compliance`, `/compliance/audits/[id]` detail with status workflow, add-finding form, findings list, mark-remediated action)
+- [x] Seed script: 1 in-progress audit with 1 critical finding + linked remediation task, 1 remediated low-severity finding
+- [x] Backend tests: 179 passing total; ruff/mypy clean
+- [x] Frontend tests: 2 new Vitest tests (16 total) covering the Audits section rendering and creating a new audit
+- [x] Live Docker smoke test: created a critical finding and confirmed a real linked remediation Task (title/module/priority verified via `/api/v1/tasks`); confirmed a low-severity finding creates no task; marked a finding remediated and completed the audit (`completed_at` set); confirmed the full `compliance.audit*` audit trail in Postgres; confirmed both `/compliance` (Audits section) and `/compliance/audits/[id]` return HTTP 200
+
 See `docs/RESUME_BUILD.md` for the next phase.
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)

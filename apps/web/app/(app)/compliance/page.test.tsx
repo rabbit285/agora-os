@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AIIncident,
   AISystem,
+  Audit,
   DPIA,
   DSAR,
   ProcessingActivity,
@@ -111,6 +112,18 @@ const QUESTIONNAIRE_FIXTURE: Questionnaire = {
   created_at: new Date().toISOString(),
 };
 
+const AUDIT_FIXTURE: Audit = {
+  id: "44444444-5555-6666-7777-888888888888",
+  title: "Annual ISO 27001 surveillance audit",
+  framework_id: null,
+  auditor_name: "Nordic Assurance Partners",
+  status: "in_progress",
+  scheduled_at: null,
+  completed_at: null,
+  owner_id: null,
+  created_at: new Date().toISOString(),
+};
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -128,6 +141,7 @@ function mockRoutes(overrides: {
   aiIncidents?: AIIncident[];
   vendors?: Vendor[];
   questionnaires?: Questionnaire[];
+  audits?: Audit[];
 }) {
   mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === "/api/v1/compliance/controls") return [];
@@ -151,6 +165,10 @@ function mockRoutes(overrides: {
       return { ...QUESTIONNAIRE_FIXTURE };
     }
     if (path === "/api/v1/compliance/questionnaires") return overrides.questionnaires ?? [];
+    if (options?.method === "POST" && path === "/api/v1/compliance/audits") {
+      return { ...AUDIT_FIXTURE };
+    }
+    if (path === "/api/v1/compliance/audits") return overrides.audits ?? [];
     throw new Error(`Unmocked path: ${path} (${options?.method ?? "GET"})`);
   });
 }
@@ -325,6 +343,38 @@ describe("CompliancePage — Questionnaires section", () => {
       expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/questionnaires", {
         method: "POST",
         body: { title: "New Customer Questionnaire", source: "customer_provided" },
+      }),
+    );
+  });
+});
+
+describe("CompliancePage — Audits section", () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+  });
+
+  it("renders audits with their auditor name and status", async () => {
+    mockRoutes({ audits: [AUDIT_FIXTURE] });
+    renderPage();
+
+    expect(await screen.findByText("Annual ISO 27001 surveillance audit")).toBeInTheDocument();
+    expect(screen.getByText("Nordic Assurance Partners")).toBeInTheDocument();
+    expect(screen.getByText("in progress")).toBeInTheDocument();
+  });
+
+  it("creates a new audit with the entered title and auditor name", async () => {
+    mockRoutes({});
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByPlaceholderText("Audit title"), "New Compliance Audit");
+    await user.type(screen.getByPlaceholderText("Auditor name"), "Big Four LLP");
+    await user.click(screen.getByRole("button", { name: "Create audit" }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/audits", {
+        method: "POST",
+        body: { title: "New Compliance Audit", auditor_name: "Big Four LLP" },
       }),
     );
   });

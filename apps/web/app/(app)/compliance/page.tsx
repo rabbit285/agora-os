@@ -16,6 +16,7 @@ import type {
   AIIncident,
   AIRiskClassification,
   AISystem,
+  Audit,
   Control,
   DPIA,
   DPIARiskLevel,
@@ -261,6 +262,73 @@ function QuestionnairesSection() {
                   </div>
                 </div>
                 <StatusBadge status={questionnaire.status} />
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AuditsSection() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [auditorName, setAuditorName] = useState("");
+
+  const { data: audits } = useQuery<Audit[]>({
+    queryKey: ["compliance", "audits"],
+    queryFn: () => apiFetch<Audit[]>("/api/v1/compliance/audits"),
+  });
+
+  const createAudit = useMutation({
+    mutationFn: () =>
+      apiFetch<Audit>("/api/v1/compliance/audits", {
+        method: "POST",
+        body: { title, auditor_name: auditorName.trim() || null },
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setAuditorName("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "audits"] });
+    },
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Audits
+      </h2>
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap gap-2 pt-6">
+          <Input
+            placeholder="Audit title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Input
+            placeholder="Auditor name"
+            value={auditorName}
+            onChange={(e) => setAuditorName(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Button disabled={!title.trim() || createAudit.isPending} onClick={() => createAudit.mutate()}>
+            Create audit
+          </Button>
+        </CardContent>
+      </Card>
+      {audits?.length === 0 && <p className="text-sm text-neutral-500">No audits recorded yet.</p>}
+      <div className="flex flex-col gap-2">
+        {audits?.map((audit) => (
+          <Link key={audit.id} href={`/compliance/audits/${audit.id}`}>
+            <Card className="transition-colors hover:border-neutral-400">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <div className="font-medium text-neutral-900">{audit.title}</div>
+                  <div className="text-xs text-neutral-400">{audit.auditor_name ?? "No auditor set"}</div>
+                </div>
+                <StatusBadge status={audit.status} />
               </CardContent>
             </Card>
           </Link>
@@ -793,6 +861,7 @@ export default function CompliancePage() {
       <RisksSection />
       <VendorsSection />
       <QuestionnairesSection />
+      <AuditsSection />
       <AISystemsSection />
       <AIIncidentsSection />
       <ProcessingActivitiesSection />

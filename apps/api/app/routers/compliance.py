@@ -13,6 +13,8 @@ from app.compliance.models import (
     AIAssessment,
     AIIncident,
     AISystem,
+    Audit,
+    AuditFinding,
     Control,
     ControlAssessment,
     ControlMapping,
@@ -38,6 +40,13 @@ from app.compliance.schemas import (
     AISystemDetailOut,
     AISystemOut,
     AISystemStatusUpdate,
+    AuditCreate,
+    AuditDetailOut,
+    AuditFindingCreate,
+    AuditFindingOut,
+    AuditFindingStatusUpdate,
+    AuditOut,
+    AuditStatusUpdate,
     ControlAssessmentCreate,
     ControlAssessmentOut,
     ControlCreate,
@@ -84,14 +93,17 @@ from app.compliance.service import (
     decide_ai_system_status,
     decide_dpia_status,
     record_assessment,
+    record_audit_finding,
     record_vendor_assessment,
     register_ai_system,
     suggest_questionnaire_answer,
     update_ai_incident_status,
+    update_audit_finding_status,
     update_dsar_status,
     update_questionnaire_answer,
 )
 from app.core.models import File
+from app.db.base import utcnow
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 
@@ -1100,3 +1112,151 @@ async def update_answer(
     await db.commit()
     await db.refresh(answer)
     return answer
+
+
+@router.get("/audits", response_model=list[AuditOut])
+async def list_audits(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[Audit]:
+    result = await db.execute(
+        select(Audit)
+        .where(Audit.organization_id == context.organization_id)
+        .order_by(Audit.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/audits", response_model=AuditOut, status_code=status.HTTP_201_CREATED)
+async def create_audit(
+    payload: AuditCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.audits.manage")),
+) -> Audit:
+    if payload.framework_id is not None:
+        framework = await db.get(Framework, payload.framework_id)
+        if framework is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework not found")
+    audit = Audit(organization_id=context.organization_id, **payload.model_dump())
+    db.add(audit)
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.audit.created",
+        object_type="audit",
+        object_id=str(audit.id),
+        after_state={"title": audit.title, "status": audit.status},
+    )
+    await db.commit()
+    await db.refresh(audit)
+    return audit
+
+
+async def _get_org_audit(
+    db: AsyncSession, audit_id: uuid.UUID, organization_id: uuid.UUID
+) -> Audit:
+    audit = await db.get(Audit, audit_id)
+    if audit is None or audit.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit not found")
+    return audit
+
+
+@router.get("/audits/{audit_id}", response_model=AuditDetailOut)
+async def get_audit(
+    audit_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> AuditDetailOut:
+    audit = await _get_org_audit(db, audit_id, context.organization_id)
+    findings_result = await db.execute(
+        select(AuditFinding)
+        .where(AuditFinding.audit_id == audit.id)
+        .order_by(AuditFinding.created_at.desc())
+    )
+    return AuditDetailOut(
+        **AuditOut.model_validate(audit).model_dump(),
+        findings=[AuditFindingOut.model_validate(f) for f in findings_result.scalars().all()],
+    )
+
+
+@router.patch("/audits/{audit_id}/status", response_model=AuditOut)
+async def update_audit_status(
+    audit_id: uuid.UUID,
+    payload: AuditStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.audits.manage")),
+) -> Audit:
+    audit = await _get_org_audit(db, audit_id, context.organization_id)
+    before_status = audit.status
+    audit.status = payload.status
+    if payload.status == "completed":
+        audit.completed_at = utcnow()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.audit.status_changed",
+        object_type="audit",
+        object_id=str(audit.id),
+        before_state={"status": before_status},
+        after_state={"status": audit.status},
+    )
+    await db.commit()
+    await db.refresh(audit)
+    return audit
+
+
+@router.post(
+    "/audits/{audit_id}/findings",
+    response_model=AuditFindingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_audit_finding(
+    audit_id: uuid.UUID,
+    payload: AuditFindingCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.audits.manage")),
+) -> AuditFinding:
+    audit = await _get_org_audit(db, audit_id, context.organization_id)
+    if payload.control_id is not None:
+        await _get_org_control(db, payload.control_id, context.organization_id)
+    finding = await record_audit_finding(
+        db,
+        organization_id=context.organization_id,
+        audit=audit,
+        title=payload.title,
+        description=payload.description,
+        severity=payload.severity,
+        control_id=payload.control_id,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(finding)
+    return finding
+
+
+@router.patch(
+    "/audits/{audit_id}/findings/{finding_id}/status",
+    response_model=AuditFindingOut,
+)
+async def update_finding_status(
+    audit_id: uuid.UUID,
+    finding_id: uuid.UUID,
+    payload: AuditFindingStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.audits.manage")),
+) -> AuditFinding:
+    finding = await db.get(AuditFinding, finding_id)
+    if (
+        finding is None
+        or finding.organization_id != context.organization_id
+        or finding.audit_id != audit_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+    finding = await update_audit_finding_status(
+        db, finding=finding, new_status=payload.status, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(finding)
+    return finding

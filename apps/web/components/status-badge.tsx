@@ -89,6 +89,8 @@ const STATUS_VARIANTS: Record<
   under_review: "warning",
   offboarded: "outline",
   missing: "destructive",
+  planned: "outline",
+  remediated: "success",
 };
 
 export function StatusBadge({ status }: { status: string }) {

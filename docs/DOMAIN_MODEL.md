@@ -198,10 +198,21 @@ erDiagram
   (ADR-0032). `opportunity_id` is a deliberately forward-looking
   nullable FK to **Sales Opportunity**, unused until the Enterprise
   Sales Security Review slice.
+- **Audit / AuditFinding** — spec §12/§67's "Audits" screen. An `Audit`
+  groups many `AuditFinding` rows under one auditor engagement
+  (optionally against a catalog **Framework**), unlike the single
+  point-in-time judgement shape `ControlAssessment`/`VendorAssessment`/
+  `AIAssessment` share. A `high`/`critical` finding auto-creates a
+  remediation **Task** — `record_assessment`'s hook shape reused a fifth
+  time, specifically its Task-creating half (the same branch a `fail`
+  `ControlAssessment` uses), since a finding is a scoped remediation
+  item, not an ongoing risk (ADR-0033). The pre-seeded but
+  previously-unused `auditor` system role gets its first real
+  permission here.
 
-Not modeled yet: framework/evidence versioning, audits (auditor portal),
-data transfers (the remaining Privacy sub-feature), Trust Center — each
-a substantial feature attaching to this backbone, not blocking it. See
+Not modeled yet: framework/evidence versioning, data transfers (the
+remaining Privacy sub-feature), Trust Center — each a substantial
+feature attaching to this backbone, not blocking it. See
 `docs/KNOWN_LIMITATIONS.md`.
 
 ## Phase 4 entities (implemented — Security backbone)

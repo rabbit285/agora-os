@@ -66,6 +66,18 @@ retrieval-grounded over the Knowledge base) as `source_type=
 human-in-the-loop discipline everywhere an AI-authored artifact could
 reach a customer. See app.compliance.service.suggest_questionnaire_answer
 and docs/DECISIONS.md ADR-0032.
+
+`Audit` / `AuditFinding` add spec §12/§67's "Audits" screen (the auditor
+portal's audit-run tracking, distinct from a one-off `ControlAssessment`
+— an Audit groups many findings under one auditor engagement, optionally
+against a `Framework`). A `high`/`critical`-severity finding auto-creates
+a remediation `core.Task`, reusing `record_assessment`'s "assessment
+creates a tracked consequence" hook shape for a fifth entity type — the
+same Task-creating half of that shape `ControlAssessment` itself uses,
+not the Risk-creating half `VendorAssessment`/`AIIncident` use, since an
+audit finding is a remediation checklist item, not an ongoing risk to
+track. See app.compliance.service.record_audit_finding and
+docs/DECISIONS.md ADR-0033.
 """
 
 from __future__ import annotations
@@ -525,4 +537,57 @@ class QuestionnaireAnswer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     answered_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class Audit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One auditor engagement (spec §12/§67 "Audits" screen) — a
+    named audit run that groups many `AuditFinding` rows, optionally
+    against a catalog `Framework` (e.g. an annual ISO 27001 audit)."""
+
+    __tablename__ = "audits"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    framework_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("frameworks.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    auditor_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # planned | in_progress | completed
+    status: Mapped[str] = mapped_column(String(20), default="planned")
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class AuditFinding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A single finding raised during an Audit, optionally against a
+    specific Control. A `high`/`critical` finding auto-creates a
+    remediation `core.Task` — see
+    app.compliance.service.record_audit_finding."""
+
+    __tablename__ = "audit_findings"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audits.id"), nullable=False, index=True
+    )
+    control_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # low | medium | high | critical
+    severity: Mapped[str] = mapped_column(String(10), nullable=False)
+    # open | remediated
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    # Cross-module hook: set when severity is high/critical.
+    related_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
     )

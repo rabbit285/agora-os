@@ -47,6 +47,7 @@ PERMISSIONS: dict[str, str] = {
     "compliance.privacy.manage": "Manage processing activities, DPIAs, and DSARs",
     "compliance.vendors.manage": "Create vendors and record vendor risk assessments",
     "compliance.questionnaires.manage": "Create questionnaires, questions, and answers",
+    "compliance.audits.manage": "Create audits and record audit findings",
     "security.assets.manage": "Create and update the security asset inventory",
     "security.findings.manage": "Create and update security findings",
     "security.alerts.manage": "Triage and update security alerts",
@@ -69,6 +70,7 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.policies.manage",
     "compliance.vendors.manage",
     "compliance.questionnaires.manage",
+    "compliance.audits.manage",
 ]
 
 AI_GOVERNANCE_PERMISSIONS = [
@@ -123,6 +125,7 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
     "support_manager": SUPPORT_PERMISSIONS,
     "support_agent": SUPPORT_PERMISSIONS,
     "automation_manager": AUTOMATION_PERMISSIONS + INTEGRATIONS_PERMISSIONS,
+    "auditor": ["compliance.audits.manage"],
 }
 
 

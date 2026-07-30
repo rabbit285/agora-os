@@ -21,6 +21,7 @@ from app.compliance.models import (
     AIAssessment,
     AIIncident,
     AISystem,
+    Audit,
     Control,
     ControlMapping,
     Evidence,
@@ -38,8 +39,10 @@ from app.compliance.service import (
     create_dpia,
     create_dsar,
     record_assessment,
+    record_audit_finding,
     record_vendor_assessment,
     register_ai_system,
+    update_audit_finding_status,
     update_dsar_status,
     update_questionnaire_answer,
 )
@@ -245,6 +248,14 @@ async def seed() -> None:
             await _seed_demo_questionnaire_data(
                 db, organization_id=organization.id, admin_id=admin.id
             )
+
+        existing_audits = (
+            (await db.execute(select(Audit).where(Audit.organization_id == organization.id)))
+            .scalars()
+            .all()
+        )
+        if not existing_audits:
+            await _seed_demo_audit_data(db, organization_id=organization.id, admin_id=admin.id)
 
         existing_assets = (
             (
@@ -779,6 +790,55 @@ async def _seed_demo_questionnaire_data(
     logger.info(
         "Seeded demo questionnaire data (1 questionnaire, 1 answered+approved question, "
         "1 missing question)"
+    )
+
+
+async def _seed_demo_audit_data(
+    db: AsyncSession, *, organization_id: uuid.UUID, admin_id: uuid.UUID
+) -> None:
+    """Seeds one in-progress audit with a critical finding (exercising the
+    cross-module hook that links a high/critical finding to a real
+    remediation core.Task, ADR-0033) and one already-remediated finding,
+    so the demo org shows both the open and resolved states honestly."""
+    audit = Audit(
+        organization_id=organization_id,
+        title="Annual ISO 27001 surveillance audit",
+        auditor_name="Nordic Assurance Partners",
+        status="in_progress",
+        owner_id=admin_id,
+    )
+    db.add(audit)
+    await db.flush()
+
+    await record_audit_finding(
+        db,
+        organization_id=organization_id,
+        audit=audit,
+        title="Terminated employees retained VPN access beyond offboarding",
+        description="Two former contractors still had active VPN credentials 3 weeks after offboarding.",
+        severity="critical",
+        control_id=None,
+        actor_user_id=admin_id,
+    )
+
+    minor_finding = await record_audit_finding(
+        db,
+        organization_id=organization_id,
+        audit=audit,
+        title="Password policy documentation was out of date",
+        description="Policy referenced a retired MFA provider; updated during the audit.",
+        severity="low",
+        control_id=None,
+        actor_user_id=admin_id,
+    )
+    await update_audit_finding_status(
+        db, finding=minor_finding, new_status="remediated", actor_user_id=admin_id
+    )
+
+    await db.commit()
+    logger.info(
+        "Seeded demo audit data (1 in-progress audit, 1 critical finding + linked remediation "
+        "task, 1 remediated low-severity finding)"
     )
 
 

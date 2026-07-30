@@ -48,6 +48,14 @@ pipeline), storing its citations and always as `status="draft"` — an
 AI-suggested or library-reused answer never auto-approves itself,
 consistent with spec F2 "no direct autonomous writes." See
 docs/DECISIONS.md ADR-0032.
+
+`record_audit_finding` reuses `record_assessment`'s "assessment creates a
+tracked consequence" hook shape (spec §80) for a fifth entity type: a
+`high`/`critical` finding auto-creates a remediation `core.Task`, the
+same Task-creating half of the shape `ControlAssessment` itself uses (not
+the Risk-creating half `VendorAssessment`/`AIIncident` reuse), since an
+audit finding is a remediation checklist item, not an ongoing risk. See
+docs/DECISIONS.md ADR-0033.
 """
 
 from __future__ import annotations
@@ -64,6 +72,8 @@ from app.compliance.models import (
     DSAR,
     AIIncident,
     AISystem,
+    Audit,
+    AuditFinding,
     Control,
     ControlAssessment,
     Questionnaire,
@@ -78,6 +88,7 @@ from app.db.base import utcnow
 
 _HIGH_RISK_TIERS = {"high", "unacceptable"}
 _HIGH_VENDOR_RISK_TIERS = {"high", "critical"}
+_HIGH_FINDING_SEVERITIES = {"high", "critical"}
 DSAR_RESPONSE_WINDOW_DAYS = 30
 
 
@@ -676,3 +687,76 @@ async def update_questionnaire_answer(
         after_state={"status": status},
     )
     return answer
+
+
+async def record_audit_finding(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    audit: Audit,
+    title: str,
+    description: str | None,
+    severity: str,
+    control_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID | None,
+) -> AuditFinding:
+    finding = AuditFinding(
+        organization_id=organization_id,
+        audit_id=audit.id,
+        control_id=control_id,
+        title=title,
+        description=description,
+        severity=severity,
+    )
+    db.add(finding)
+    await db.flush()
+
+    if severity in _HIGH_FINDING_SEVERITIES:
+        remediation_task = Task(
+            organization_id=organization_id,
+            title=f"Remediate audit finding: {title}",
+            description=description,
+            module="compliance",
+            priority="high" if severity == "high" else "urgent",
+            assignee_id=audit.owner_id,
+        )
+        db.add(remediation_task)
+        await db.flush()
+        finding.related_task_id = remediation_task.id
+
+    await record_event(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.audit_finding.created",
+        object_type="audit_finding",
+        object_id=str(finding.id),
+        after_state={
+            "audit_id": str(audit.id),
+            "severity": severity,
+            "related_task_id": str(finding.related_task_id) if finding.related_task_id else None,
+        },
+    )
+    return finding
+
+
+async def update_audit_finding_status(
+    db: AsyncSession,
+    *,
+    finding: AuditFinding,
+    new_status: str,
+    actor_user_id: uuid.UUID | None,
+) -> AuditFinding:
+    before_status = finding.status
+    finding.status = new_status
+    await record_event(
+        db,
+        organization_id=finding.organization_id,
+        actor_user_id=actor_user_id,
+        action="compliance.audit_finding.status_changed",
+        object_type="audit_finding",
+        object_id=str(finding.id),
+        before_state={"status": before_status},
+        after_state={"status": new_status},
+    )
+    return finding

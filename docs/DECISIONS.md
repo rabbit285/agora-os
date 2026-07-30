@@ -860,3 +860,52 @@ no-Knowledge-evidence AI-suggestion path, cross-questionnaire library
 reuse of a manually-approved answer, the questionnaire status
 lifecycle, and tenant isolation (both a foreign `opportunity_id` and a
 questionnaire from another org are rejected).
+
+## ADR-0033 — Audits reuse record_assessment's Task-creating half a fifth time; the pre-seeded but previously-unused "auditor" role gets its first permission
+
+**Decision**: `Audit` / `AuditFinding` (`app/compliance/models.py`, spec
+§12/§67's "Audits" screen) model an auditor engagement as a named run
+(`Audit`, optionally against a catalog `Framework`) that groups many
+`AuditFinding` rows, each optionally against a specific `Control`. This
+is deliberately a different shape from `ControlAssessment`/
+`VendorAssessment`/`AIAssessment` (a single point-in-time judgement of
+one entity): an audit produces *many* findings per engagement, so
+`AuditFinding` is its own entity with its own `open`/`remediated`
+lifecycle, not a repeated assessment row.
+
+`record_audit_finding` reuses `record_assessment`'s "assessment creates a
+tracked consequence" hook shape (spec §80) for a fifth entity type, but
+specifically its *Task*-creating half: a `high`/`critical` finding
+auto-creates a remediation `core.Task`, the same way a `fail` Control
+assessment does — not the *Risk*-creating half `VendorAssessment` and
+`AIIncident` reuse. This is a deliberate choice, not an oversight: an
+audit finding is inherently a remediation checklist item scoped to a
+specific engagement (fix this before the audit closes), not an ongoing
+risk to track in the Risk Register the way an unvetted vendor or a
+biased AI system is.
+
+RBAC adds `compliance.audits.manage`, appended to the existing
+`COMPLIANCE_PERMISSIONS` bundle (`compliance_manager`/`dpo` get it
+automatically) — and also granted directly to the `auditor` system role
+(`app/core/rbac.py` `SYSTEM_ROLE_KEYS`), which has existed since Phase 1
+but held zero permissions until now. This is the natural home for an
+auditor-facing capability rather than inventing a new role.
+
+**Why**: Reusing record_assessment's Task-creating half (not
+reinventing a parallel "finding creates a follow-up" mechanism) keeps
+spec §80's shared-primitive discipline intact for a fifth entity type,
+while correctly choosing the Task branch over the Risk branch based on
+what an audit finding actually represents — a scoped remediation item,
+not a standing risk. Granting the pre-seeded `auditor` role its first
+real permission here (rather than adding a redundant grant to
+`compliance_manager` alone) reflects that an external or internal
+auditor is a distinct audience from a compliance manager, even though
+this build has no dedicated auditor portal UI yet (see
+`docs/KNOWN_LIMITATIONS.md`). Tested in `tests/test_compliance.py`: RBAC
+denial for `employee`, the `auditor` role's grant, the
+critical-finding-creates-task hook (with the task's title/module/
+priority asserted, matching `test_failed_assessment_creates_remediation_task`'s
+pattern), the negative case for low severity, a finding attaching to a
+Control, the audit and finding status lifecycles (including
+`completed_at` being set), tenant isolation, and rejection of a
+`framework_id` from another org.

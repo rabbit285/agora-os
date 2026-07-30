@@ -472,6 +472,41 @@ a live `app.ai.copilot.ask_copilot` call (`source_type='ai_suggested'`,
 `citations` populated) — either way the result is always
 `status='draft'`, never auto-approved (ADR-0032).
 
+```text
+audits                     -- auditor engagements (spec §12/§67 "Audits")
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  framework_id UUID FK frameworks NULL
+  title TEXT NOT NULL
+  auditor_name TEXT NULL
+  status TEXT NOT NULL DEFAULT 'planned'   -- planned|in_progress|completed
+  scheduled_at TIMESTAMPTZ NULL
+  completed_at TIMESTAMPTZ NULL
+  owner_id UUID FK users NULL
+  created_at, updated_at
+
+audit_findings
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  audit_id UUID FK audits NOT NULL
+  control_id UUID FK controls NULL
+  title TEXT NOT NULL
+  description TEXT NULL
+  severity TEXT NOT NULL   -- low|medium|high|critical
+  status TEXT NOT NULL DEFAULT 'open'   -- open|remediated
+  related_task_id UUID FK tasks NULL   -- cross-module hook, see below
+  created_at, updated_at
+```
+
+An `audit_findings` row with `severity` of `high` or `critical`
+automatically creates a linked `core.tasks` remediation row, via
+`app/compliance/service.py::record_audit_finding` — reusing
+`record_assessment`'s "assessment creates a tracked consequence" hook
+shape for a fifth entity type, specifically the Task-creating half a
+`fail` `ControlAssessment` uses (not the Risk-creating half
+`VendorAssessment`/`AIIncident` use — an audit finding is a scoped
+remediation item, not an ongoing risk) (ADR-0033).
+
 ## Tables (Phase 4 — Security)
 
 Code lives in `app/secops/` (not `app/security/` — see `docs/DECISIONS.md`

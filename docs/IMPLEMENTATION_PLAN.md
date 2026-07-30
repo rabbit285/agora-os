@@ -92,11 +92,19 @@ fallback — always landing as `status="draft"`, never auto-approved
 FK to Sales Opportunity for the not-yet-built Enterprise Sales Security
 Review slice.
 
-Remaining: data transfers (Privacy's remaining sub-feature), audits
-(auditor portal), Trust Center, Enterprise Sales Security Review,
-regulatory intelligence feed. Each is a substantial feature attaching to
-the backbone above, not a blocker
-to it — see `docs/RESUME_BUILD.md` for suggested next-slice ordering.
+Also done: Audits (`Audit`/`AuditFinding`, spec §12/§67 "Audits"). An
+`Audit` groups many findings under one auditor engagement, a different
+shape from the single-judgement `ControlAssessment`/`VendorAssessment`/
+`AIAssessment` pattern. A `high`/`critical` finding reuses
+`record_assessment`'s Task-creating hook shape for a fifth entity type
+(ADR-0033); the pre-seeded but previously-unused `auditor` system role
+got its first real permission.
+
+Remaining: data transfers (Privacy's remaining sub-feature), Trust
+Center, Enterprise Sales Security Review, regulatory intelligence feed.
+Each is a substantial feature attaching to the backbone above, not a
+blocker to it — see `docs/RESUME_BUILD.md` for suggested next-slice
+ordering.
 
 ## Phase 4 — Security (backbone in progress)
 

@@ -61,35 +61,48 @@ per-question suggest-answer/save-draft/approve actions). Seed data: 1
 questionnaire ("Nordwind Robotics vendor security questionnaire") with 1
 approved answer + 1 missing answer.
 
-All checks pass: **171 backend tests** (was 164), ruff + mypy --strict
-clean; frontend eslint + tsc + production build clean; **14 frontend
-tests** (was 12), all passing. Live Docker smoke test: created a second
-questionnaire with an identically-worded question and confirmed live
-library reuse (`source_type="reused_from_library"`); confirmed the honest
-AI-Copilot fallback on a genuinely novel question (real retrieval
-citations against the seeded Knowledge document, since this org — unlike
-the automated test's fresh org — already has an indexed document);
-confirmed manual answer approval and the questionnaire status transition
-to `completed`; confirmed the full `compliance.questionnaire*` audit
-trail in Postgres; confirmed both `/compliance` and
-`/compliance/questionnaires/[id]` return HTTP 200 (required a `docker
-restart` of the `web` container — the bind-mounted dev server did not
-pick up the brand-new route directory on its own; see "Machine-specific
-note" below).
+**Audits** (`Audit`/`AuditFinding`, `app/compliance/models.py`,
+ADR-0033). An `Audit` groups many `AuditFinding` rows under one auditor
+engagement (optionally against a catalog `Framework`) — a different
+shape from the single-judgement `ControlAssessment`/`VendorAssessment`/
+`AIAssessment` pattern. `record_audit_finding` reuses
+`record_assessment`'s hook shape for a fifth entity type, specifically
+its Task-creating half: a `high`/`critical` finding auto-creates a
+remediation `core.Task`. RBAC: `compliance.audits.manage` added to the
+existing `COMPLIANCE_PERMISSIONS` bundle, and also granted to the
+pre-seeded but previously-unused `auditor` system role (its first real
+permission). Frontend: an Audits section on `/compliance` (create form,
+list) + `/compliance/audits/[id]` detail (status dropdown, add-finding
+form, findings list with severity/status badges, mark-remediated
+action). Seed data: 1 in-progress audit ("Annual ISO 27001 surveillance
+audit") with 1 critical finding + linked remediation task, 1 remediated
+low-severity finding.
 
-**Remaining in this sequence, in order**: Audits, Trust Center, Enterprise
-Sales Security Review, Data Transfers. See "Next highest-priority task"
-below for the concrete plan for each, established before starting so the
-whole sequence stays internally consistent (e.g. Questionnaires had to
-exist before the Sales Security Review can create/import one — it now
-does).
+All checks pass: **179 backend tests** (was 164 before Questionnaires,
+171 after), ruff + mypy --strict clean; frontend eslint + tsc +
+production build clean; **16 frontend tests** (was 12, then 14, now
+16), all passing. Live Docker smoke test for Audits: created a critical
+finding and confirmed a real linked remediation Task (title/module/
+priority verified via `/api/v1/tasks`); confirmed a low-severity finding
+creates no task; marked a finding remediated and completed the audit
+(`completed_at` set); confirmed the full `compliance.audit*` audit trail
+in Postgres; confirmed both `/compliance` and `/compliance/audits/[id]`
+return HTTP 200 (again required a `docker restart` of the `web`
+container for the brand-new route to be picked up — see
+"Machine-specific note" below, now confirmed on three separate slices).
+
+**Remaining in this sequence, in order**: Trust Center, Enterprise Sales
+Security Review, Data Transfers. See "Next highest-priority task" below
+for the concrete plan for each, established before starting so the whole
+sequence stays internally consistent (e.g. Questionnaires had to exist
+before the Sales Security Review can create/import one — it now does).
 
 ## Branch and commit
 
 Branch: `main`. Nineteen substantive commits through the Vendor Risk
-slice (Phase 1 through the AI Incidents slice, then that one); this
-session adds the Security Questionnaires commit on top. See `git log`
-for exact SHAs.
+slice (Phase 1 through the AI Incidents slice, then that one), plus the
+Security Questionnaires commit and now this session's Audits commit on
+top. See `git log` for exact SHAs.
 
 ## Machine-specific note
 
@@ -112,69 +125,75 @@ separate Docker images** — a new Python dependency needs
 
 The `web` container's bind-mounted Next.js dev server (Turbopack) has not
 reliably picked up brand-new route directories (`app/(app)/.../[id]/page.tsx`)
-created while it was already running — confirmed twice now (once implicitly
-during the Vendor Risk slice, explicitly during the Questionnaires slice,
-where a new `/compliance/questionnaires/[id]` route 404'd until `docker
-restart agora-origin-web-1`). If a newly-added dynamic route 404s in a live
-smoke test, restart the `web` container before assuming the route itself is
-broken.
+created while it was already running — now confirmed on three separate
+slices (Vendor Risk, Security Questionnaires, Audits), each time a new
+`/compliance/.../[id]` route 404'd until `docker restart
+agora-origin-web-1`. Treat this as routine: after adding any new dynamic
+route, restart the `web` container before running its live smoke test,
+rather than debugging the route itself when it 404s.
 
-## Exact commands already run (this session, Security Questionnaires slice)
+## Exact commands already run (this session, Audits slice)
 
 ```bash
-docker compose run --rm --no-deps api alembic revision --autogenerate -m "add security questionnaire tables"
+docker compose run --rm --no-deps api alembic revision --autogenerate -m "add audit tables"
 docker compose run --rm --no-deps api ruff format migrations/
 docker compose run --rm api alembic upgrade head
 docker compose run --rm api alembic check   # confirms no drift
 
 docker compose run --rm --no-deps api sh -c "ruff check . && ruff format --check . && mypy app && pytest -q"
-# -> 171 passed
+# -> 179 passed
 
-docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 3x total across sessions
+docker compose run --rm --no-deps api python -m app.seed   # idempotent, confirmed 4x total across sessions
 
 cd apps/web
 npx tsc --noEmit
 npx eslint .
-npx vitest run   # -> 14 passed
+npx vitest run   # -> 16 passed
 npm run build
 
-# live smoke test (after docker restart agora-origin-web-1 to pick up the new route)
+docker restart agora-origin-web-1   # pick up the new /compliance/audits/[id] route
+
+# live smoke test
 docker exec agora-origin-api-1 sh -lc "curl -s -X POST http://localhost:8000/api/v1/auth/login ..."
-docker exec agora-origin-api-1 sh -lc "curl -s -b /tmp/cookies.txt -X POST .../questionnaires ..."
-docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action, object_type FROM audit_events WHERE action LIKE 'compliance.questionnaire%';"
+docker exec agora-origin-api-1 sh -lc "curl -s -b /tmp/audit_cookies.txt -X POST .../audits ..."
+docker exec agora-origin-api-1 sh -lc "curl -s -b /tmp/audit_cookies.txt -X POST .../audits/{id}/findings -d '{\"severity\":\"critical\",...}'"
+docker exec agora-origin-postgres-1 psql -U agora -d agora -c "SELECT action, object_type FROM audit_events WHERE action LIKE 'compliance.audit%';"
 ```
 
-## Next highest-priority task: Audits (item 3 of 6)
+## Next highest-priority task: Trust Center (item 4 of 6)
 
-- **Audit**: `Audit` (framework_id nullable, auditor_name, status:
-  planned|in_progress|completed, scheduled_at/completed_at) +
-  `AuditFinding` (control_id nullable, severity, status: open|remediated)
-  — a `high`/`critical` finding creates a remediation Task, the same
-  `record_assessment` hook shape reused a fifth time.
-- RBAC: likely a new `compliance.audits.manage` permission added to the
-  `COMPLIANCE_PERMISSIONS` bundle (same reasoning as every prior slice).
-- Router endpoints on the existing `/api/v1/compliance` router; frontend:
-  an Audits section on `/compliance` + `/compliance/audits/[id]` detail
-  (findings list, remediation-task links).
+- **TrustCenterItem** (category matching spec §B4's exact bullet list:
+  security_overview/privacy_overview/subprocessors/data_locations/
+  encryption_practices/availability/vulnerability_reporting/
+  compliance_roadmap/dpa_availability/incident_communication/
+  responsible_ai/ai_provider_disclosures/retention_deletion/
+  business_continuity, status: planned|in_progress|implemented|
+  independently_assessed|certified — spec's own status vocabulary, not
+  invented — is_public bool).
+- Genuinely public: one unauthenticated `GET
+  /api/v1/trust-center/public/{org_slug}` route (same "deliberately
+  unauthenticated, narrowly scoped" pattern as the webhook
+  receiver/OAuth callback) exposing only `is_public=true` rows, plus
+  published+`is_public` Policies as downloadable documents.
+- An `EvidenceRequest` model (public POST, no auth) backs spec's
+  "evidence request workflow," creating a `core.Task`.
+- RBAC for the authenticated management side: likely
+  `compliance.trust_center.manage`, added to the `COMPLIANCE_PERMISSIONS`
+  bundle (same reasoning as every prior slice). The public endpoint has
+  no RBAC — it's unauthenticated by design.
+- Frontend: a Trust Center management section on `/compliance` +
+  a genuinely public `/trust/[org_slug]` page (outside the authenticated
+  `(app)` route group) that renders only `is_public` items, no login
+  required — this is the one piece of this build's frontend meant to be
+  reachable without a session, so it needs its own layout/route outside
+  `app/(app)/`.
 - Full test/seed/smoke-test/doc/commit cycle, matching every prior slice
-  this session.
+  this session — the smoke test must include an actual unauthenticated
+  `curl` (no cookie jar) against the public endpoint to prove it's really
+  public, not just RBAC-permissive.
 
-## Then: Trust Center, Enterprise Sales Security Review, Data Transfers
+## Then: Enterprise Sales Security Review, Data Transfers
 
-- **Trust Center**: `TrustCenterItem` (category matching spec §B4's exact
-  bullet list: security_overview/privacy_overview/subprocessors/
-  data_locations/encryption_practices/availability/
-  vulnerability_reporting/compliance_roadmap/dpa_availability/
-  incident_communication/responsible_ai/ai_provider_disclosures/
-  retention_deletion/business_continuity, status: planned|in_progress|
-  implemented|independently_assessed|certified — spec's own status
-  vocabulary, not invented — is_public bool). Genuinely public: one
-  unauthenticated `GET /api/v1/trust-center/public/{org_slug}` route
-  (same "deliberately unauthenticated, narrowly scoped" pattern as the
-  webhook receiver/OAuth callback) exposing only `is_public=true` rows,
-  plus published+`is_public` Policies as downloadable documents. An
-  `EvidenceRequest` model (public POST, no auth) backs spec's "evidence
-  request workflow," creating a `core.Task`.
 - **Enterprise Sales Security Review**: the big one. `SecurityReview`
   (opportunity_id FK sales_opportunities, questionnaire_id nullable,
   trust_package_file_id nullable FK files, status: in_progress|blocked|
@@ -211,6 +230,6 @@ cd d:/agora-os
 git status   # confirm clean tree before starting
 cd infra/docker
 docker compose up -d
-docker compose run --rm --no-deps api pytest -q   # confirm still green (171 passed)
-cd ../../apps/web && npx vitest run   # confirm still green (14 passed)
+docker compose run --rm --no-deps api pytest -q   # confirm still green (179 passed)
+cd ../../apps/web && npx vitest run   # confirm still green (16 passed)
 ```
