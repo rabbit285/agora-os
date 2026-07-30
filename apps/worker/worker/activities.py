@@ -42,12 +42,16 @@ async def ingest_document_activity(document_id: str) -> str:
 
         file_bytes = download_object(file_record.storage_key)
         status = await ingest_document(db, document_id=doc_uuid, file_bytes=file_bytes)
-        logger.info("Document %s ingestion finished with status=%s", document_id, status)
+        logger.info(
+            "Document %s ingestion finished with status=%s", document_id, status
+        )
         return status
 
 
 @activity.defn(name="execute_integration_sync_activity")
-async def execute_integration_sync_activity(connection_id: str, sync_run_id: str) -> str:
+async def execute_integration_sync_activity(
+    connection_id: str, sync_run_id: str
+) -> str:
     import app.db.register_all_models  # noqa: F401 — see module docstring
     from app.db.session import AsyncSessionLocal
     from app.integrations.models import IntegrationConnection, SyncRun
@@ -72,3 +76,84 @@ async def execute_integration_sync_activity(connection_id: str, sync_run_id: str
             sync_run.status,
         )
         return sync_run.status
+
+
+@activity.defn(name="run_workflow_step_batch_activity")
+async def run_workflow_step_batch_activity(run_id: str) -> dict[str, object]:
+    """Executes as many of a Business Process Automation `WorkflowRun`'s
+    remaining steps as it can in one batch — stopping at completion,
+    failure, an `awaiting_approval` pause, or a `delay` step (see
+    `app.automation.service.advance_run`) — and reports back whether the
+    calling `WorkflowRunWorkflow` needs to sleep for a real duration
+    (`delay_seconds`) before invoking this activity again."""
+    import app.db.register_all_models  # noqa: F401 — see module docstring
+    from sqlalchemy import select
+
+    from app.automation.models import Workflow, WorkflowRun, WorkflowStepRun
+    from app.automation.service import advance_run
+    from app.db.session import AsyncSessionLocal
+
+    run_uuid = uuid.UUID(run_id)
+    async with AsyncSessionLocal() as db:
+        run = await db.get(WorkflowRun, run_uuid)
+        if run is None:
+            raise LookupError(f"WorkflowRun {run_id} not found")
+        workflow_row = await db.get(Workflow, run.workflow_id)
+        if workflow_row is None:
+            raise LookupError(f"Workflow {run.workflow_id} not found")
+
+        run = await advance_run(
+            db, run=run, workflow=workflow_row, actor_user_id=run.triggered_by
+        )
+        await db.commit()
+
+        delay_seconds: int | None = None
+        if run.status == "running":
+            last_step = (
+                await db.execute(
+                    select(WorkflowStepRun)
+                    .where(WorkflowStepRun.run_id == run.id)
+                    .order_by(WorkflowStepRun.step_index.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if (
+                last_step is not None
+                and last_step.step_type == "delay"
+                and last_step.output
+            ):
+                delay_seconds = int(last_step.output.get("waited_seconds", 0))
+
+        logger.info("Workflow run %s batch finished with status=%s", run_id, run.status)
+        return {"run_status": run.status, "delay_seconds": delay_seconds}
+
+
+@activity.defn(name="create_scheduled_workflow_run_activity")
+async def create_scheduled_workflow_run_activity(workflow_id: str) -> str | None:
+    """Fired by a real Temporal Schedule (spec §38). Returns `None` (the
+    `ScheduledWorkflowRunWorkflow` interprets this as "skipped") if the
+    workflow was paused/archived/deleted since the schedule was created —
+    a schedule firing into a no-longer-active workflow is not an error."""
+    import app.db.register_all_models  # noqa: F401 — see module docstring
+    from app.automation.models import Workflow
+    from app.automation.service import start_run
+    from app.db.session import AsyncSessionLocal
+
+    workflow_uuid = uuid.UUID(workflow_id)
+    async with AsyncSessionLocal() as db:
+        workflow_row = await db.get(Workflow, workflow_uuid)
+        if workflow_row is None or workflow_row.status != "active":
+            return None
+
+        run = await start_run(
+            db,
+            organization_id=workflow_row.organization_id,
+            workflow=workflow_row,
+            trigger_payload={"trigger": "schedule"},
+            actor_user_id=None,
+        )
+        await db.commit()
+        logger.info(
+            "Scheduled trigger created run %s for workflow %s", run.id, workflow_id
+        )
+        return str(run.id)

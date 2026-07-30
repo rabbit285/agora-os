@@ -108,6 +108,17 @@ async def create_document(
         object_id=str(document.id),
         after_state={"title": document.title, "file_id": str(file_record.id)},
     )
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="document_uploaded",
+        payload={"document_id": str(document.id), "title": document.title},
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(document)
 

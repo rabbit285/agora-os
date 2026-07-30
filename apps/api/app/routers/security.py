@@ -325,6 +325,17 @@ async def create_alert(
         object_id=str(alert.id),
         after_state={"title": alert.title, "severity": alert.severity},
     )
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="security_alert",
+        payload={"alert_id": str(alert.id), "title": alert.title, "severity": alert.severity},
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(alert)
     return alert

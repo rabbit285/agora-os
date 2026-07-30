@@ -178,5 +178,16 @@ async def accept_invitation(
     )
     organization = await db.get(Organization, invitation.organization_id)
     assert organization is not None  # FK guarantees existence
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=invitation.organization_id,
+        trigger_type="new_employee",
+        payload={"user_id": str(user.id), "email": user.email},
+        actor_user_id=user.id,
+    )
+
     await db.commit()
     return user, organization, session

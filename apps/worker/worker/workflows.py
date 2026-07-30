@@ -53,3 +53,69 @@ class IntegrationSyncWorkflow:
             args=[connection_id, sync_run_id],
             start_to_close_timeout=timedelta(minutes=5),
         )
+
+
+@workflow.defn
+class WorkflowRunWorkflow:
+    """Runs a Business Process Automation `WorkflowRun` durably (spec §36,
+    §61) — the `WorkflowRun`/`WorkflowStepRun` rows already exist/are
+    created by `run_workflow_step_batch_activity`, which is just
+    `app.automation.service.advance_run` invoked from an activity instead
+    of inline in the HTTP handler.
+
+    A `human_approval` step pauses this workflow on the `wake` signal
+    (sent by `app.automation.workflow_client.signal_workflow_run`, called
+    automatically whenever the linked `core.Approval` is decided via
+    `/api/v1/approvals/{id}/decide` — see app.routers.approvals) rather
+    than a polling loop: genuine push-based resumption, not "check back
+    later"."""
+
+    def __init__(self) -> None:
+        self._woken = False
+
+    @workflow.signal
+    def wake(self) -> None:
+        self._woken = True
+
+    @workflow.run
+    async def run(self, run_id: str) -> str:
+        while True:
+            result = await workflow.execute_activity(
+                "run_workflow_step_batch_activity",
+                run_id,
+                start_to_close_timeout=timedelta(minutes=10),
+            )
+            status = result["run_status"]
+            if status == "awaiting_approval":
+                self._woken = False
+                await workflow.wait_condition(lambda: self._woken)
+                continue
+            delay_seconds = result.get("delay_seconds")
+            if delay_seconds:
+                await workflow.sleep(timedelta(seconds=delay_seconds))
+                continue
+            return status
+
+
+@workflow.defn
+class ScheduledWorkflowRunWorkflow:
+    """The target of a real Temporal Schedule (spec §38 "Schedule"
+    trigger — see app.automation.workflow_client.create_or_update_schedule).
+    Takes a `Workflow.id` (not a `WorkflowRun.id`, which doesn't exist yet
+    at schedule-fire time): creates a fresh run via an activity, then runs
+    it to completion as a real child workflow, reusing
+    `WorkflowRunWorkflow` rather than duplicating its step-execution
+    loop."""
+
+    @workflow.run
+    async def run(self, workflow_id: str) -> str:
+        run_id = await workflow.execute_activity(
+            "create_scheduled_workflow_run_activity",
+            workflow_id,
+            start_to_close_timeout=timedelta(minutes=1),
+        )
+        if run_id is None:
+            return "skipped"
+        return await workflow.execute_child_workflow(
+            WorkflowRunWorkflow.run, run_id, id=f"automation-run-{run_id}"
+        )

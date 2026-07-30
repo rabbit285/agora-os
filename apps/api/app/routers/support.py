@@ -130,6 +130,21 @@ async def create_ticket_route(
         priority=payload.priority,
         actor_user_id=context.user.id,
     )
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="new_support_ticket",
+        payload={
+            "ticket_id": str(ticket.id),
+            "subject": ticket.subject,
+            "category": ticket.category,
+        },
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(ticket)
     return ticket

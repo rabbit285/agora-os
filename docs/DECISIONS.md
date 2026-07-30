@@ -1325,3 +1325,133 @@ discovering and fixing the `ensure_system_roles` gap — a direct SQL
 confirmation that an org created before the fix correctly received the
 new permission grants on the next restart, with the previously-403 calls
 then succeeding.
+
+## ADR-0040 — Automation's Temporal migration makes the Temporal workflow the sole writer of run state; `advance_run` stays a plain, directly-testable function; the 24/16-item vocabularies are real dispatch/dispatch-sources wherever a real one exists, honestly unwired where none does
+
+**Decision**: `app.automation.service.start_run` now only creates the
+`WorkflowRun` row and returns — all step execution moved out of the HTTP
+request into `WorkflowRunWorkflow` (apps/worker/worker/workflows.py), the
+same request/durable-execution split Knowledge's `DocumentIngestionWorkflow`
+and Integrations' `IntegrationSyncWorkflow` already established. The
+workflow's activity, `run_workflow_step_batch_activity`, is a thin wrapper
+around `advance_run` — the exact same function this build always had,
+unchanged in its core step-iteration logic, now just invoked from a
+different caller. This preserves the existing "activity is a thin
+wrapper around a directly-tested function" testing convention
+(`execute_sync_run`, `ingest_document`) rather than inventing a new
+testing strategy for Automation specifically: `tests/test_automation_
+service.py` exercises `advance_run`/`start_run`/`publish_workflow_version`
+directly against a database session with no live Temporal server, exactly
+like the pre-existing Integrations/Knowledge tests do.
+
+`human_approval` pausing now uses a real Temporal signal (`wake`) plus
+`workflow.wait_condition`, not the polling-based re-invocation the
+original synchronous design used. This is a structural choice, not just
+an optimization: once a run starts, `WorkflowRunWorkflow` (via its
+activity) is the *only* writer of `WorkflowRun`/`WorkflowStepRun` state.
+`POST /runs/{id}/resume` no longer calls `advance_run` directly — doing so
+would create a second, HTTP-triggered writer racing against the same
+paused workflow, exactly the kind of dual-writer bug a real production
+incident looks like. Instead, `resume` (and, automatically, `/api/v1/
+approvals/{id}/decide` for *any* module's Approval, not just Automation's)
+only ever sends the `wake` signal — a safe, idempotent nudge regardless of
+whether a Temporal workflow is even still listening. A `delay` step
+("Wait", spec §39) uses the same mechanism from the other direction:
+`advance_run` returns immediately after recording a `delay` step's
+`waited_seconds`, and the *workflow* (not the activity) calls a real
+`workflow.sleep()` before resuming — genuinely durable waiting that was
+never safely buildable in the old synchronous-in-request model, since
+sleeping inside an HTTP handler for an arbitrary duration would tie up a
+request thread indefinitely.
+
+All 24 of spec §39's named action types (plus 2 pre-existing extras,
+`send_notification`/`export_data`, kept for backward compatibility) are
+real `STEP_HANDLERS` entries. The guiding rule was: reuse an existing
+cross-module service wherever the underlying capability already exists
+(Compliance's `record_assessment` for "Run compliance assessment",
+Security's `run_cloud_security_scan` for "Run security check", Support's
+`create_ticket` for "Create support ticket" — reusing its own
+security-category-to-SecurityAlert hook for free — the AI Copilot for
+"Generate AI response"/"Analyze document", Global Search for "Search
+knowledge"), and build a genuinely new but honestly-scoped capability
+only where nothing existed (a real `httpx` call for "Call API"/"Webhook",
+a bounded small-entity-set dispatch table for "Create record"/"Update
+record"/"Update CRM" rather than an unbounded generic ORM proxy). Two
+actions — "Send email" and "Send Slack/Teams message" — hit a genuine
+capability boundary this build already has for a documented reason (no
+SMTP/SES client exists anywhere yet; the Slack/Microsoft OAuth connectors
+are deliberately scoped to `channels:read` only, spec §B1's progressive
+trust model, and cannot post) — both honestly report they could not
+actually deliver rather than either skipping the action type or
+fabricating a "sent" result.
+
+The 16 named trigger types split the same way. `manual`/`api` share the
+existing trigger-run endpoint (the distinction is which kind of caller
+triggers it, not a different mechanism); `webhook` reuses the Phase 9
+inbound webhook connector unchanged; `schedule` is the one trigger that
+needed genuinely new Temporal infrastructure — a real Temporal Schedule
+(`app.automation.workflow_client.create_or_update_schedule`) targets a new
+`ScheduledWorkflowRunWorkflow`, which creates a fresh `WorkflowRun` via an
+activity and then executes `WorkflowRunWorkflow` as a real Temporal child
+workflow rather than duplicating its step-execution loop a second time.
+The other 8 real triggers (new/changed CRM leads and opportunity stages,
+new support tickets, new vendors, new employees, document uploads, failed
+control assessments, security alerts) are wired via one new
+`app.automation.triggers.dispatch_event` call added at each pre-existing
+domain-event call site — a query for matching `active` workflows plus a
+`start_run` call, the same shape every time. The remaining 4
+(`new_email`, `form_submission`, `database_event`, `new_regulatory_
+update`) have no real source system anywhere in this build; rather than
+either omitting them from the type vocabulary (which would make it
+impossible to even author a workflow ready for when a real source
+exists) or fabricating a fake event source, they are accepted
+`trigger_type` values with no dispatch entry — `app.automation.triggers`'s
+own docstring is explicit about exactly which 4 these are and why.
+
+The Workflow Builder (spec §41) uses `@xyflow/react` (React Flow) as a
+real node-graph canvas rather than a hand-rolled drag surface — steps
+render as connected nodes in execution order, and dragging a node to a
+new vertical position genuinely reorders the underlying step array (the
+canvas snaps nodes back onto a standard grid after each reorder, since
+`Workflow.steps` has no persisted x/y position field — only order
+matters to `advance_run`). This is a deliberately linear-chain
+visualization, not a branching DAG editor: `condition`'s branch-false
+path ends the run rather than jumping to an arbitrary node, and `loop`
+repeats one nested step inline rather than a nested step subtree — the
+canvas honestly represents what `advance_run` actually executes, rather
+than implying branching/nesting capabilities this build's execution
+model doesn't have. Workflow Templates reuses the exact "global catalog
+data" pattern Compliance's Frameworks/Requirements established (no
+organization_id); the Connections page adds zero new backend surface,
+reading the pre-existing `GET /integrations/connections` directly (spec
+§80); Automation Analytics follows the same live-aggregate-query pattern
+as the Security Overview and Sales Intelligence dashboards (ADR-0037/
+ADR-0038).
+
+**Why**: The single biggest risk in this migration was silently
+introducing a second writer of run state (the naive fix for "resume
+needs to work" would have been "just call advance_run from the resume
+endpoint too", which is exactly the dual-writer bug this design
+structurally forecloses). Keeping `advance_run` itself unchanged in
+shape — still a plain async function taking a `db`/`run`/`workflow` —
+meant the existing test suite's understanding of the business logic
+transferred directly rather than needing to be rebuilt around Temporal's
+own testing primitives, consistent with how this codebase has always
+tested Temporal-backed features (never spinning up
+`temporalio.testing.WorkflowEnvironment` in the pytest suite; live
+verification against the real running Docker stack is what actually
+proves the Temporal wiring, not a mocked-out test double). Tested in
+`tests/test_automation_service.py` (16 tests covering the full step
+dispatch table, condition/loop/delay control flow, and the pause/approve/
+reject cycle directly) plus updates to 3 pre-existing test files
+(`test_automation.py`, `test_integrations.py`, `test_compliance_
+governance.py`) whose assertions had to change from "the run completed
+synchronously" to "the run was queued" — a necessary consequence of
+AUTO-03 actually being fixed, not a regression. Live-verified against the
+real running Docker stack (a genuine Temporal server and worker, not a
+mock): a real run completing end-to-end through the worker in ~1.1
+seconds, a `human_approval` pause that resumed within a second of
+deciding the Approval purely from the automatic signal (never calling
+`/resume` manually), a `new_crm_lead`-triggered workflow firing a real
+run when a Lead was created, and template cloning producing a real new
+draft workflow.

@@ -333,6 +333,18 @@ async def create_assessment(
         notes=payload.notes,
         assessed_by=context.user.id,
     )
+
+    if payload.status == "fail":
+        from app.automation.triggers import dispatch_event
+
+        await dispatch_event(
+            db,
+            organization_id=context.organization_id,
+            trigger_type="control_failed",
+            payload={"control_id": str(control.id), "assessment_id": str(assessment.id)},
+            actor_user_id=context.user.id,
+        )
+
     await db.commit()
     await db.refresh(assessment)
     return assessment
@@ -1013,6 +1025,17 @@ async def create_vendor(
         object_id=str(vendor.id),
         after_state={"name": vendor.name, "category": vendor.category},
     )
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="new_vendor",
+        payload={"vendor_id": str(vendor.id), "name": vendor.name},
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(vendor)
     return vendor

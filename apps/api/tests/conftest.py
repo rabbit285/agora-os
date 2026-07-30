@@ -12,6 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import app.db.register_all_models  # noqa: F401 — registers every model's table
+from app.automation.workflow_client import (
+    get_run_signaler,
+    get_run_starter,
+    get_schedule_deleter,
+    get_schedule_syncer,
+)
 from app.core.rbac import ensure_system_roles
 from app.db.base import Base
 from app.db.session import get_db
@@ -65,9 +71,41 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
         return _start
 
+    async def _noop_run_starter():  # type: ignore[no-untyped-def]
+        async def _start(run_id: object) -> None:
+            # Tests never have a real Temporal server; run execution is
+            # tested directly against app.automation.service.advance_run
+            # (see tests/test_automation_service.py), not through the
+            # workflow.
+            return None
+
+        return _start
+
+    async def _noop_run_signaler():  # type: ignore[no-untyped-def]
+        async def _signal(run_id: object) -> None:
+            return None
+
+        return _signal
+
+    async def _noop_schedule_syncer():  # type: ignore[no-untyped-def]
+        async def _sync(workflow_id: object, cron: object) -> None:
+            return None
+
+        return _sync
+
+    async def _noop_schedule_deleter():  # type: ignore[no-untyped-def]
+        async def _delete(workflow_id: object) -> None:
+            return None
+
+        return _delete
+
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_ingestion_starter] = _noop_ingestion_starter
     app.dependency_overrides[get_sync_starter] = _noop_sync_starter
+    app.dependency_overrides[get_run_starter] = _noop_run_starter
+    app.dependency_overrides[get_run_signaler] = _noop_run_signaler
+    app.dependency_overrides[get_schedule_syncer] = _noop_schedule_syncer
+    app.dependency_overrides[get_schedule_deleter] = _noop_schedule_deleter
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

@@ -10,100 +10,71 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { Workflow, WorkflowStep, WorkflowStepType } from "@/lib/types";
+import type {
+  Workflow,
+  WorkflowAnalytics,
+  WorkflowStep,
+  WorkflowTriggerType,
+} from "@/lib/types";
+import { UNWIRED_TRIGGER_TYPES, WORKFLOW_TRIGGER_TYPES } from "@/lib/types";
 
 const selectClassName =
   "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+
+function AnalyticsSection() {
+  const { data: analytics } = useQuery<WorkflowAnalytics>({
+    queryKey: ["automation", "analytics"],
+    queryFn: () => apiFetch<WorkflowAnalytics>("/api/v1/automation/analytics"),
+  });
+
+  if (!analytics) return null;
+
+  return (
+    <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">
+            {analytics.active_workflows}
+          </div>
+          <div className="text-xs text-neutral-500">Active Workflows</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">{analytics.total_runs}</div>
+          <div className="text-xs text-neutral-500">Total Runs</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">
+            {analytics.success_rate_percent}%
+          </div>
+          <div className="text-xs text-neutral-500">Success Rate</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-2xl font-semibold text-neutral-900">
+            {analytics.awaiting_approval_count}
+          </div>
+          <div className="text-xs text-neutral-500">Awaiting Approval</div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function emptyStep(): WorkflowStep {
   return { step_type: "create_task", config: { title: "" } };
 }
 
-function StepEditor({
-  step,
-  onChange,
-  onRemove,
-}: {
-  step: WorkflowStep;
-  onChange: (step: WorkflowStep) => void;
-  onRemove: () => void;
-}) {
-  const setType = (step_type: WorkflowStepType) => {
-    if (step_type === "create_task") onChange({ step_type, config: { title: "" } });
-    else if (step_type === "send_notification") onChange({ step_type, config: { title: "", body: "" } });
-    else onChange({ step_type, config: { action_type: "", risk_class: "moderate" } });
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 p-2">
-      <select
-        className={selectClassName}
-        value={step.step_type}
-        onChange={(e) => setType(e.target.value as WorkflowStepType)}
-      >
-        <option value="create_task">Create task</option>
-        <option value="send_notification">Send notification</option>
-        <option value="human_approval">Human approval</option>
-      </select>
-      {step.step_type === "create_task" && (
-        <Input
-          placeholder="Task title"
-          value={(step.config.title as string) ?? ""}
-          onChange={(e) => onChange({ ...step, config: { ...step.config, title: e.target.value } })}
-          className="min-w-[200px] flex-1"
-        />
-      )}
-      {step.step_type === "send_notification" && (
-        <>
-          <Input
-            placeholder="Title"
-            value={(step.config.title as string) ?? ""}
-            onChange={(e) => onChange({ ...step, config: { ...step.config, title: e.target.value } })}
-            className="min-w-[160px] flex-1"
-          />
-          <Input
-            placeholder="Body"
-            value={(step.config.body as string) ?? ""}
-            onChange={(e) => onChange({ ...step, config: { ...step.config, body: e.target.value } })}
-            className="min-w-[160px] flex-1"
-          />
-        </>
-      )}
-      {step.step_type === "human_approval" && (
-        <>
-          <Input
-            placeholder="What needs approval?"
-            value={(step.config.action_type as string) ?? ""}
-            onChange={(e) =>
-              onChange({ ...step, config: { ...step.config, action_type: e.target.value } })
-            }
-            className="min-w-[200px] flex-1"
-          />
-          <select
-            className={selectClassName}
-            value={(step.config.risk_class as string) ?? "moderate"}
-            onChange={(e) =>
-              onChange({ ...step, config: { ...step.config, risk_class: e.target.value } })
-            }
-          >
-            <option value="low">Low risk</option>
-            <option value="moderate">Moderate risk</option>
-            <option value="high">High risk</option>
-            <option value="critical">Critical risk</option>
-          </select>
-        </>
-      )}
-      <Button variant="outline" size="sm" onClick={onRemove}>
-        Remove
-      </Button>
-    </div>
-  );
-}
-
 function WorkflowsSection() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const [steps, setSteps] = useState<WorkflowStep[]>([emptyStep()]);
+  const [triggerType, setTriggerType] = useState<WorkflowTriggerType>("manual");
+  const [scheduleCron, setScheduleCron] = useState("");
+  const [steps] = useState<WorkflowStep[]>([emptyStep()]);
 
   const { data: workflows } = useQuery<Workflow[]>({
     queryKey: ["automation", "workflows"],
@@ -114,11 +85,17 @@ function WorkflowsSection() {
     mutationFn: () =>
       apiFetch<Workflow>("/api/v1/automation/workflows", {
         method: "POST",
-        body: { name, steps },
+        body: {
+          name,
+          trigger_type: triggerType,
+          schedule_cron: triggerType === "schedule" ? scheduleCron : null,
+          steps,
+        },
       }),
     onSuccess: () => {
       setName("");
-      setSteps([emptyStep()]);
+      setTriggerType("manual");
+      setScheduleCron("");
       queryClient.invalidateQueries({ queryKey: ["automation", "workflows"] });
     },
   });
@@ -130,34 +107,45 @@ function WorkflowsSection() {
       </h2>
       <Card className="mb-4">
         <CardContent className="flex flex-col gap-3 pt-6">
-          <Input placeholder="Workflow name" value={name} onChange={(e) => setName(e.target.value)} />
-          <div className="flex flex-col gap-2">
-            {steps.map((step, index) => (
-              <StepEditor
-                key={index}
-                step={step}
-                onChange={(updated) =>
-                  setSteps((prev) => prev.map((s, i) => (i === index ? updated : s)))
-                }
-                onRemove={() => setSteps((prev) => prev.filter((_, i) => i !== index))}
-              />
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSteps((prev) => [...prev, emptyStep()])}>
-              Add step
-            </Button>
-            <Button
-              disabled={!name.trim() || steps.length === 0 || createWorkflow.isPending}
-              onClick={() => createWorkflow.mutate()}
+          <Input
+            placeholder="Workflow name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <select
+              className={selectClassName}
+              value={triggerType}
+              onChange={(e) => setTriggerType(e.target.value as WorkflowTriggerType)}
             >
-              Create workflow (draft)
-            </Button>
+              {WORKFLOW_TRIGGER_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type.replace(/_/g, " ")}
+                  {UNWIRED_TRIGGER_TYPES.includes(type) ? " (not yet wired)" : ""}
+                </option>
+              ))}
+            </select>
+            {triggerType === "schedule" && (
+              <Input
+                placeholder="Cron expression (e.g. 0 9 * * 1)"
+                value={scheduleCron}
+                onChange={(e) => setScheduleCron(e.target.value)}
+                className="min-w-[200px] flex-1"
+              />
+            )}
           </div>
           <p className="text-xs text-neutral-400">
-            New workflows start as drafts. Steps can only be edited while a workflow is in draft
-            status — publishing to active locks the steps (spec section 41).
+            New workflows start as a single &ldquo;Create task&rdquo; draft step — use the
+            visual Step Builder on the workflow&rsquo;s own page to add and configure more
+            steps before publishing (spec §41: steps lock once active).
           </p>
+          <Button
+            disabled={!name.trim() || createWorkflow.isPending}
+            onClick={() => createWorkflow.mutate()}
+            className="self-start"
+          >
+            Create workflow (draft)
+          </Button>
         </CardContent>
       </Card>
       {workflows?.length === 0 && <p className="text-sm text-neutral-500">No workflows yet.</p>}
@@ -170,7 +158,7 @@ function WorkflowsSection() {
                   <div className="font-medium text-neutral-900">{workflow.name}</div>
                   <div className="text-xs text-neutral-400">
                     {workflow.steps.length} step{workflow.steps.length === 1 ? "" : "s"} · v
-                    {workflow.version}
+                    {workflow.version} · {workflow.trigger_type.replace(/_/g, " ")}
                   </div>
                 </div>
                 <StatusBadge status={workflow.status} />
@@ -183,13 +171,30 @@ function WorkflowsSection() {
   );
 }
 
+const SUB_PAGES = [
+  { href: "/automation/templates", label: "Templates" },
+  { href: "/automation/connections", label: "Connections" },
+];
+
 export default function AutomationPage() {
   return (
     <div>
       <PageHeader
         title="Business Automation"
         description="Workflow builder, runs, and the Human Approval hook — spec sections 36-43."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {SUB_PAGES.map((page) => (
+              <Link key={page.href} href={page.href}>
+                <Button variant="outline" size="sm">
+                  {page.label}
+                </Button>
+              </Link>
+            ))}
+          </div>
+        }
       />
+      <AnalyticsSection />
       <WorkflowsSection />
     </div>
   );

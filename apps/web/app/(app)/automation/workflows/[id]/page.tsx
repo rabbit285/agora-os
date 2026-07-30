@@ -9,7 +9,16 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
-import type { Workflow, WorkflowRun, WorkflowRunDetail, WorkflowStatus } from "@/lib/types";
+import type {
+  Workflow,
+  WorkflowRun,
+  WorkflowRunDetail,
+  WorkflowStatus,
+  WorkflowStep,
+  WorkflowVersion,
+} from "@/lib/types";
+
+import { StepBuilder } from "./step-builder";
 
 const NEXT_STATUS: Partial<Record<WorkflowStatus, WorkflowStatus>> = {
   draft: "active",
@@ -17,12 +26,15 @@ const NEXT_STATUS: Partial<Record<WorkflowStatus, WorkflowStatus>> = {
   active: "paused",
 };
 
+const ACTIVE_RUN_STATUSES = new Set(["running", "awaiting_approval"]);
+
 function RunRow({ run }: { run: WorkflowRun }) {
   const [expanded, setExpanded] = useState(false);
   const { data: detail } = useQuery<WorkflowRunDetail>({
     queryKey: ["automation", "runs", run.id],
     queryFn: () => apiFetch<WorkflowRunDetail>(`/api/v1/automation/runs/${run.id}`),
     enabled: expanded,
+    refetchInterval: ACTIVE_RUN_STATUSES.has(run.status) ? 2000 : false,
   });
 
   const queryClient = useQueryClient();
@@ -65,6 +77,11 @@ function RunRow({ run }: { run: WorkflowRun }) {
         </div>
         {expanded && detail && (
           <div className="mt-3 flex flex-col gap-1 border-t border-neutral-100 pt-3">
+            {detail.step_runs.length === 0 && (
+              <p className="text-xs text-neutral-400">
+                Queued for durable execution — no steps have run yet.
+              </p>
+            )}
             {detail.step_runs.map((stepRun) => (
               <div
                 key={stepRun.id}
@@ -83,6 +100,40 @@ function RunRow({ run }: { run: WorkflowRun }) {
   );
 }
 
+function VersionHistorySection({ workflowId }: { workflowId: string }) {
+  const { data: versions } = useQuery<WorkflowVersion[]>({
+    queryKey: ["automation", "workflows", workflowId, "versions"],
+    queryFn: () =>
+      apiFetch<WorkflowVersion[]>(`/api/v1/automation/workflows/${workflowId}/versions`),
+  });
+
+  if (!versions || versions.length === 0) return null;
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        Version History
+      </h2>
+      <p className="mb-2 text-xs text-neutral-400">
+        Immutable snapshots (spec §41) — one is recorded every time this workflow is published.
+      </p>
+      <div className="flex flex-col gap-2">
+        {versions.map((version) => (
+          <Card key={version.id}>
+            <CardContent className="flex items-center justify-between pt-6">
+              <span className="text-sm text-neutral-700">v{version.version_number}</span>
+              <span className="text-xs text-neutral-400">
+                {version.steps.length} step(s) · published{" "}
+                {new Date(version.published_at).toLocaleString()}
+              </span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const queryClient = useQueryClient();
@@ -95,12 +146,19 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const { data: runs } = useQuery<WorkflowRun[]>({
     queryKey: ["automation", "runs"],
     queryFn: () => apiFetch<WorkflowRun[]>("/api/v1/automation/runs"),
+    refetchInterval: (query) => {
+      const list = query.state.data as WorkflowRun[] | undefined;
+      return list?.some((r) => ACTIVE_RUN_STATUSES.has(r.status)) ? 2000 : false;
+    },
   });
 
   const setStatus = useMutation({
     mutationFn: (status: WorkflowStatus) =>
       apiFetch(`/api/v1/automation/workflows/${id}/status`, { method: "PATCH", body: { status } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automation", "workflows", id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["automation", "workflows", id] });
+      queryClient.invalidateQueries({ queryKey: ["automation", "workflows", id, "versions"] });
+    },
   });
 
   const archive = useMutation({
@@ -113,8 +171,15 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   });
 
   const runNow = useMutation({
-    mutationFn: () => apiFetch(`/api/v1/automation/workflows/${id}/run`, { method: "POST", body: {} }),
+    mutationFn: () =>
+      apiFetch(`/api/v1/automation/workflows/${id}/run`, { method: "POST", body: {} }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automation", "runs"] }),
+  });
+
+  const saveSteps = useMutation({
+    mutationFn: (steps: WorkflowStep[]) =>
+      apiFetch(`/api/v1/automation/workflows/${id}/steps`, { method: "PATCH", body: { steps } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["automation", "workflows", id] }),
   });
 
   if (!workflow) return null;
@@ -142,7 +207,12 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           </Button>
         )}
         {workflow.status !== "archived" && (
-          <Button size="sm" variant="outline" disabled={archive.isPending} onClick={() => archive.mutate()}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={archive.isPending}
+            onClick={() => archive.mutate()}
+          >
             Archive
           </Button>
         )}
@@ -155,23 +225,40 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
 
       <div className="mb-8">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Steps (v{workflow.version})
+          Steps (v{workflow.version}) — trigger: {workflow.trigger_type.replace(/_/g, " ")}
+          {workflow.schedule_cron ? ` (${workflow.schedule_cron})` : ""}
         </h2>
-        <div className="flex flex-col gap-2">
-          {workflow.steps.map((step, index) => (
-            <Card key={index}>
-              <CardContent className="flex items-center justify-between pt-6">
-                <span className="text-sm text-neutral-700">
-                  {index + 1}. {step.step_type.replace(/_/g, " ")}
-                </span>
-                <span className="text-xs text-neutral-400">
-                  {"title" in step.config ? String(step.config.title) : String(step.config.action_type ?? "")}
-                </span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {workflow.status === "draft" ? (
+          <StepBuilder
+            key={workflow.version}
+            steps={workflow.steps}
+            saving={saveSteps.isPending}
+            onSave={(steps) => saveSteps.mutate(steps)}
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="mb-1 text-xs text-neutral-400">
+              Steps are locked while this workflow isn&rsquo;t in draft status (spec §41).
+            </p>
+            {workflow.steps.map((step, index) => (
+              <Card key={index}>
+                <CardContent className="flex items-center justify-between pt-6">
+                  <span className="text-sm text-neutral-700">
+                    {index + 1}. {step.step_type.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-xs text-neutral-400">
+                    {"title" in step.config
+                      ? String(step.config.title)
+                      : String(step.config.action_type ?? "")}
+                  </span>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
+
+      <VersionHistorySection workflowId={id} />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">

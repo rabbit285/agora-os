@@ -155,20 +155,40 @@ implied to work.
   Security Incident chain's Task/Notification are only created for
   `critical`-severity incidents, same gate as the pre-existing Risk
   link — there's no separate configurable threshold.
-- **Automation**: only three step types actually execute
-  (`create_task`, `send_notification`, `human_approval`) out of spec §37's
-  much larger vocabulary (Condition, Delay, Loop, Data Transform, Webhook,
-  Subworkflow, AI Step are not implemented). `manual` and `webhook`
-  triggers work (the latter added in Phase 9 — see below); email,
-  CRM-stage-change, and schedule triggers (spec §38) still need
-  connectors that don't exist. There's no visual drag-and-drop builder —
-  workflows are defined as a JSON-backed ordered step list via a plain
-  form. No templates, no automation analytics (spec §43), no
-  retry/backoff policies beyond "a failed step fails the run." Workflow
-  governance is real but simple: a workflow's steps can only be edited
-  while `status = draft`; there's no parallel draft/published dual-version
-  editing of an already-active workflow (spec §41's fuller versioning
-  model).
+- **Automation**: execution is now Temporal-durable (`WorkflowRunWorkflow`,
+  spec §61) — `app.automation.service.start_run` only creates the
+  `WorkflowRun` row; a real worker executes it. All 24 of spec §39's named
+  action types (plus 2 pre-existing extras) are real dispatch handlers
+  (`app.automation.service.STEP_HANDLERS`), reusing existing cross-module
+  services (Compliance's control assessments, Security's cloud scanner,
+  Support's ticket creation, the AI Copilot, Global Search) rather than
+  stubs. `send_email` and `send_chat_message` are honestly
+  credential/scope-gated: this build has no real SMTP/SES dispatch path
+  anywhere, and the Slack/Microsoft OAuth connectors are deliberately
+  scoped read-only (`channels:read` only — see
+  `app.integrations.adapters.slack`), so both always report they could not
+  actually deliver rather than fabricating a "sent" result. 11 of spec
+  §38's 16 named trigger types genuinely fire real runs — `manual`, `api`,
+  the pre-existing `webhook` connector, a real Temporal Schedule for
+  `schedule`, and 8 more wired to real internal domain events (new/changed
+  CRM leads and opportunity stages, new support tickets, new vendors, new
+  employees, document uploads, failed control assessments, security
+  alerts). The remaining 4 (`new_email`, `form_submission`,
+  `database_event`, `new_regulatory_update`) have no real source system
+  anywhere in this build (no inbound email parsing, no form-building
+  feature, no DB-watching connector, no Regulatory Intelligence feed) and
+  are accepted `trigger_type` values that are honestly never dispatched,
+  not silently faked. The Workflow Builder is now a real
+  `@xyflow/react` drag-and-drop node canvas (draft workflows only, per
+  spec §41's edit-lock); a Workflow Templates gallery (3 seeded templates,
+  clone-to-draft), a Connections page (reusing Integrations' own
+  connections list), and a live Automation Analytics dashboard
+  (`app.automation.analytics`) all exist. `WorkflowVersion` provides real
+  immutable publish-history snapshots. Still missing: retry/backoff
+  policies beyond "a failed step fails the run", and Data Transform/
+  Subworkflow as their own named spec §37 step categories (the closest
+  equivalents here are `extract_data`/`classify_data` for data
+  transformation and nothing yet for true nested subworkflows).
 - **Integrations**: `IntegrationConnection.connector_key` supports
   `"webhook"` plus six OAuth2 providers — HubSpot, Google, Microsoft,
   GitHub, Slack, Salesforce (ADR-0026, ADR-0028) — every other spec §48

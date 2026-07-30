@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.automation.models import Workflow
+from app.automation.workflow_client import RunStarter, get_run_starter
 from app.config import settings
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -296,6 +297,7 @@ async def receive_webhook(
     connection_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    run_starter: RunStarter = Depends(get_run_starter),
 ) -> dict[str, bool]:
     """No session/OrgContext dependency — the caller is an external system,
     not a logged-in platform user. The security boundary is the HMAC
@@ -307,7 +309,7 @@ async def receive_webhook(
     raw_body = await request.body()
     signature = request.headers.get("X-Webhook-Signature")
     event = await receive_webhook_event(
-        db, connection=connection, raw_body=raw_body, signature=signature
+        db, connection=connection, raw_body=raw_body, signature=signature, run_starter=run_starter
     )
     await db.commit()
     return {"received": True, "verified": event.verified}

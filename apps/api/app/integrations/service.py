@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_event
 from app.automation.models import Workflow
 from app.automation.service import start_run
+from app.automation.workflow_client import RunStarter
 from app.core.crypto import decrypt_token, encrypt_token
 from app.db.base import as_aware_utc, utcnow
 from app.integrations.adapters import default_redirect_uri, get_oauth_adapter
@@ -78,6 +79,7 @@ async def receive_webhook_event(
     connection: IntegrationConnection,
     raw_body: bytes,
     signature: str | None,
+    run_starter: RunStarter,
 ) -> WebhookEvent:
     verified = (
         connection.status == "active"
@@ -123,7 +125,9 @@ async def receive_webhook_event(
                         trigger_payload=payload,
                         actor_user_id=connection.created_by,
                     )
+                    await db.flush()
                     event.triggered_run_id = run.id
+                    await run_starter(run.id)
                 else:
                     connection.last_error = (
                         "Cannot trigger linked workflow: connection has no creator "

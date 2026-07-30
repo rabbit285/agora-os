@@ -113,14 +113,10 @@ table rather than a fourth table.
 
 | Route | Status |
 |---|---|
-| `/automation` | [x] workflow list + step-by-step create form |
-| `/automation/workflows/[id]` | [x] detail: status governance, run now, run history with expandable step log |
-
-Not yet built (spec §67 lists these under Automation): a visual
-drag-and-drop Workflow Builder (React Flow), Workflow Templates gallery,
-a dedicated Connections page, automation analytics dashboard. The current
-create form is a structured list-based step editor, not the visual
-builder.
+| `/automation` | [x] live analytics dashboard tiles + workflow list + create form |
+| `/automation/workflows/[id]` | [x] detail: status governance, real @xyflow/react drag-and-drop Step Builder (draft only), version history, run now, polling run history with expandable step log |
+| `/automation/templates` | [x] Workflow Templates gallery — clone a seeded template into a new draft workflow |
+| `/automation/connections` | [x] reuses `GET /integrations/connections` read-only (spec §80 — no duplicate store) |
 
 ## SETTINGS
 

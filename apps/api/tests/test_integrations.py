@@ -153,7 +153,9 @@ async def test_verified_webhook_triggers_linked_workflow(client: AsyncClient) ->
     assert runs.status_code == 200
     matching_run = next(r for r in runs.json() if r["id"] == event["triggered_run_id"])
     assert matching_run["workflow_id"] == workflow_id
-    assert matching_run["status"] == "succeeded"
+    # Execution is Temporal-durable (spec §61) — the row is created
+    # synchronously but its steps run via a worker, never inline here.
+    assert matching_run["status"] == "running"
     assert matching_run["trigger_payload"] == {"lead_name": "Test Lead"}
 
 

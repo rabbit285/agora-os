@@ -133,7 +133,16 @@ async def test_only_active_workflows_can_run(client: AsyncClient) -> None:
     assert response.status_code == 409
 
 
-async def test_run_with_no_approval_step_succeeds_immediately(client: AsyncClient) -> None:
+async def test_trigger_run_creates_a_running_row_and_kicks_off_execution(
+    client: AsyncClient,
+) -> None:
+    """Execution is Temporal-durable (spec §61) — the HTTP response only
+    ever reflects that the run was queued, never its eventual outcome.
+    Tests have no live Temporal worker (the run-starter dependency is a
+    no-op override — see conftest.py), so the run genuinely stays
+    "running" here; the step-execution logic itself is exhaustively
+    tested directly in tests/test_automation_service.py, matching how
+    execute_sync_run/ingest_document are tested."""
     await _signup(client, "wf6@example.com", "Workflow Org 6")
     workflow_id = await _create_workflow(
         client,
@@ -147,16 +156,20 @@ async def test_run_with_no_approval_step_succeeds_immediately(client: AsyncClien
 
     run = await client.post(f"/api/v1/automation/workflows/{workflow_id}/run", json={})
     assert run.status_code == 201, run.text
-    assert run.json()["status"] == "succeeded"
+    assert run.json()["status"] == "running"
 
     detail = await client.get(f"/api/v1/automation/runs/{run.json()['id']}")
     assert detail.status_code == 200
-    step_runs = detail.json()["step_runs"]
-    assert len(step_runs) == 2
-    assert all(s["status"] == "succeeded" for s in step_runs)
+    assert detail.json()["step_runs"] == []
 
 
-async def test_human_approval_step_creates_approval_and_pauses_run(client: AsyncClient) -> None:
+async def test_resume_requires_awaiting_approval_status(client: AsyncClient) -> None:
+    """The router-level resume/decide contract without a live worker:
+    resume is a 409 unless the run is actually awaiting_approval (which
+    never happens here since nothing executes the human_approval step
+    without a worker) — full pause/resume/reject behavior is tested
+    directly against app.automation.service.advance_run in
+    tests/test_automation_service.py."""
     await _signup(client, "wf7@example.com", "Workflow Org 7")
     workflow_id = await _create_workflow(
         client,
@@ -167,7 +180,6 @@ async def test_human_approval_step_creates_approval_and_pauses_run(client: Async
                 "step_type": "human_approval",
                 "config": {"action_type": "Approve the thing", "risk_class": "high"},
             },
-            {"step_type": "create_task", "config": {"title": "Finalize"}},
         ],
     )
     await _activate(client, workflow_id)
@@ -175,53 +187,10 @@ async def test_human_approval_step_creates_approval_and_pauses_run(client: Async
     run = await client.post(f"/api/v1/automation/workflows/{workflow_id}/run", json={})
     assert run.status_code == 201
     run_id = run.json()["id"]
-    assert run.json()["status"] == "awaiting_approval"
+    assert run.json()["status"] == "running"
 
-    detail = await client.get(f"/api/v1/automation/runs/{run_id}")
-    step_runs = detail.json()["step_runs"]
-    assert len(step_runs) == 2  # first task step + the paused approval step
-    assert step_runs[0]["status"] == "succeeded"
-    assert step_runs[1]["status"] == "awaiting_approval"
-    approval_id = step_runs[1]["approval_id"]
-    assert approval_id is not None
-
-    approvals = await client.get("/api/v1/approvals")
-    assert any(a["id"] == approval_id for a in approvals.json())
-
-    # resuming before a decision is a no-op, still awaiting approval
     resumed = await client.post(f"/api/v1/automation/runs/{run_id}/resume")
-    assert resumed.status_code == 200
-    assert resumed.json()["status"] == "awaiting_approval"
-
-    decision = await client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": True})
-    assert decision.status_code == 200
-
-    resumed_after_approval = await client.post(f"/api/v1/automation/runs/{run_id}/resume")
-    assert resumed_after_approval.status_code == 200
-    assert resumed_after_approval.json()["status"] == "succeeded"
-
-    final_detail = await client.get(f"/api/v1/automation/runs/{run_id}")
-    assert len(final_detail.json()["step_runs"]) == 3
-
-
-async def test_rejected_approval_fails_the_run(client: AsyncClient) -> None:
-    await _signup(client, "wf8@example.com", "Workflow Org 8")
-    workflow_id = await _create_workflow(
-        client,
-        name="Will be rejected",
-        steps=[{"step_type": "human_approval", "config": {"action_type": "Risky action"}}],
-    )
-    await _activate(client, workflow_id)
-
-    run = await client.post(f"/api/v1/automation/workflows/{workflow_id}/run", json={})
-    run_id = run.json()["id"]
-    step_runs = (await client.get(f"/api/v1/automation/runs/{run_id}")).json()["step_runs"]
-    approval_id = step_runs[0]["approval_id"]
-
-    await client.post(f"/api/v1/approvals/{approval_id}/decide", json={"approve": False})
-    resumed = await client.post(f"/api/v1/automation/runs/{run_id}/resume")
-    assert resumed.status_code == 200
-    assert resumed.json()["status"] == "failed"
+    assert resumed.status_code == 409
 
 
 async def test_workflow_from_other_org_returns_not_found(client: AsyncClient) -> None:

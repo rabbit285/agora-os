@@ -239,6 +239,18 @@ async def create_lead(
 ) -> Lead:
     lead = Lead(organization_id=context.organization_id, **payload.model_dump())
     db.add(lead)
+    await db.flush()
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="new_crm_lead",
+        payload={"lead_id": str(lead.id), "source": lead.source},
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(lead)
     return lead
@@ -363,6 +375,21 @@ async def update_opportunity(
         before_state={"stage": before_stage},
         after_state={"stage": opportunity.stage},
     )
+
+    if before_stage != opportunity.stage:
+        from app.automation.triggers import dispatch_event
+
+        await dispatch_event(
+            db,
+            organization_id=context.organization_id,
+            trigger_type="crm_stage_change",
+            payload={
+                "opportunity_id": str(opportunity.id),
+                "before_stage": before_stage,
+                "stage": opportunity.stage,
+            },
+            actor_user_id=context.user.id,
+        )
 
     if before_stage != "closed_won" and opportunity.stage == "closed_won":
         account = await _get_org_account(db, opportunity.account_id, context.organization_id)

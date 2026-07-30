@@ -15,8 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.gateway import ModelGateway
-from app.automation.models import Workflow
-from app.automation.service import start_run
+from app.automation.models import Workflow, WorkflowTemplate
+from app.automation.service import advance_run, start_run
 from app.compliance.models import (
     AIAssessment,
     AIIncident,
@@ -419,6 +419,8 @@ async def seed() -> None:
         )
         if not existing_workflows:
             await _seed_demo_automation_data(db, organization_id=organization.id, admin_id=admin.id)
+
+        await _seed_workflow_templates(db)
 
         existing_connections = (
             (
@@ -1446,13 +1448,18 @@ async def _seed_demo_automation_data(
     )
     db.add(vendor_workflow)
     await db.flush()
-    await start_run(
+    vendor_run = await start_run(
         db,
         organization_id=organization_id,
         workflow=vendor_workflow,
         trigger_payload={"vendor_name": "Helvetia Cloud Services"},
         actor_user_id=admin_id,
     )
+    # Seed data has no live Temporal worker attached to it — advance the
+    # run directly (the same function a real worker's activity calls) so
+    # the seeded run genuinely reaches "awaiting_approval", not just
+    # "running" with zero step_runs.
+    await advance_run(db, run=vendor_run, workflow=vendor_workflow, actor_user_id=admin_id)
 
     reminder_workflow = Workflow(
         organization_id=organization_id,
@@ -1472,13 +1479,14 @@ async def _seed_demo_automation_data(
     )
     db.add(reminder_workflow)
     await db.flush()
-    await start_run(
+    reminder_run = await start_run(
         db,
         organization_id=organization_id,
         workflow=reminder_workflow,
         trigger_payload=None,
         actor_user_id=admin_id,
     )
+    await advance_run(db, run=reminder_run, workflow=reminder_workflow, actor_user_id=admin_id)
 
     db.add(
         Workflow(
@@ -1501,6 +1509,70 @@ async def _seed_demo_automation_data(
         "Seeded demo automation data (2 active workflows - 1 run awaiting approval, "
         "1 run succeeded, 1 draft workflow)"
     )
+
+
+async def _seed_workflow_templates(db: AsyncSession) -> None:
+    """spec §41's Workflow Templates gallery — global catalog data (no
+    organization_id), seeded once regardless of which demo org runs the
+    seed script."""
+    existing = (await db.execute(select(WorkflowTemplate))).scalars().first()
+    if existing is not None:
+        return
+
+    db.add_all(
+        [
+            WorkflowTemplate(
+                name="New Vendor Onboarding",
+                description="Collect a security questionnaire, get manager approval, then "
+                "provision the vendor.",
+                category="compliance",
+                trigger_type="new_vendor",
+                steps=[
+                    {
+                        "step_type": "create_task",
+                        "config": {"title": "Collect vendor security questionnaire"},
+                    },
+                    {
+                        "step_type": "human_approval",
+                        "config": {"action_type": "Approve new vendor", "risk_class": "moderate"},
+                    },
+                    {
+                        "step_type": "create_task",
+                        "config": {"title": "Provision vendor in accounting system"},
+                    },
+                ],
+            ),
+            WorkflowTemplate(
+                name="New Lead Follow-up",
+                description="Notify the sales team and create a follow-up task whenever a new "
+                "CRM lead comes in.",
+                category="sales",
+                trigger_type="new_crm_lead",
+                steps=[
+                    {
+                        "step_type": "send_notification",
+                        "config": {"title": "New lead", "body": "A new lead needs follow-up."},
+                    },
+                    {"step_type": "create_task", "config": {"title": "Follow up with new lead"}},
+                ],
+            ),
+            WorkflowTemplate(
+                name="Security Alert Triage",
+                description="Create an urgent triage task the moment a new security alert is "
+                "raised.",
+                category="security",
+                trigger_type="security_alert",
+                steps=[
+                    {
+                        "step_type": "create_task",
+                        "config": {"title": "Triage new security alert", "priority": "urgent"},
+                    },
+                ],
+            ),
+        ]
+    )
+    await db.commit()
+    logger.info("Seeded 3 workflow templates")
 
 
 async def _seed_demo_integrations_data(
@@ -1540,17 +1612,36 @@ async def _seed_demo_integrations_data(
     db.add(connection)
     await db.flush()
 
+    async def _noop_run_starter(run_id: object) -> None:
+        # Seed data only needs the WorkflowRun row to exist for the demo
+        # to look realistic — it doesn't need a live Temporal worker to
+        # actually execute it during seeding.
+        return None
+
     verified_body = b'{"lead_name": "Jonas Keller", "source": "website_form"}'
-    await receive_webhook_event(
+    verified_event = await receive_webhook_event(
         db,
         connection=connection,
         raw_body=verified_body,
         signature=sign_payload(webhook_secret, verified_body),
+        run_starter=_noop_run_starter,
     )
+    if verified_event.triggered_run_id is not None:
+        from app.automation.models import WorkflowRun
+
+        triggered_run = await db.get(WorkflowRun, verified_event.triggered_run_id)
+        if triggered_run is not None:
+            await advance_run(
+                db, run=triggered_run, workflow=webhook_workflow, actor_user_id=admin_id
+            )
 
     unverified_body = b'{"lead_name": "Suspicious Sender"}'
     await receive_webhook_event(
-        db, connection=connection, raw_body=unverified_body, signature="not-a-real-signature"
+        db,
+        connection=connection,
+        raw_body=unverified_body,
+        signature="not-a-real-signature",
+        run_starter=_noop_run_starter,
     )
 
     await db.commit()

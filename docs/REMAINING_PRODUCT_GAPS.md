@@ -299,19 +299,32 @@ after the change.
 - **RESOLVED**: QA scoring (`TicketQAScore`) and a real CSAT/QA/resolution-time
   analytics dashboard (`app.support.analytics`, `GET /support/analytics`).
 
-### Automation
+### Automation (resolved 2026-07-30 — see AUTO-03/04/05/06/07/08 in the traceability matrix)
 
-- **PARTIAL**: only 3 of ~24 spec'd action types and 2 of ~16 spec'd trigger types are
-  executable.
-- **ARCHITECTURAL GAP**: Automation executes fully synchronously inside the HTTP
-  request/response cycle with zero Temporal usage, directly contradicting spec §61 ("do
-  not couple workflows directly to HTTP requests") — Knowledge and Integrations both
-  correctly use Temporal; Automation does not.
-- **MISSING**: `WorkflowVersion` / immutable publish-history table.
-- **MISSING (frontend)**: visual drag-and-drop Workflow Builder (React Flow), Workflow
-  Templates gallery, dedicated Connections page, automation analytics dashboard.
+- **RESOLVED (architectural)**: Automation execution is now Temporal-durable
+  (`WorkflowRunWorkflow`), matching Knowledge's and Integrations' pattern — spec §61's
+  "do not couple workflows directly to HTTP requests" no longer has an exception.
+  `human_approval` now pauses on a real Temporal signal, woken automatically when the
+  linked Approval is decided, rather than a polling loop.
+- **RESOLVED**: all 24 of spec §39's named action types (plus 2 pre-existing extras) are
+  real dispatch handlers, reusing existing cross-module services wherever one exists.
+  `send_email`/`send_chat_message` honestly report they can't actually deliver (no SMTP
+  provider in this build; Slack/Teams connectors are deliberately read-only-scoped) —
+  never a fabricated "sent" result.
+- **RESOLVED**: 11 of spec §38's 16 named trigger types genuinely fire real runs
+  (`manual`, `api`, `webhook`, `schedule` via a real Temporal Schedule, plus 8 wired to
+  real internal domain events: new/changed CRM leads and opportunity stages, new support
+  tickets, new vendors, new employees, document uploads, failed control assessments,
+  security alerts). The remaining 4 (`new_email`, `form_submission`, `database_event`,
+  `new_regulatory_update`) have no real source system in this build and are honestly
+  accepted-but-unwired, not silently faked.
+- **RESOLVED**: `WorkflowVersion` immutable publish-history table.
+- **RESOLVED (frontend)**: a real `@xyflow/react` visual drag-and-drop Workflow Builder
+  (drag a step node to reorder it), a Workflow Templates gallery (3 real seeded
+  templates, clone-to-new-draft), a Connections page (reuses Integrations' connections
+  list rather than duplicating it), and a live Automation Analytics dashboard.
 - **VERIFIED (genuinely real, not a gap)**: the `human_approval` pause/resume/reject
-  mechanism — real behavioral test coverage for all three paths.
+  mechanism — real behavioral test coverage for all three paths, now signal-based.
 
 ### Integrations
 

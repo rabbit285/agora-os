@@ -897,7 +897,108 @@ export type SupportAnalytics = {
   qa_score_count: number;
 };
 
-export type WorkflowStepType = "create_task" | "send_notification" | "human_approval";
+export type WorkflowStepType =
+  | "create_task"
+  | "send_notification"
+  | "human_approval"
+  | "export_data"
+  | "create_record"
+  | "update_record"
+  | "send_email"
+  | "send_chat_message"
+  | "assign_user"
+  | "generate_document"
+  | "analyze_document"
+  | "extract_data"
+  | "classify_data"
+  | "call_api"
+  | "webhook"
+  | "search_knowledge"
+  | "generate_ai_response"
+  | "run_compliance_assessment"
+  | "run_security_check"
+  | "create_lead"
+  | "update_crm"
+  | "create_support_ticket"
+  | "create_report"
+  | "delay"
+  | "condition"
+  | "loop";
+
+export const WORKFLOW_STEP_TYPES: WorkflowStepType[] = [
+  "create_task",
+  "send_notification",
+  "human_approval",
+  "export_data",
+  "create_record",
+  "update_record",
+  "send_email",
+  "send_chat_message",
+  "assign_user",
+  "generate_document",
+  "analyze_document",
+  "extract_data",
+  "classify_data",
+  "call_api",
+  "webhook",
+  "search_knowledge",
+  "generate_ai_response",
+  "run_compliance_assessment",
+  "run_security_check",
+  "create_lead",
+  "update_crm",
+  "create_support_ticket",
+  "create_report",
+  "delay",
+  "condition",
+  "loop",
+];
+
+export type WorkflowTriggerType =
+  | "manual"
+  | "schedule"
+  | "webhook"
+  | "api"
+  | "new_email"
+  | "new_crm_lead"
+  | "crm_stage_change"
+  | "new_support_ticket"
+  | "new_vendor"
+  | "new_employee"
+  | "document_uploaded"
+  | "control_failed"
+  | "security_alert"
+  | "form_submission"
+  | "database_event"
+  | "new_regulatory_update";
+
+export const WORKFLOW_TRIGGER_TYPES: WorkflowTriggerType[] = [
+  "manual",
+  "schedule",
+  "webhook",
+  "api",
+  "new_email",
+  "new_crm_lead",
+  "crm_stage_change",
+  "new_support_ticket",
+  "new_vendor",
+  "new_employee",
+  "document_uploaded",
+  "control_failed",
+  "security_alert",
+  "form_submission",
+  "database_event",
+  "new_regulatory_update",
+];
+
+// Trigger types with no real internal event source in this build yet —
+// see app.automation.triggers's module docstring.
+export const UNWIRED_TRIGGER_TYPES: WorkflowTriggerType[] = [
+  "new_email",
+  "form_submission",
+  "database_event",
+  "new_regulatory_update",
+];
 
 export type WorkflowStep = {
   step_type: WorkflowStepType;
@@ -911,6 +1012,7 @@ export type Workflow = {
   name: string;
   description: string | null;
   trigger_type: string;
+  schedule_cron: string | null;
   status: WorkflowStatus;
   steps: WorkflowStep[];
   version: number;
@@ -943,6 +1045,34 @@ export type WorkflowStepRun = {
 
 export type WorkflowRunDetail = WorkflowRun & {
   step_runs: WorkflowStepRun[];
+};
+
+export type WorkflowVersion = {
+  id: string;
+  workflow_id: string;
+  version_number: number;
+  steps: WorkflowStep[];
+  trigger_type: string;
+  published_by: string | null;
+  published_at: string;
+};
+
+export type WorkflowTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  trigger_type: string;
+  steps: WorkflowStep[];
+};
+
+export type WorkflowAnalytics = {
+  total_workflows: number;
+  active_workflows: number;
+  total_runs: number;
+  runs_by_status: Record<string, number>;
+  success_rate_percent: number;
+  awaiting_approval_count: number;
 };
 
 export type IntegrationConnection = {
