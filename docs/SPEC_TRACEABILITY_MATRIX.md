@@ -40,7 +40,7 @@ is still present per row, just labeled inline rather than column-separated.
 | PLAT-19 | Billing & entitlements | MISSING | No implementation found | Full build | No |
 | PLAT-20 | Reporting module | MISSING | No implementation found | Full build | No |
 | PLAT-21 | Global search | VERIFIED (fixed 2026-07-30) | See KNOW-08/PLAT-21 row below in the Knowledge & RAG section (same requirement, tracked once) | — | No |
-| PLAT-22 | Global Create button | MISSING | Not present in navigation/build output | Full build | No |
+| PLAT-22 | Global Create button (spec §72) | VERIFIED (fixed 2026-07-30) | BE: `GET /organizations/current/my-permissions` exposes the current membership's resolved permission keys (same set `require_permission()` enforces); FE: `GlobalCreateButton` in the top nav, permission-filtered dropdown over 13 of spec §72's 14 named entities, each navigating to its owning module's real existing creation form rather than duplicating 13 miniature forms — "Report" omitted until PLAT-20 (Reporting) exists; TEST: 2 backend + 3 frontend tests; RUN: this audit — live signup returned the full real permission set for org_admin | — | No |
 | PLAT-23 | Workflow engine decoupled from HTTP request cycle via Temporal (§61) | PARTIAL (Automation module specifically) | BE: Automation executes fully synchronously in-request, zero Temporal usage, contradicting §61; Knowledge and Integrations correctly use Temporal | Move Automation execution onto Temporal | No |
 | PLAT-24 | CI/CD pipeline configuration exists in-repo | MISSING | No `.github/` directory found | Add CI workflow config (excludes live AWS deploy validation) | No |
 

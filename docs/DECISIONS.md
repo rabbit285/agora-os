@@ -1612,3 +1612,41 @@ rejection, and RBAC denial for a non-admin role; live-verified end to end
 against the running Docker stack including a direct `audit_events` query
 confirming every action recorded a real object id, not the class of bug
 finding A1 fixed earlier this session.
+
+## ADR-0044 — Global Create navigates to each entity's existing module page instead of duplicating 13 miniature creation forms; permission filtering is server-computed, not re-derived client-side
+
+**Decision**: spec §72's Global Create button lists 14 entity types
+(Task, Lead, Account, Campaign, Support Ticket, AI System, Risk, Vendor,
+Policy, DPIA, DSAR, Workflow, Document, Report) whose real `Create`
+schemas range from one optional field (`Lead`) to several required
+fields including reference pickers to other entities (`Campaign` needs an
+existing `Sequence`; `Support Ticket` needs an existing `Customer`).
+Building 13 separate condensed creation forms inside one global dropdown
+component would either under-serve the complex ones (a bare UUID text
+field standing in for what should be a real picker) or balloon the
+component into duplicating logic every target module's page already has
+correctly. `GlobalCreateButton` instead treats each option as a
+navigation shortcut to the module page that already owns that entity's
+real creation form — `/tasks`, `/sales`, `/sales/campaigns`, `/support`,
+`/compliance`, `/automation`, `/knowledge` — the same "reuse the existing
+primitive" discipline applied throughout this session (Security Policies
+reusing Compliance's `Policy`, Automation's Connections page reusing
+Integrations' connections list, etc., spec §80). "Report" is the one
+entity omitted entirely for now: no Reporting module (PLAT-20) exists yet
+to navigate to, so listing it would be a broken link — a disclosed
+sequencing dependency, not a silent drop; it gets added the moment
+PLAT-20 ships.
+
+Permission filtering is the second real decision: the dropdown must only
+show entities the current user can actually create (spec §72's own
+"Options based on permissions"), and `OrgContext.permissions` — the exact
+set `require_permission()` checks on every write — already exists
+server-side (`app/dependencies.py`). Rather than re-deriving a parallel
+client-side permission model (which would inevitably drift from the real
+RBAC grants the backend enforces), a new `GET /organizations/current/
+my-permissions` endpoint returns that same resolved set verbatim. The
+frontend's `CREATE_OPTIONS` table maps each entity to the literal
+permission key its real creation endpoint requires, so the two can never
+silently disagree — if a permission key changes on the backend, the
+Global Create option either starts working or starts being hidden
+automatically, never staying visibly-present-but-403ing.

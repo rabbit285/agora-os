@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { GlobalCreateButton } from "@/components/global-create-button";
 import { ModuleSwitcher } from "@/components/module-switcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ export function TopNavigation() {
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-6">
       <ModuleSwitcher />
       <div className="flex items-center gap-4">
+        <GlobalCreateButton />
         <Input
           placeholder="Search everything…"
           value={searchValue}

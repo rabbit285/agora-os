@@ -70,6 +70,16 @@ async def update_current_organization(
     return org
 
 
+@router.get("/current/my-permissions", response_model=list[str])
+async def get_my_permissions(
+    context: OrgContext = Depends(get_org_context),
+) -> list[str]:
+    """The current membership's resolved permission keys (spec §72 Global
+    Create needs to filter its options by permission client-side, the same
+    set `require_permission()` already checks server-side on every write)."""
+    return sorted(context.permissions)
+
+
 @router.get("/current/members", response_model=list[MembershipOut])
 async def list_members(
     db: AsyncSession = Depends(get_db),

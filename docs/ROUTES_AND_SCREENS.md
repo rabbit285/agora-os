@@ -136,4 +136,8 @@ table rather than a fourth table.
 `ModuleSwitcher` (spec §70–71) around every authenticated route. Unimplemented
 modules still appear in the sidebar/module switcher but link to a "this
 module isn't built yet" state rather than a broken 404 — never a fake
-working page (spec §82).
+working page (spec §82). `TopNavigation` also renders `GlobalCreateButton`
+(spec §72, fixed 2026-07-30, PLAT-22) — a permission-filtered "Create ▾"
+dropdown covering 13 of the 14 named entities (all but "Report", which
+needs the not-yet-built Reporting module, PLAT-20), each option navigating
+to its owning module's existing creation form.

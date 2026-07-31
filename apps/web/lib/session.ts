@@ -20,3 +20,11 @@ export function useCurrentOrganization() {
     retry: false,
   });
 }
+
+export function useCurrentPermissions() {
+  return useQuery<string[]>({
+    queryKey: ["organizations", "current", "my-permissions"],
+    queryFn: () => apiFetch<string[]>("/api/v1/organizations/current/my-permissions"),
+    retry: false,
+  });
+}

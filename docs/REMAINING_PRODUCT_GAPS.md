@@ -420,12 +420,19 @@ after the change.
   §53**: parent organization / subsidiaries hierarchy, Agency/consultant multi-client mode
   (tracked as PLAT-17), regional hosting. SSO/SAML/SCIM moved out of this bucket — see
   below.
+- **[FIXED 2026-07-30]** ~~Global Create button~~ — spec §72's "Create" nav button is real:
+  `GlobalCreateButton` in the top nav (`apps/web/components/global-create-button.tsx`)
+  fetches the current user's real permission keys (new `GET /organizations/current/
+  my-permissions`, the same set `require_permission()` already enforces server-side) and
+  shows only the entity types the user can actually create, each navigating to its owning
+  module's real existing creation form. Covers 13 of spec §72's 14 named entities; "Report"
+  is omitted until the Reporting module (PLAT-20) exists — not silently dropped, a
+  disclosed sequencing dependency. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-22.
 - **MISSING**: Billing & entitlements, Reporting module, global Notification dispatch
   beyond in-app (`Notification.channel` is only ever constructed as `"in_app"` — grep
   confirmed across every construction site; no email/Slack/Teams/webhook dispatch adapter
-  exists), Global Create button, standalone `/settings/roles` management UI (read-only
-  view only), `/settings/ai-providers` management UI (status display only, no
-  configuration UI).
+  exists), standalone `/settings/roles` management UI (does not exist), `/settings/
+  ai-providers` management UI (does not exist).
 - **MISSING (Business Intelligence layer, spec §86-90)**: Business Process Discovery, AI
   Recommendation Engine, AI Daily Briefing, Business AI Memory, Business Rules Engine —
   none implemented.
