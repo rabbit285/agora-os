@@ -54,7 +54,10 @@ async def update_current_organization(
     org = await db.get(Organization, context.organization_id)
     assert org is not None
     before_name = org.name
+    before_webhook = org.notification_webhook_url
     org.name = payload.name
+    if "notification_webhook_url" in payload.model_fields_set:
+        org.notification_webhook_url = payload.notification_webhook_url
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -62,8 +65,8 @@ async def update_current_organization(
         action="org.settings.updated",
         object_type="organization",
         object_id=str(org.id),
-        before_state={"name": before_name},
-        after_state={"name": org.name},
+        before_state={"name": before_name, "notification_webhook_url": before_webhook},
+        after_state={"name": org.name, "notification_webhook_url": org.notification_webhook_url},
     )
     await db.commit()
     await db.refresh(org)

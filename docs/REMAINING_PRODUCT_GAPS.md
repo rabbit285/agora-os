@@ -428,11 +428,22 @@ after the change.
   module's real existing creation form. Covers 13 of spec §72's 14 named entities; "Report"
   is omitted until the Reporting module (PLAT-20) exists — not silently dropped, a
   disclosed sequencing dependency. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-22.
-- **MISSING**: Billing & entitlements, Reporting module, global Notification dispatch
-  beyond in-app (`Notification.channel` is only ever constructed as `"in_app"` — grep
-  confirmed across every construction site; no email/Slack/Teams/webhook dispatch adapter
-  exists), standalone `/settings/roles` management UI (does not exist), `/settings/
-  ai-providers` management UI (does not exist).
+- **[FIXED 2026-07-30]** ~~global Notification dispatch beyond in-app (`Notification.
+  channel` is only ever constructed as `"in_app"` — grep confirmed across every
+  construction site; no email/Slack/Teams/webhook dispatch adapter exists)~~ — spec §66's
+  4 named channels are now real, where "real" is honestly bounded: `app.core.
+  notifications.notify` is the single call site every module uses; Email dispatches
+  through the same log-only dev adapter every other transactional email uses; Webhook does
+  a real `httpx` POST to a configurable `Organization.notification_webhook_url`; Slack/
+  Teams are disclosed as never-deliverable (Slack's OAuth scope is read-only, no Teams
+  connector exists) rather than faked. Per-user channel opt-in via new
+  `NotificationPreference` rows (migration `f2899856bd0f`), exposed on a new `/notifications`
+  page (which also fixes the missing frontend for the pre-existing list/mark-read backend —
+  finding A3) alongside a real inbox. 5 backend + 5 frontend tests; live-verified: a
+  critical security incident's notification came back with
+  `channels_delivered: ["in_app", "email"]` and a real log line for the email dispatch.
+- **MISSING**: Billing & entitlements, Reporting module, standalone `/settings/roles`
+  management UI (does not exist), `/settings/ai-providers` management UI (does not exist).
 - **MISSING (Business Intelligence layer, spec §86-90)**: Business Process Discovery, AI
   Recommendation Engine, AI Daily Briefing, Business AI Memory, Business Rules Engine —
   none implemented.

@@ -43,7 +43,8 @@ from app.ai.gateway import GenerateRequest, ModelGateway
 from app.audit.service import record_event
 from app.automation.models import Workflow, WorkflowRun, WorkflowStepRun, WorkflowVersion
 from app.compliance.governance import check_data_export_permission
-from app.core.models import Approval, Notification, Task
+from app.core.models import Approval, Task
+from app.core.notifications import notify
 from app.db.base import utcnow
 
 STEP_CREATE_TASK = "create_task"
@@ -122,14 +123,21 @@ async def _handle_create_task(ctx: StepContext) -> WorkflowStepRun:
 
 
 async def _handle_send_notification(ctx: StepContext) -> WorkflowStepRun:
-    notification = Notification(
+    recipient_id = ctx.actor_user_id or ctx.run.triggered_by
+    if recipient_id is None:
+        return _step_run(
+            ctx,
+            STEP_SEND_NOTIFICATION,
+            "failed",
+            {"reason": "No user to notify (unattributed run, e.g. a webhook/schedule trigger)"},
+        )
+    notification = await notify(
+        ctx.db,
         organization_id=ctx.run.organization_id,
-        user_id=ctx.run.triggered_by,
+        user_id=recipient_id,
         title=ctx.config.get("title", "Workflow notification"),
         body=ctx.config.get("body"),
     )
-    ctx.db.add(notification)
-    await ctx.db.flush()
     return _step_run(
         ctx, STEP_SEND_NOTIFICATION, "succeeded", {"notification_id": str(notification.id)}
     )

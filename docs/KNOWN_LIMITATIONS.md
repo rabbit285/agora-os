@@ -358,6 +358,31 @@ implied to work.
   agency/consultant multi-client mode (one login managing several client
   organizations) — both are spec-deferred product-roadmap items, not
   gaps in what was attempted.
+- **Notification dispatch is real for 2 of spec §66's 4 named channels
+  beyond in-app** (fixed 2026-07-30): `app.core.notifications.notify` is
+  now the single call site every module uses (replacing 6 places that
+  each constructed a `Notification` row directly) and honestly records
+  what was requested vs. actually delivered on
+  `channels_requested`/`channels_delivered`. **Email**: dispatched through
+  the same log-only dev adapter every other transactional email in this
+  build uses — no real SMTP/SES provider is configured anywhere. **Webhook**:
+  a real `httpx` POST to `Organization.notification_webhook_url` when one
+  is configured (settable on `/settings/organization`) — genuinely
+  delivered, not simulated. **Slack**/**Teams**: honestly never deliverable
+  — the Slack OAuth connector is deliberately scoped `channels:read` only
+  (spec §B1) and cannot post; no Teams connector exists at all. A user can
+  still store a preference for either channel (their stated intent, real
+  `NotificationPreference` rows, migration `f2899856bd0f`), but `notify()`
+  never marks Slack/Teams as delivered even when "enabled." Per-user
+  channel toggles live on the new `/notifications` page alongside a real
+  inbox (list, mark-read) — previously the backend list/read endpoints
+  existed with no frontend page (finding A3). Only two of the 6 existing
+  notification call sites request a channel beyond in-app (both
+  `critical`-severity incident-assignment notifications, Compliance's AI
+  incident and Security's incident, request `email`) — the rest remain
+  in-app-only, unchanged from before this fix, since retrofitting every
+  call site to request every channel wasn't the goal; the dispatch
+  infrastructure itself being real and correctly wired was.
 
 ## Trust and progressive access model (spec §B)
 

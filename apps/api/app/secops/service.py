@@ -27,7 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.compliance.models import Risk
-from app.core.models import Notification, Task
+from app.core.models import Task
+from app.core.notifications import notify
 from app.secops.models import SecurityIncident
 
 
@@ -83,15 +84,15 @@ async def create_incident(
         response_task_id = response_task.id
 
         if owner_id is not None:
-            db.add(
-                Notification(
-                    organization_id=organization_id,
-                    user_id=owner_id,
-                    title="Critical security incident assigned to you",
-                    body=f'"{title}" was just declared critical and needs immediate '
-                    "investigation and containment.",
-                    link="/security",
-                )
+            await notify(
+                db,
+                organization_id=organization_id,
+                user_id=owner_id,
+                title="Critical security incident assigned to you",
+                body=f'"{title}" was just declared critical and needs immediate '
+                "investigation and containment.",
+                link="/security",
+                channels=["email"],
             )
 
     await record_event(

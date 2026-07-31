@@ -226,6 +226,8 @@ export default function OrganizationSettingsPage() {
   const { data: organization } = useCurrentOrganization();
   const [draftName, setDraftName] = useState<string | null>(null);
   const name = draftName ?? organization?.name ?? "";
+  const [draftWebhookUrl, setDraftWebhookUrl] = useState<string | null>(null);
+  const webhookUrl = draftWebhookUrl ?? organization?.notification_webhook_url ?? "";
 
   const update = useMutation({
     mutationFn: (newName: string) =>
@@ -234,6 +236,18 @@ export default function OrganizationSettingsPage() {
         body: { name: newName },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations", "current"] }),
+  });
+
+  const updateWebhook = useMutation({
+    mutationFn: (newUrl: string) =>
+      apiFetch<Organization>("/api/v1/organizations/current", {
+        method: "PATCH",
+        body: { name: organization?.name ?? "", notification_webhook_url: newUrl || null },
+      }),
+    onSuccess: () => {
+      setDraftWebhookUrl(null);
+      queryClient.invalidateQueries({ queryKey: ["organizations", "current"] });
+    },
   });
 
   const { data: entities, error: entitiesError } = useQuery<LegalEntity[]>({
@@ -260,6 +274,32 @@ export default function OrganizationSettingsPage() {
             onClick={() => update.mutate(name.trim())}
           >
             {update.isPending ? "Saving…" : "Save"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-md">
+        <CardContent className="flex flex-col gap-4 pt-6">
+          <div>
+            <Label htmlFor="notification-webhook-url">Notification webhook URL</Label>
+            <p className="text-xs text-neutral-500">
+              spec §66 Webhook channel — a real HTTP POST is sent here whenever a user with
+              the webhook channel enabled receives a notification. Leave blank to disable.
+            </p>
+          </div>
+          <Input
+            id="notification-webhook-url"
+            placeholder="https://hooks.example.com/agora"
+            value={webhookUrl}
+            onChange={(e) => setDraftWebhookUrl(e.target.value)}
+          />
+          <Button
+            className="self-start"
+            variant="outline"
+            disabled={updateWebhook.isPending}
+            onClick={() => updateWebhook.mutate(webhookUrl.trim())}
+          >
+            {updateWebhook.isPending ? "Saving…" : "Save webhook URL"}
           </Button>
         </CardContent>
       </Card>

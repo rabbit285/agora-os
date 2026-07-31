@@ -29,7 +29,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.core.models import Notification
+from app.core.notifications import notify
 from app.sales.models import Account, Lead
 from app.secops.models import SecurityAlert
 from app.support.models import Customer, Ticket
@@ -115,15 +115,14 @@ async def flag_upsell_signal(
         if account is not None and account.owner_id is not None:
             notified_user_id = account.owner_id
 
-    db.add(
-        Notification(
-            organization_id=organization_id,
-            user_id=notified_user_id,
-            title="Expansion signal detected",
-            body=f'Customer "{customer.name}" may be a good fit for an upsell — '
-            f'flagged from support ticket "{ticket.subject}".',
-            link="/sales" if lead.account_id is None else f"/sales/accounts/{lead.account_id}",
-        )
+    await notify(
+        db,
+        organization_id=organization_id,
+        user_id=notified_user_id,
+        title="Expansion signal detected",
+        body=f'Customer "{customer.name}" may be a good fit for an upsell — '
+        f'flagged from support ticket "{ticket.subject}".',
+        link="/sales" if lead.account_id is None else f"/sales/accounts/{lead.account_id}",
     )
 
     await record_event(

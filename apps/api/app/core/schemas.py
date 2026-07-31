@@ -54,12 +54,16 @@ class OrganizationSettingsOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    notification_webhook_url: str | None
 
     model_config = {"from_attributes": True}
 
 
 class OrganizationSettingsUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    # spec §66 Webhook notification channel target. Not in
+    # model_fields_set means "leave unchanged"; explicit null clears it.
+    notification_webhook_url: str | None = Field(default=None, max_length=500)
 
 
 class LegalEntityCreate(BaseModel):
@@ -118,10 +122,24 @@ class NotificationOut(BaseModel):
     title: str
     body: str | None
     link: str | None
+    channels_requested: list[str]
+    channels_delivered: list[str]
     read_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class NotificationPreferenceOut(BaseModel):
+    channel: str
+    enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationPreferenceUpdate(BaseModel):
+    channel: str = Field(pattern="^(email|slack|teams|webhook)$")
+    enabled: bool
 
 
 class FileUploadRequest(BaseModel):

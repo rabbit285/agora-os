@@ -11,7 +11,7 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, Uuid
+from sqlalchemy.types import JSON, DateTime, Uuid
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utcnow
 
@@ -21,6 +21,10 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    # spec §66 Webhook notification channel — a real outbound POST target,
+    # org-scoped rather than per-user (a webhook receiver is an
+    # organization's integration, not an individual's preference).
+    notification_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -199,6 +203,13 @@ class File(UUIDPrimaryKeyMixin, Base):
 
 
 class Notification(UUIDPrimaryKeyMixin, Base):
+    """spec §66's In-app channel is always fired unconditionally; the other
+    three named channels (Email, Slack, Teams — Webhook is org-level, see
+    `Organization.notification_webhook_url`) are opt-in per user via
+    `NotificationPreference` and honestly report what was actually
+    delivered, never a fabricated "sent" (spec §82) — see
+    `app.core.notifications.notify`."""
+
     __tablename__ = "notifications"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -207,9 +218,37 @@ class Notification(UUIDPrimaryKeyMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
+    # Kept for backward compatibility with any direct reader; always
+    # "in_app" — see channels_requested/channels_delivered for the real
+    # multi-channel picture.
     channel: Mapped[str] = mapped_column(String(20), default="in_app")
+    channels_requested: Mapped[list[str]] = mapped_column(JSON, default=list)
+    channels_delivered: Mapped[list[str]] = mapped_column(JSON, default=list)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NotificationPreference(UUIDPrimaryKeyMixin, Base):
+    """Per-user, per-channel opt-in (spec §66 "User preferences"). No row
+    for a channel means disabled — `in_app` never needs a row since it
+    always fires. Only `email`/`webhook` can ever actually deliver in this
+    build even when enabled (see `app.core.notifications`); `slack`/`teams`
+    preferences can still be stored (a user's stated intent) but never
+    result in a real delivery here."""
+
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "channel", name="uq_notification_pref_user_channel"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True)

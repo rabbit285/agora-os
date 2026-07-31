@@ -33,7 +33,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 | `/copilot` | [x] retrieval-grounded Q&A with citations |
 | `/tasks` | [x] list + create |
 | `/approvals` | [x] list + approve/reject |
-| `/notifications` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed `[~]`, which does not exist in the build output) |
+| `/notifications` | [x] real inbox (list, mark-read, unread count), per-channel preference toggles (email/webhook real, Slack/Teams labeled Not deliverable) — built 2026-07-30, PLAT-10 |
 | Global search (`/search`) | [x] real tenant-scoped search across 16 entity types, reachable from an always-visible top-nav box |
 | Global Create button | [ ] |
 

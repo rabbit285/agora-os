@@ -14,6 +14,7 @@ export type Organization = {
   id: string;
   name: string;
   slug: string;
+  notification_webhook_url: string | null;
 };
 
 export type Task = {
@@ -96,9 +97,18 @@ export type Notification = {
   title: string;
   body: string | null;
   link: string | null;
+  channels_requested: string[];
+  channels_delivered: string[];
   read_at: string | null;
   created_at: string;
 };
+
+export type NotificationPreference = {
+  channel: string;
+  enabled: boolean;
+};
+
+export const NOTIFICATION_CHANNELS = ["email", "slack", "teams", "webhook"] as const;
 
 export type KnowledgeBase = {
   id: string;

@@ -23,6 +23,7 @@ export const NAVIGATION: NavGroup[] = [
       { label: "AI Copilot", href: "/copilot", implemented: true },
       { label: "Tasks", href: "/tasks", implemented: true },
       { label: "Approvals", href: "/approvals", implemented: true },
+      { label: "Notifications", href: "/notifications", implemented: true },
     ],
   },
   {

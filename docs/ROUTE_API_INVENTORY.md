@@ -91,19 +91,20 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 
 ### Documented-but-nonexistent routes (drift, see gaps §A3)
 
-`/onboarding/company`, `/onboarding/goals`, `/notifications`, `/settings/roles`,
-`/settings/ai-providers` — listed in `docs/ROUTES_AND_SCREENS.md` as `[~]`/`[ ]` but
-produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`, and the MFA
-challenge were also in this list at first-audit time; all 3 are now built — see above.)
+`/onboarding/company`, `/onboarding/goals`, `/settings/roles`,
+`/settings/ai-providers` — listed in `docs/ROUTES_AND_SCREENS.md` as `[ ]` (corrected
+2026-07-30 from a misleading `[~]`), still produce no route in the build. (`/invite/
+[token]`, `/verify-email/[token]`, the MFA challenge, and `/notifications` were also in
+this list at earlier audit points; all 4 are now built — see above.)
 
-## Backend API surface (164 paths, from live `/openapi.json`)
+## Backend API surface (170 paths, from live `/openapi.json`, 2026-07-30)
 
 | Prefix | Paths | Notes |
 |---|---|---|
 | `/auth` | 13 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation |
-| `/organizations` | 4 | current (GET/PATCH), current/members (GET), current/invitations (GET/POST) + revoke |
+| `/organizations` | 11 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
 | `/tasks`, `/approvals` | 4 | core primitives |
-| `/notifications` | 2 | list, mark-read — no dispatch-channel config endpoint |
+| `/notifications` | 4 | list, mark-read, preferences (GET/PUT) — real multi-channel dispatch (email/webhook real, Slack/Teams honestly non-deliverable) |
 | `/files` | 2 | upload-url, get |
 | `/ai/copilot` | 1 | `/ask` (real reranking now runs between retrieval and generation) |
 | `/knowledge` | 6 | documents (list/create/get/chunks) incl. real XLSX/HTML extraction, knowledge-bases, graph (entity-types, entity traversal) |

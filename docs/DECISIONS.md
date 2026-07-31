@@ -1650,3 +1650,56 @@ permission key its real creation endpoint requires, so the two can never
 silently disagree — if a permission key changes on the backend, the
 Global Create option either starts working or starts being hidden
 automatically, never staying visibly-present-but-403ing.
+
+## ADR-0045 — Notification dispatch centralizes on one `notify()` call site; only Email and Webhook can ever really deliver, and `notify()` says so on every row rather than only in a docstring
+
+**Decision**: spec §66 names four notification channels beyond in-app —
+Email, Slack, Teams, Webhook — with per-user preferences. Before this
+change, six call sites across four modules each constructed a
+`Notification` row directly, all implicitly `channel="in_app"` (the
+model's default), with no dispatch logic anywhere. `app.core.
+notifications.notify()` is now the one place that logic lives; all six
+call sites (automation's `send_notification` step, two critical-incident
+hooks in Compliance and Security, a security-review-started/cleared pair
+in Compliance, Support's upsell-signal notification) were migrated to
+call it instead of constructing the row themselves.
+
+The real decision is what "real" means per channel, and it isn't uniform:
+**Email** reuses the exact log-only dev adapter every other transactional
+email in this build already uses (password reset, invitations) — a real
+dispatch call, honestly not a real send, consistent with the standing
+disclosure in `docs/KNOWN_LIMITATIONS.md`. **Webhook** is different in
+kind: there's no reason it can't be fully real, since it's just an
+outbound `httpx` POST to a URL the organization configures
+(`Organization.notification_webhook_url`, settable on `/settings/
+organization`) — so it is a genuine HTTP call, not simulated, the same
+"real API call, no live credentials to test end-to-end in this
+environment" honesty class as every OAuth adapter this session built.
+**Slack** and **Teams** hit a harder wall than "no credentials
+configured": even with real Slack credentials, the existing Slack OAuth
+connector is deliberately scoped `channels:read` only (spec §B1's
+progressive trust model — see ADR-0026/ADR-0028), so it structurally
+cannot post a message, and no Teams connector exists in this build at
+all. A user can still register a preference for either (their stated
+intent is real data worth keeping), but `notify()` never appends them to
+`channels_delivered` regardless — the distinction between "requested" and
+"delivered" is recorded on every `Notification` row itself
+(`channels_requested`/`channels_delivered`, both real JSON columns,
+migration `f2899856bd0f`), not just asserted in a docstring, so any
+caller or the `/notifications` UI can see the honest outcome without
+reading source code.
+
+Two of the six migrated call sites — the critical-incident-assignment
+notifications in Compliance (`AiIncident`) and Security
+(`SecurityIncident`) — were deliberately upgraded to request
+`channels=["email"]` as the one concrete demonstration that multi-channel
+dispatch does something real when asked, rather than shipping
+infrastructure nothing calls. The other four call sites were left
+in-app-only, unchanged from their prior behavior — retrofitting every
+existing notification to request every channel wasn't the goal; a
+correctly wired dispatch layer was. The `/notifications` page (previously
+missing entirely — the list/mark-read backend already existed with no
+frontend, finding A3) is the other real half of spec §66: a genuine inbox
+plus per-channel preference toggles, each channel's toggle labeled
+honestly ("Not deliverable" for Slack/Teams) rather than presented as
+uniformly functional.

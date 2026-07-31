@@ -110,7 +110,8 @@ from app.compliance.models import (
     Vendor,
     VendorAssessment,
 )
-from app.core.models import Approval, File, Notification, Task
+from app.core.models import Approval, File, Task
+from app.core.notifications import notify
 from app.core.storage import ensure_bucket, upload_object
 from app.db.base import utcnow
 from app.sales.models import Opportunity
@@ -458,15 +459,15 @@ async def create_ai_incident(
         incident.related_task_id = response_task.id
 
         if owner_id is not None:
-            db.add(
-                Notification(
-                    organization_id=organization_id,
-                    user_id=owner_id,
-                    title="Critical AI incident assigned to you",
-                    body=f'"{title}" was just declared critical and needs immediate '
-                    "investigation.",
-                    link="/compliance",
-                )
+            await notify(
+                db,
+                organization_id=organization_id,
+                user_id=owner_id,
+                title="Critical AI incident assigned to you",
+                body=f'"{title}" was just declared critical and needs immediate '
+                "investigation.",
+                link="/compliance",
+                channels=["email"],
             )
 
     await record_event(
@@ -849,15 +850,14 @@ async def start_security_review(
     await db.flush()
 
     if opportunity.owner_id is not None:
-        db.add(
-            Notification(
-                organization_id=organization_id,
-                user_id=opportunity.owner_id,
-                title="Security review started",
-                body=f'"{opportunity.title}" has entered security review and is now '
-                "tracked as a deal blocker.",
-                link="/compliance",
-            )
+        await notify(
+            db,
+            organization_id=organization_id,
+            user_id=opportunity.owner_id,
+            title="Security review started",
+            body=f'"{opportunity.title}" has entered security review and is now '
+            "tracked as a deal blocker.",
+            link="/compliance",
         )
 
     await record_event(
@@ -1057,15 +1057,14 @@ async def clear_security_review(
 
     opportunity = await db.get(Opportunity, review.opportunity_id)
     if opportunity is not None and opportunity.owner_id is not None:
-        db.add(
-            Notification(
-                organization_id=review.organization_id,
-                user_id=opportunity.owner_id,
-                title="Security review cleared",
-                body=f'"{opportunity.title}" security review is cleared — the trust '
-                "package is ready.",
-                link="/compliance",
-            )
+        await notify(
+            db,
+            organization_id=review.organization_id,
+            user_id=opportunity.owner_id,
+            title="Security review cleared",
+            body=f'"{opportunity.title}" security review is cleared — the trust '
+            "package is ready.",
+            link="/compliance",
         )
 
     await record_event(
