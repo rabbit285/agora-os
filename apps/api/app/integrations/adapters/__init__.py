@@ -89,7 +89,9 @@ def _provider_specs() -> dict[str, _ProviderSpec]:
             settings.salesforce_redirect_uri,
         ),
         "zendesk": _ProviderSpec(
-            ZendeskAdapter,
+            ZendeskAdapter,  # type: ignore[arg-type]  # extra required `subdomain` kwarg;
+            # get_oauth_adapter() below always special-cases zendesk and never invokes
+            # `spec.adapter_cls(client_id=..., client_secret=...)` generically for it.
             settings.zendesk_client_id,
             settings.zendesk_client_secret,
             settings.zendesk_redirect_uri,

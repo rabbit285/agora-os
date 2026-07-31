@@ -1750,3 +1750,76 @@ lists Azure OpenAI without the "architecture" qualifier it gives Google
 OpenAI adapter is nominally in scope — this build has none, now disclosed
 as `has_adapter: false` on the page itself rather than silently absent,
 tracked in `docs/REMAINING_PRODUCT_GAPS.md`.
+
+## ADR-0047 — Onboarding's readiness score reuses (or extracts and reuses) each dimension's own module's real formula, never a separately-invented number; the wizard is one route with internal step state, not ten route folders
+
+**Decision**: spec §68's Onboarding Experience ends in a "Business AI
+Readiness" output — five percentages (Compliance, Security, Sales
+Automation, Support Automation, Process Automation) plus named
+opportunities. The obvious wrong way to build this is a plausible-looking
+random or hardcoded number; the obvious *expensive* way is inventing five
+new independent computations that inevitably drift from what each
+module's own dashboard already shows for "how well is Compliance/
+Security/etc. doing." This build does neither: two dimensions
+(`compute_sales_intelligence`'s `sequence_completion_rate_percent`,
+`compute_workflow_analytics`'s `success_rate_percent`) call the exact
+existing service functions Sales Intelligence and Automation Analytics
+already use. Security's dimension required extracting logic that
+previously lived inline inside `GET /security/overview`'s handler
+(critical alerts × 10 + critical findings × 8 + high findings × 4 + open
+incidents × 6, floored at 0) into a new `app.secops.service.
+compute_security_score` — a real, low-risk refactor (same formula, same
+tests still pass) rather than copy-pasting the deduction weights a second
+time where they could silently diverge on the next edit. Compliance and
+Support Automation needed genuinely new (but still real) queries:
+Compliance is `implemented Controls / total Controls` org-wide — a
+simpler, independently-computed ratio than the Framework Dashboard's
+per-requirement coverage percent (disclosed as such, not claimed
+identical); Support Automation is a new metric entirely — the share of
+agent-facing reply volume (`TicketMessage.sender_type in (agent, ai)`)
+that was AI-authored and actually auto-sent (`sender_type=ai,
+status=sent`), a direct, honest read of the same `TicketMessage.status`
+field the Support AI Agent cluster already uses to distinguish a
+pending-approval draft from a sent reply.
+
+Named opportunities follow the same discipline as the percentages: "Fix N
+compliance gaps," "Enable MFA for N administrators," "N potential
+high-fit sales accounts identified" (mirroring `app.sales.lead_finder`'s
+own ICP-fit-without-a-Lead query, read-only here rather than the mutating
+`find_and_create_leads`), and two automation-health opportunities derived
+from the same numbers already computed above — never spec §68's literal
+example text ("84 potential high-fit sales accounts," "37% of support
+questions") copied in as a placeholder.
+
+The wizard itself is one route (`/onboarding`) managing 9 screens via
+local step state, not ten separate route folders as
+`docs/ROUTES_AND_SCREENS.md` originally sketched
+(`/onboarding/company`, `/onboarding/goals`, ...). Spec steps 1
+("Company") and 2 ("Business profile") are combined onto one screen —
+step 1 has no fields of its own beyond the organization identity already
+captured at signup — and the backend mirrors this: `PUT /onboarding/
+company` collects both `industry`/`employee_count_range` in one call.
+`OnboardingProfile.current_step` advances by exactly one step per
+completed screen (a `_advance(profile, N)` helper that's a no-op if the
+org is already further along, so re-submitting an earlier step never
+regresses progress), letting the frontend resume a half-finished wizard
+at the right screen from one `GET /onboarding/status` call rather than
+reconstructing progress from ten separate route visits. Steps 8 and 9
+("Connect tools", "Upload knowledge") have no fields at all — they link
+out to the real, already-built Integrations and Knowledge pages (spec
+§80: reuse, don't duplicate) and a single generic `POST /onboarding/
+advance` moves past either.
+
+Building this surfaced a genuine, previously-untested bug unrelated to
+Onboarding itself: `GoalsStepUpdate`'s `@field_validator` raising a plain
+`ValueError` for an unknown goal key crashed `app.main`'s
+`RequestValidationError` handler with a 500 instead of the intended 422 —
+Pydantic v2 embeds the raw exception instance in each error's `ctx`,
+which stdlib `json.dumps` can't serialize. The exact same shape already
+existed in `app.automation.schemas.WorkflowCreate`'s `trigger_type`/
+`steps` validators, just never exercised by an invalid value in any prior
+test. Fixed once, centrally, in the shared exception handler (`exc.
+errors()` through FastAPI's `jsonable_encoder`) rather than working
+around it per-schema, with a regression test covering the pre-existing
+`WorkflowCreate` validator specifically so the fix's value isn't limited
+to the one call site that happened to surface it.

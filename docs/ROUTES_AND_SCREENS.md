@@ -21,9 +21,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/onboarding/company` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed `[~]` "placeholder step", which does not exist in the build output) |
-| `/onboarding/goals` | [ ] does not exist yet |
-| remaining onboarding steps (spec §68) | [ ] |
+| `/onboarding` | [x] real 9-screen wizard covering all 10 spec §68 steps (steps 1-2 combined onto one screen) — Company/Business profile, Goals, Compliance/Security/Sales/Support profiles, Connect tools (links to `/settings/integrations`), Upload knowledge (links to `/knowledge`), and a live-computed "Business AI Readiness" dashboard (5 dimensions + named opportunities) with an "Open Business Command Center" CTA. Resumable via `current_step`. Signup now redirects here instead of straight to the dashboard — built 2026-07-30, PLAT-25. Design note: replaces the originally-sketched per-step routes (`/onboarding/company`, `/onboarding/goals`, ...) with one route managing step state internally, a deliberate simplification (see docs/DECISIONS.md) |
 
 ## CORE (app shell)
 

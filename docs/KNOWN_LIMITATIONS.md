@@ -359,6 +359,19 @@ implied to work.
   submitted at `/mfa-challenge`. No real email provider is wired up yet
   (same log-only dev adapter as password reset) — WebAuthn/hardware-key
   MFA is not implemented, only TOTP.
+- **Onboarding Experience (spec §68) is implemented** (fixed 2026-07-30,
+  completeness-audit backlog PLAT-25): a real 9-screen wizard at
+  `/onboarding` (spec's steps 1-2, Company and Business profile, are
+  combined onto one screen; every other named step maps 1:1), resumable
+  via `OnboardingProfile.current_step`. Steps 8-9 ("Connect tools",
+  "Upload knowledge") deliberately have no fields of their own — they
+  link to the real, already-existing Integrations and Knowledge pages
+  rather than duplicating those flows. Step 10's "Business AI Readiness"
+  output is computed live from real organization data on every request
+  (never stored, never a hardcoded example number) across 5 dimensions
+  and a list of named opportunities — see `SPEC_TRACEABILITY_MATRIX.md`
+  PLAT-25 for exactly which real query backs each one. Signup now
+  redirects new organizations here instead of straight to the dashboard.
 - **No SSO/SAML/SCIM.** Reserved for Phase 10 per the spec.
 - **Multi-entity (spec §53) is real for its "Support:" tier, not its
   "Future:" tier.** `LegalEntity`/`Team` have full CRUD

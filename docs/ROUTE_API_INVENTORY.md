@@ -23,7 +23,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (59 total, from `npm run build` output)
+## Frontend routes (62 total, from `npm run build` output, 2026-07-30)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -32,7 +32,8 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/` | ○ | Unified Dashboard — 2 of 4 metric tiles real, 2 honest "Not available yet" |
 | `/_not-found` | ○ | — |
 | `/login` | ○ | Redirects to `/mfa-challenge` when the account has TOTP enabled |
-| `/signup` | ○ | — |
+| `/signup` | ○ | Redirects to `/onboarding` on success (spec §68) |
+| `/onboarding` | ○ | Real 9-screen guided setup wizard + live-computed Business AI Readiness — PLAT-25 |
 | `/forgot-password` | ○ | — |
 | `/reset-password/[token]` | ƒ | — |
 | `/verify-email/[token]` | ƒ | Consumes an email-verification token |
@@ -99,12 +100,13 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
 also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (172 paths, from live `/openapi.json`, 2026-07-30)
+## Backend API surface (182 paths, from live `/openapi.json`, 2026-07-30)
 
 | Prefix | Paths | Notes |
 |---|---|---|
 | `/auth` | 13 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation |
 | `/organizations` | 12 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
+| `/onboarding` | 10 | status, company, goals, compliance-profile, security-profile, sales-profile, support-profile, advance, readiness, complete — spec §68 |
 | `/tasks`, `/approvals` | 4 | core primitives |
 | `/notifications` | 4 | list, mark-read, preferences (GET/PUT) — real multi-channel dispatch (email/webhook real, Slack/Teams honestly non-deliverable) |
 | `/files` | 2 | upload-url, get |

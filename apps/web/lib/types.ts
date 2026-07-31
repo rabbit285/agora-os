@@ -92,6 +92,45 @@ export const SYSTEM_ROLES: { key: string; name: string }[] = [
   { key: "read_only", name: "Read Only" },
 ];
 
+export type OnboardingProfile = {
+  industry: string | null;
+  employee_count_range: string | null;
+  selected_goals: string[];
+  selected_framework_keys: string[];
+  primary_cloud_provider: string | null;
+  sales_focus: string | null;
+  support_channels: string[];
+  current_step: number;
+  completed_at: string | null;
+};
+
+export const ONBOARDING_GOALS: { key: string; label: string }[] = [
+  { key: "improve_compliance", label: "Improve compliance" },
+  { key: "improve_security", label: "Improve security" },
+  { key: "find_more_customers", label: "Find more customers" },
+  { key: "automate_customer_support", label: "Automate customer support" },
+  { key: "automate_business_operations", label: "Automate business operations" },
+];
+
+export type ReadinessDimension = {
+  label: string;
+  percent: number;
+};
+
+export type ReadinessOpportunity = {
+  title: string;
+  detail: string;
+};
+
+export type Readiness = {
+  compliance: ReadinessDimension;
+  security: ReadinessDimension;
+  sales_automation: ReadinessDimension;
+  support_automation: ReadinessDimension;
+  process_automation: ReadinessDimension;
+  opportunities: ReadinessOpportunity[];
+};
+
 export type Role = {
   key: string;
   name: string;

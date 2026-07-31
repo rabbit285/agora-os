@@ -35,7 +35,9 @@ export default function SignupPage() {
     setServerError(null);
     try {
       await apiFetch("/api/v1/auth/signup", { method: "POST", body: values });
-      router.push("/");
+      // spec §68 — every new organization starts with the guided
+      // onboarding wizard, not the bare dashboard.
+      router.push("/onboarding");
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : "Something went wrong");
     }

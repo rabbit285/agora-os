@@ -22,14 +22,16 @@ consequences, not two separate triggers.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.compliance.models import Risk
 from app.core.models import Task
 from app.core.notifications import notify
-from app.secops.models import SecurityIncident
+from app.secops.models import SecurityAlert, SecurityFinding, SecurityIncident
 
 
 async def create_incident(
@@ -109,3 +111,49 @@ async def create_incident(
         },
     )
     return incident
+
+
+async def compute_security_score(db: AsyncSession, *, organization_id: uuid.UUID) -> int:
+    """The same simple, transparent deduction model `GET /security/overview`
+    computes (spec §13) — extracted here so it has one real implementation
+    used by both that dashboard and the Onboarding readiness score
+    (spec §68), rather than two independently-drifting copies."""
+
+    async def _count(stmt: Any) -> int:
+        result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+        return int(result.scalar_one())
+
+    critical_alerts = await _count(
+        select(SecurityAlert.id).where(
+            SecurityAlert.organization_id == organization_id,
+            SecurityAlert.severity == "critical",
+            SecurityAlert.status.notin_(["resolved", "false_positive"]),
+        )
+    )
+    open_critical_findings = await _count(
+        select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == organization_id,
+            SecurityFinding.severity == "critical",
+            SecurityFinding.status.notin_(["resolved", "false_positive", "risk_accepted"]),
+        )
+    )
+    open_high_findings = await _count(
+        select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == organization_id,
+            SecurityFinding.severity == "high",
+            SecurityFinding.status.notin_(["resolved", "false_positive", "risk_accepted"]),
+        )
+    )
+    open_incidents = await _count(
+        select(SecurityIncident.id).where(
+            SecurityIncident.organization_id == organization_id,
+            SecurityIncident.status != "closed",
+        )
+    )
+    deductions = (
+        critical_alerts * 10
+        + open_critical_findings * 8
+        + open_high_findings * 4
+        + open_incidents * 6
+    )
+    return max(0, 100 - deductions)

@@ -125,15 +125,15 @@ exists, but none produced a route in the Next.js build output (33 real routes, l
 it means the doc cannot be trusted as a completeness source — which is exactly why this
 audit re-derived route status from the live build rather than from the doc.
 
-**Fix applied so far (2026-07-30)**: 2 of the 8 (`/invite/[token]`, `/verify-email/[token]`,
-plus the MFA-challenge screen — 3 of the 8) were already built in an earlier cluster this
-session (PLAT-13/14/15) and are correctly `[x]` now. The remaining 5
-(`/onboarding/company`, `/onboarding/goals`, `/settings/roles`, `/settings/ai-providers`,
-`/notifications`) have been relabeled `[ ]` with an inline correction note — the doc no
-longer overstates their status — but the pages themselves are still not built; that's
-tracked as separate, still-open work (onboarding wizard spec §68, roles/AI-providers
-management UIs, notification dispatch + inbox page), not closed by this documentation fix
-alone.
+**Fix applied (2026-07-30, now complete for all 8)**: `/invite/[token]`, `/verify-email/
+[token]`, and the MFA-challenge screen were already built in an earlier cluster this session
+(PLAT-13/14/15). `/notifications` (PLAT-10), `/settings/roles` and `/settings/ai-providers`,
+and the onboarding wizard (`/onboarding`, replacing the originally-sketched `/onboarding/
+company`+`/onboarding/goals` sub-routes, PLAT-25) are now all real, built, tested pages —
+see their own entries below and in `SPEC_TRACEABILITY_MATRIX.md`. All 8 of finding A3's
+originally-flagged routes are now either accurately documented as `[ ]` (the two remaining
+`/onboarding/company`/`/onboarding/goals` mentions were superseded by the single `/onboarding`
+route) or built and `[x]`.
 
 ### A4. `apps/api/app/audit/models.py` docstring claims a DB-level `REVOKE UPDATE/DELETE` on `audit_events` that does not exist
 
@@ -396,6 +396,29 @@ after the change.
   code is submitted. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-13/14/15. WebAuthn/hardware
   keys remain unimplemented (TOTP only) and no real email provider is wired up (same
   log-only dev adapter as password reset).
+- **[FIXED 2026-07-30]** ~~Onboarding Experience (spec §68) — the 10-step guided setup
+  wizard and "Business AI Readiness" output — was entirely unbuilt~~ — a real 9-screen
+  wizard now exists at `/onboarding` (steps 1-2 combined onto one screen; every other
+  step maps 1:1), backed by a new `OnboardingProfile` model and resumable via
+  `current_step`. Step 10's readiness output is computed live from real data on every
+  request, never stored: Compliance (implemented/total Controls ratio), Security (the
+  exact formula `GET /security/overview` uses, now shared via a new
+  `app.secops.service.compute_security_score` extracted for this purpose), Sales
+  Automation (reuses `compute_sales_intelligence`), Support Automation (a new, real
+  AI-authored-and-auto-sent-vs-total-replies ratio), Process Automation (reuses
+  `compute_workflow_analytics`) — plus named opportunities (compliance gaps, admins
+  without MFA, ICP-fit accounts without a Lead, manual support-reply share, stalled
+  workflow runs) computed the same way, never hardcoded example text. Signup now
+  redirects to `/onboarding` instead of straight to the dashboard. See
+  `SPEC_TRACEABILITY_MATRIX.md` PLAT-25. Building this surfaced and fixed a real,
+  previously-untested cross-cutting bug: Pydantic v2 embeds the raw exception instance
+  in `ctx` for any custom `@field_validator` that raises `ValueError`, which crashed
+  `app.main`'s `RequestValidationError` handler (500 instead of the intended 422) for
+  *every* such validator in this codebase, not just the new Onboarding one — fixed by
+  running `exc.errors()` through FastAPI's `jsonable_encoder` first, with a regression
+  test (`tests/test_validation_error_handling.py`) covering the pre-existing
+  `WorkflowCreate.trigger_type` validator that had never been exercised by an invalid
+  value in any prior test.
 - **[FIXED 2026-07-30]** ~~4 of 16 seeded system roles had zero permission grants; zero
   `knowledge.*`/`copilot.*`/`ai.*` permission keys existed~~ — `executive`,
   `operations_manager`, and `employee` now carry scoped grants (approvals/tasks/

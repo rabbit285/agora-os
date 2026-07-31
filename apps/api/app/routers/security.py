@@ -43,7 +43,7 @@ from app.secops.schemas import (
     TimelineEntryCreate,
     TimelineEntryOut,
 )
-from app.secops.service import create_incident
+from app.secops.service import compute_security_score, create_incident
 
 router = APIRouter(prefix="/api/v1/security", tags=["security"])
 
@@ -118,30 +118,9 @@ async def get_security_overview(
         round(100 * incidents_with_evidence / total_incidents, 1) if total_incidents else 0.0
     )
 
-    # A simple, transparent deduction model: start at 100 and subtract a
-    # fixed weight per open critical/high item, floored at 0 — not a
-    # fabricated or externally-benchmarked "score".
-    open_high_findings = await _count(
-        select(SecurityFinding.id).where(
-            SecurityFinding.organization_id == org_id,
-            SecurityFinding.severity == "high",
-            SecurityFinding.status.notin_(["resolved", "false_positive", "risk_accepted"]),
-        )
-    )
-    open_critical_findings = await _count(
-        select(SecurityFinding.id).where(
-            SecurityFinding.organization_id == org_id,
-            SecurityFinding.severity == "critical",
-            SecurityFinding.status.notin_(["resolved", "false_positive", "risk_accepted"]),
-        )
-    )
-    deductions = (
-        critical_alerts * 10
-        + open_critical_findings * 8
-        + open_high_findings * 4
-        + open_incidents * 6
-    )
-    security_score = max(0, 100 - deductions)
+    # Simple, transparent deduction model (spec §13) — shared with the
+    # Onboarding readiness score (spec §68), see app.secops.service.
+    security_score = await compute_security_score(db, organization_id=org_id)
 
     return SecurityOverviewOut(
         security_score=security_score,

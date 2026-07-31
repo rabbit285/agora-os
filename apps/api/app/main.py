@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -26,6 +27,7 @@ from app.routers import (
     integrations,
     knowledge,
     notifications,
+    onboarding,
     organizations,
     sales,
     search,
@@ -97,14 +99,24 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    # Pydantic v2 includes the raw exception instance in each error's `ctx`
+    # for a custom `@field_validator` that raises `ValueError` (e.g.
+    # app.onboarding.schemas.GoalsStepUpdate, app.automation.schemas.
+    # WorkflowCreate) — stdlib `json.dumps` can't serialize that, so every
+    # such validator previously 500'd instead of returning the intended
+    # 422. `jsonable_encoder` is FastAPI's own sanitizer for exactly this.
     return _error_envelope(
-        request, status.HTTP_422_UNPROCESSABLE_ENTITY, "Validation error", exc.errors()
+        request,
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "Validation error",
+        jsonable_encoder(exc.errors()),
     )
 
 
 app.include_router(health.router)
 app.include_router(auth_router)
 app.include_router(organizations.router)
+app.include_router(onboarding.router)
 app.include_router(tasks.router)
 app.include_router(approvals.router)
 app.include_router(files.router)
