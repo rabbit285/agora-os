@@ -22,3 +22,11 @@ class CopilotAskResponse(BaseModel):
     model: str
     grounded: bool
     citations: list[CitationOut]
+
+
+class AIProviderStatusOut(BaseModel):
+    provider_key: str
+    name: str
+    has_adapter: bool
+    configured: bool
+    active: bool

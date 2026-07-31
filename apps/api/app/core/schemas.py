@@ -108,6 +108,12 @@ class TeamOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RoleOut(BaseModel):
+    key: str
+    name: str
+    permissions: list[str]
+
+
 class MembershipOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

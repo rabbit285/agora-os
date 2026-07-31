@@ -92,6 +92,20 @@ export const SYSTEM_ROLES: { key: string; name: string }[] = [
   { key: "read_only", name: "Read Only" },
 ];
 
+export type Role = {
+  key: string;
+  name: string;
+  permissions: string[];
+};
+
+export type AIProviderStatus = {
+  provider_key: string;
+  name: string;
+  has_adapter: boolean;
+  configured: boolean;
+  active: boolean;
+};
+
 export type Notification = {
   id: string;
   title: string;

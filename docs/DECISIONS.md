@@ -1703,3 +1703,50 @@ frontend, finding A3) is the other real half of spec §66: a genuine inbox
 plus per-channel preference toggles, each channel's toggle labeled
 honestly ("Not deliverable" for Slack/Teams) rather than presented as
 uniformly functional.
+
+## ADR-0046 — /settings/roles is a reference view, never an editor, because every role in this build is a system role shared across every organization; /settings/ai-providers stays environment-variable-only, matching every other credential in this codebase
+
+**Decision**: both pages were previously documented (`docs/ROUTES_AND_
+SCREENS.md`) as at least partially built — `/settings/roles` as "read-only
+view", `/settings/ai-providers` as "shows configured/not-configured
+state" — but neither existed anywhere in the codebase (finding A3).
+Building them raised one real design question each.
+
+`/settings/roles`: could this be a role *editor*? No, and not because of
+scope-cutting — the data model makes it actively unsafe. Every one of the
+16 default roles (`app.core.rbac.SYSTEM_ROLE_KEYS`) is seeded with
+`organization_id = NULL`, meaning `Role.compliance_manager` (say) is the
+literal same database row for every organization in this deployment. A
+"Roles" settings page that let one org's admin toggle a permission on
+`compliance_manager` would silently change what every *other*
+organization's Compliance Managers can do — a cross-tenant mutation
+disguised as a per-org settings change, and a serious one. This build has
+no per-org custom-role concept (spec §54 doesn't ask for one either, only
+"Use capability permissions"), so there is no safe "your org's copy of
+this role" to edit. `/settings/roles` is therefore a real reference view
+— live data from a new `GET /organizations/current/roles` (join
+`Role`/`RolePermission`/`Permission`, filtered to `organization_id IS
+NULL`) — not a stub with fewer buttons than the finding's "read-only
+view" implied; the honest scope decision is disclosed on the page itself
+and in `docs/KNOWN_LIMITATIONS.md`, not hidden.
+
+`/settings/ai-providers`: the natural instinct for a "configure AI
+providers" page is a form that writes an API key to the database. That
+would be a regression relative to how every other credential in this
+codebase works — all seven OAuth integration providers, and both AI
+providers already, are environment-variable-only (`ANTHROPIC_API_KEY`,
+`HUBSPOT_CLIENT_ID`, etc.), never stored in Postgres. Introducing the
+first-ever DB-stored secret for this one feature would mean a new
+encryption-at-rest decision, a new access-control surface, and a
+precedent this codebase's `.env.example`-based config model doesn't
+otherwise have — disproportionate to what spec §57 actually asks for
+("Model routing based on... provider adapters"). The page is instead a
+real-time status view (`GET /ai/providers`): has-adapter, configured (the
+env var is actually set), active (is this the provider `AI_PROVIDER`
+routes to right now) — genuinely live data, just never a write path for a
+secret. Building it surfaced a previously-undocumented gap: spec §57
+lists Azure OpenAI without the "architecture" qualifier it gives Google
+(and the "future" qualifier it gives Local/private), meaning a real Azure
+OpenAI adapter is nominally in scope — this build has none, now disclosed
+as `has_adapter: false` on the page itself rather than silently absent,
+tracked in `docs/REMAINING_PRODUCT_GAPS.md`.

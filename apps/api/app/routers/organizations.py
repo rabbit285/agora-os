@@ -15,7 +15,9 @@ from app.core.models import (
     Membership,
     MembershipRole,
     Organization,
+    Permission,
     Role,
+    RolePermission,
     Team,
 )
 from app.core.schemas import (
@@ -25,6 +27,7 @@ from app.core.schemas import (
     MembershipOut,
     OrganizationSettingsOut,
     OrganizationSettingsUpdate,
+    RoleOut,
     TeamCreate,
     TeamOut,
     TeamUpdate,
@@ -81,6 +84,41 @@ async def get_my_permissions(
     Create needs to filter its options by permission client-side, the same
     set `require_permission()` already checks server-side on every write)."""
     return sorted(context.permissions)
+
+
+@router.get("/current/roles", response_model=list[RoleOut])
+async def list_roles(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[RoleOut]:
+    """spec §54's default role list, each with its real granted permission
+    keys — a reference view (`/settings/roles`), not an editor: every role
+    here is a system role (`organization_id IS NULL`, shared across every
+    organization in this deployment), so editing one from a single org's
+    settings page would silently change what every *other* organization's
+    same-named role can do. This build has no per-org custom roles yet
+    (spec §54 doesn't ask for one), so there is nothing safe to edit —
+    disclosed in docs/KNOWN_LIMITATIONS.md rather than building an editor
+    that would mutate shared state."""
+    roles = (
+        (await db.execute(select(Role).where(Role.organization_id.is_(None)).order_by(Role.key)))
+        .scalars()
+        .all()
+    )
+    grants = (
+        await db.execute(
+            select(RolePermission.role_id, Permission.key).join(
+                Permission, Permission.id == RolePermission.permission_id
+            )
+        )
+    ).all()
+    permissions_by_role: dict[uuid.UUID, list[str]] = {}
+    for role_id, permission_key in grants:
+        permissions_by_role.setdefault(role_id, []).append(permission_key)
+    return [
+        RoleOut(key=role.key, name=role.name, permissions=sorted(permissions_by_role.get(role.id, [])))
+        for role in roles
+    ]
 
 
 @router.get("/current/members", response_model=list[MembershipOut])

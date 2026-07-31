@@ -58,8 +58,10 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { label: "Organization", href: "/settings/organization", implemented: true },
       { label: "Users", href: "/settings/users", implemented: true },
+      { label: "Roles", href: "/settings/roles", implemented: true },
       { label: "Security", href: "/settings/security", implemented: true },
       { label: "Integrations", href: "/settings/integrations", implemented: true },
+      { label: "AI Providers", href: "/settings/ai-providers", implemented: true },
     ],
   },
 ];

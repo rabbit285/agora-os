@@ -11,9 +11,23 @@ implied to work.
   **Automation** — all five primary product modules — have their core
   backbones (see below) but not their larger sub-features. See
   `docs/IMPLEMENTATION_PLAN.md` for the phase order.
+- **AI Model Gateway (spec §57)**: Anthropic and OpenAI have real, live
+  adapters (`app.ai.adapters`), each activating only when its API key is
+  set via environment variable (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`) and
+  selected via `AI_PROVIDER` — otherwise the gateway honestly runs
+  `DemoAdapter`, never a fabricated response. Real-time status for every
+  named provider (has-adapter / configured / active) is visible at
+  `/settings/ai-providers` (fixed 2026-07-30). **Azure OpenAI has no
+  adapter** — the only provider spec §57 lists without an explicit
+  "architecture"/"future" qualifier that still has zero implementation,
+  surfaced while building that status page (`has_adapter: false`,
+  disclosed on the page itself, not silently omitted). Google carries the
+  spec's own "architecture" qualifier; "Local/private" carries "future" —
+  both legitimately unbuilt.
 - **Integrations (Phase 9)**: a generic inbound Webhook connector plus a
-  six-provider OAuth2 framework (HubSpot, Google, Microsoft, GitHub,
-  Slack, Salesforce) are implemented — see the dedicated bullet below.
+  seven-provider OAuth2 framework (HubSpot, Google, Microsoft, GitHub,
+  Slack, Salesforce, Zendesk) are implemented — see the dedicated bullet
+  below.
   Every other spec §48 category (Email, Marketing, Cloud, remaining
   Identity/Engineering/Communication/Documents/Accounting connectors)
   still needs a real third-party OAuth app or API key this environment

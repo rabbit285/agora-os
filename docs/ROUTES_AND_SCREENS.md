@@ -125,8 +125,8 @@ table rather than a fourth table.
 | `/settings/organization` | [x] name/slug profile; Legal Entities section (create, promote-to-default, archive) and Teams section (create, link to a legal entity, archive) — spec §53's "Support:" multi-tenancy tier |
 | `/settings/users` | [x] member list + invite-a-member form (email + role) + pending-invitations list with revoke |
 | `/settings/security` | [x] email verification status/resend, TOTP MFA enroll/confirm/disable |
-| `/settings/roles` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed here as `[~]` "read-only view", which does not exist in the build output either) |
-| `/settings/ai-providers` | [ ] does not exist yet (corrected 2026-07-30 — finding A3: was previously listed here as `[~]` "shows configured/not-configured state", which does not exist in the build output either) |
+| `/settings/roles` | [x] all 16 system roles listed with their real granted permissions (expandable); deliberately a reference view, not an editor — see docs/KNOWN_LIMITATIONS.md for why — built 2026-07-30 |
+| `/settings/ai-providers` | [x] real-time status per spec §57 provider (has-adapter/configured/active), demo-mode banner when none active — built 2026-07-30 |
 | `/settings/integrations` | [x] provider catalog for 7 OAuth providers (permission preview of requested scopes before Connect, Not-configured badge), OAuth connections (health/scopes/sync history, refresh/disconnect/sync-now — sync polls a durable Temporal job to completion), webhook connections (create, copy URL/secret, link/unlink a workflow, received events) |
 | all other settings sub-pages (spec §67 SETTINGS group) | [ ] |
 

@@ -442,8 +442,26 @@ after the change.
   finding A3) alongside a real inbox. 5 backend + 5 frontend tests; live-verified: a
   critical security incident's notification came back with
   `channels_delivered: ["in_app", "email"]` and a real log line for the email dispatch.
-- **MISSING**: Billing & entitlements, Reporting module, standalone `/settings/roles`
-  management UI (does not exist), `/settings/ai-providers` management UI (does not exist).
+- **[FIXED 2026-07-30]** ~~standalone `/settings/roles` management UI (does not exist),
+  `/settings/ai-providers` management UI (does not exist)~~ — both now exist. `/settings/
+  roles`: a new `GET /organizations/current/roles` returns all 16 system roles with their
+  real granted permission keys (joining `Role`/`RolePermission`/`Permission`); the frontend
+  lists each role, expandable to show its exact permissions. Deliberately a reference view,
+  not an editor — every role here is a system role shared across every organization in this
+  deployment (`organization_id IS NULL`), and this build has no per-org custom roles, so
+  there's nothing safe to let one org's admin edit. `/settings/ai-providers`: a new `GET
+  /ai/providers` reports each spec §57 provider's real status — has-adapter, configured (a
+  real env var is set), active (is the one `AI_PROVIDER` actually routes to). No API key is
+  ever written to the database for any provider (same environment-variable-only convention
+  every OAuth integration follows) — this is a status view, not a secrets form. Surfaced a
+  previously-undocumented gap while building it: spec §57 lists "Azure OpenAI" without an
+  "architecture" qualifier (only "Google" carries one), meaning a real Azure OpenAI adapter
+  is technically in scope but has zero code — now disclosed honestly as `has_adapter: false`
+  rather than silently absent from the page. 3 backend + 5 frontend tests; live-verified.
+- **MISSING**: Billing & entitlements, Reporting module.
+- **MISSING (spec §57, surfaced while building the AI Providers status page above)**: Azure
+  OpenAI has no adapter — the only spec §57 Model Gateway provider without an explicit
+  "architecture"/"future" qualifier that still has zero implementation.
 - **MISSING (Business Intelligence layer, spec §86-90)**: Business Process Discovery, AI
   Recommendation Engine, AI Daily Briefing, Business AI Memory, Business Rules Engine —
   none implemented.

@@ -83,30 +83,32 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/automation/workflows/[id]` | ƒ | Visual @xyflow/react drag-and-drop Step Builder (draft only), version history, polling run history |
 | `/automation/templates` | ○ | Workflow Templates gallery, clone-to-draft |
 | `/automation/connections` | ○ | Reuses `GET /integrations/connections` |
-| `/settings/organization` | ○ | — |
+| `/settings/organization` | ○ | Profile, Legal Entities/Teams (PLAT-16), notification webhook URL |
 | `/settings/users` | ○ | Member list + invite-a-member form + pending-invitations list with revoke |
+| `/settings/roles` | ○ | All 16 system roles + real granted permissions (reference view, not an editor) |
 | `/settings/security` | ○ | Email verification status/resend, TOTP MFA enroll/confirm/disable |
 | `/settings/integrations` | ○ | Provider catalog, OAuth connections, webhooks |
+| `/settings/ai-providers` | ○ | Real-time status per spec §57 provider (has-adapter/configured/active) |
+| `/notifications` | ○ | Inbox (list, mark-read) + per-channel preference toggles |
 | `/coming-soon` | ƒ | Honest not-yet-built landing for unimplemented modules |
 
 ### Documented-but-nonexistent routes (drift, see gaps §A3)
 
-`/onboarding/company`, `/onboarding/goals`, `/settings/roles`,
-`/settings/ai-providers` — listed in `docs/ROUTES_AND_SCREENS.md` as `[ ]` (corrected
-2026-07-30 from a misleading `[~]`), still produce no route in the build. (`/invite/
-[token]`, `/verify-email/[token]`, the MFA challenge, and `/notifications` were also in
-this list at earlier audit points; all 4 are now built — see above.)
+`/onboarding/company`, `/onboarding/goals` — listed in `docs/ROUTES_AND_SCREENS.md` as
+`[ ]`, still produce no route in the build. (`/invite/[token]`, `/verify-email/[token]`,
+the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
+also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (170 paths, from live `/openapi.json`, 2026-07-30)
+## Backend API surface (172 paths, from live `/openapi.json`, 2026-07-30)
 
 | Prefix | Paths | Notes |
 |---|---|---|
 | `/auth` | 13 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation |
-| `/organizations` | 11 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
+| `/organizations` | 12 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
 | `/tasks`, `/approvals` | 4 | core primitives |
 | `/notifications` | 4 | list, mark-read, preferences (GET/PUT) — real multi-channel dispatch (email/webhook real, Slack/Teams honestly non-deliverable) |
 | `/files` | 2 | upload-url, get |
-| `/ai/copilot` | 1 | `/ask` (real reranking now runs between retrieval and generation) |
+| `/ai` | 2 | `/copilot/ask` (real reranking now runs between retrieval and generation), `/providers` (real-time status per spec §57 provider) |
 | `/knowledge` | 6 | documents (list/create/get/chunks) incl. real XLSX/HTML extraction, knowledge-bases, graph (entity-types, entity traversal) |
 | `/search` | 1 | tenant-scoped substring search across 16 entity types |
 | `/compliance` | 53 | by far the largest surface — controls, risks, evidence, policies (incl. publish status), frameworks (incl. per-framework dashboard), vendors, questionnaires, audits, ai-systems, ai-incidents, processing-activities, dpias, dsars, data-transfers, security-reviews |
