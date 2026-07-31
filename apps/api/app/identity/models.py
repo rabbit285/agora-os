@@ -59,6 +59,24 @@ class EmailVerificationToken(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class SsoLoginAttempt(UUIDPrimaryKeyMixin, Base):
+    """spec §59 SSO — a single-use CSRF token for the pre-login
+    authorize→callback round trip, the same "capability token" pattern
+    `IntegrationConnection.oauth_state` uses for the (post-login,
+    org-scoped) Integrations OAuth flow. SSO has no session/org context
+    yet when the callback fires, so this table (not a cookie or an
+    existing row) is what proves a callback belongs to a request this
+    server actually issued."""
+
+    __tablename__ = "sso_login_attempts"
+
+    state_token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Session(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "sessions"
 

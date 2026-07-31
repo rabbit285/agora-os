@@ -100,11 +100,11 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
 also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (182 paths, from live `/openapi.json`, 2026-07-30)
+## Backend API surface (185 paths, from live `/openapi.json`, 2026-07-30)
 
 | Prefix | Paths | Notes |
 |---|---|---|
-| `/auth` | 13 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation |
+| `/auth` | 16 | signup, login, logout, me, forgot/reset-password, verify-email, resend-verification-email, mfa/{enroll,confirm,disable,verify}, accept-invitation, sso/providers, sso/{provider}/start, sso/{provider}/callback (spec §59) |
 | `/organizations` | 12 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
 | `/onboarding` | 10 | status, company, goals, compliance-profile, security-profile, sales-profile, support-profile, advance, readiness, complete — spec §68 |
 | `/tasks`, `/approvals` | 4 | core primitives |

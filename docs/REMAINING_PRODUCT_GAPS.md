@@ -441,8 +441,17 @@ after the change.
   live-verified. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-16.
 - **AWS_EXCLUDED / not yet attempted, consistent with spec's own "Future:" deferral in
   §53**: parent organization / subsidiaries hierarchy, Agency/consultant multi-client mode
-  (tracked as PLAT-17), regional hosting. SSO/SAML/SCIM moved out of this bucket — see
-  below.
+  (tracked as PLAT-17), regional hosting.
+- **[FIXED 2026-07-30]** ~~SSO/SAML/SCIM — treated as a bundled Phase-10 deferral~~ — this
+  conflated spec §59's plain "SSO" line item with the same line's "SAML architecture"/"SCIM
+  architecture" items, which carry a real qualifier SSO itself doesn't. Real Sign-in-with-
+  Google/Microsoft SSO now exists (`app/identity/sso.py`) — genuinely reuses the existing
+  OAuth adapters' token-exchange call with a minimal identity-only scope, auto-provisions a
+  new organization on first login exactly like normal signup, and honestly refuses (400) to
+  start a flow for a provider that isn't really configured rather than fabricating a login.
+  SAML and SCIM remain unbuilt, correctly disclosed as architecture-ready-not-built per
+  their own spec qualifier — see `SPEC_TRACEABILITY_MATRIX.md` PLAT-18 and
+  `KNOWN_LIMITATIONS.md`.
 - **[FIXED 2026-07-30]** ~~Global Create button~~ — spec §72's "Create" nav button is real:
   `GlobalCreateButton` in the top nav (`apps/web/components/global-create-button.tsx`)
   fetches the current user's real permission keys (new `GET /organizations/current/

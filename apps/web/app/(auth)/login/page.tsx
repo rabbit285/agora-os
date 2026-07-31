@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -19,6 +20,55 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+type SsoProviderStatus = { provider: string; configured: boolean };
+
+const SSO_LABELS: Record<string, string> = { google: "Google", microsoft: "Microsoft" };
+
+function SsoButtons() {
+  const { data: providers } = useQuery<SsoProviderStatus[]>({
+    queryKey: ["auth", "sso", "providers"],
+    queryFn: () => apiFetch<SsoProviderStatus[]>("/api/v1/auth/sso/providers"),
+  });
+
+  const startSso = useMutation({
+    mutationFn: (provider: string) =>
+      apiFetch<{ authorization_url: string }>(`/api/v1/auth/sso/${provider}/start`),
+    onSuccess: (data) => {
+      window.location.href = data.authorization_url;
+    },
+  });
+
+  const configured = providers?.filter((p) => p.configured) ?? [];
+  if (configured.length === 0) return null;
+
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      {configured.map((p) => (
+        <Button
+          key={p.provider}
+          variant="outline"
+          disabled={startSso.isPending}
+          onClick={() => startSso.mutate(p.provider)}
+        >
+          Sign in with {SSO_LABELS[p.provider] ?? p.provider}
+        </Button>
+      ))}
+      <div className="flex items-center gap-2 text-xs text-neutral-400">
+        <div className="h-px flex-1 bg-neutral-200" />
+        or
+        <div className="h-px flex-1 bg-neutral-200" />
+      </div>
+    </div>
+  );
+}
+
+function SsoErrorBanner() {
+  const searchParams = useSearchParams();
+  const ssoError = searchParams.get("error");
+  if (!ssoError) return null;
+  return <p className="mb-4 text-sm text-red-600">{ssoError}</p>;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,6 +98,10 @@ export default function LoginPage() {
         <CardTitle>Log in</CardTitle>
       </CardHeader>
       <CardContent>
+        <SsoButtons />
+        <Suspense fallback={null}>
+          <SsoErrorBanner />
+        </Suspense>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Email</Label>

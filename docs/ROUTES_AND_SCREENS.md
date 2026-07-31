@@ -9,7 +9,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/login` | [x] redirects to MFA challenge when the account has TOTP enabled |
+| `/login` | [x] redirects to MFA challenge when the account has TOTP enabled; real "Sign in with Google/Microsoft" SSO buttons shown only for a provider that's actually configured (spec §59, PLAT-18) |
 | `/signup` | [x] |
 | `/invite/[token]` | [x] accept an org invitation, creating or attaching the user |
 | `/forgot-password` | [x] |

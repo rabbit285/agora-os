@@ -372,7 +372,20 @@ implied to work.
   and a list of named opportunities — see `SPEC_TRACEABILITY_MATRIX.md`
   PLAT-25 for exactly which real query backs each one. Signup now
   redirects new organizations here instead of straight to the dashboard.
-- **No SSO/SAML/SCIM.** Reserved for Phase 10 per the spec.
+- **SSO is real; SAML/SCIM are not** (fixed 2026-07-30, completeness-audit
+  backlog PLAT-18): spec §59 lists "SSO" plain but "SAML architecture" and
+  "SCIM architecture" — only the latter two carry the spec's own
+  deferral qualifier. `/login` has real "Sign in with Google"/"Sign in
+  with Microsoft" buttons (shown only when that provider is actually
+  configured, via a public `GET /auth/sso/providers` status check) that
+  reuse the exact same OAuth adapters Integrations uses for the token
+  exchange, with a minimal identity-only scope rather than Integrations'
+  broader Calendar/Gmail/Drive/Mail scopes. A first-time SSO login
+  auto-provisions a brand-new organization exactly like normal signup
+  (new org_admin Membership, default LegalEntity) since there's no
+  invitation-only-SSO concept in this build. SAML and SCIM remain
+  genuinely unbuilt — that really is Phase 10 per spec's own qualifier
+  for those two specifically, not for SSO.
 - **Multi-entity (spec §53) is real for its "Support:" tier, not its
   "Future:" tier.** `LegalEntity`/`Team` have full CRUD
   (`/organizations/current/legal-entities`, `/teams`; migration

@@ -1823,3 +1823,48 @@ errors()` through FastAPI's `jsonable_encoder`) rather than working
 around it per-schema, with a regression test covering the pre-existing
 `WorkflowCreate` validator specifically so the fix's value isn't limited
 to the one call site that happened to surface it.
+
+## ADR-0048 — SSO reuses the Integrations OAuth adapters' token exchange but requests its own minimal identity scope; a first-time SSO login auto-provisions an organization exactly like signup
+
+**Decision**: spec §59 lists "SSO" as a plain requirement, distinct from
+"SAML architecture" and "SCIM architecture" on the same line — only the
+latter two carry spec's own deferral qualifier, so PLAT-18 built real
+Sign-in-with-Google/Microsoft rather than bundling all three into one
+Phase-10 deferral (the completeness audit's original framing had
+conflated them). The interesting design decision is *how much* of the
+existing Integrations OAuth machinery to reuse. `exchange_code_for_tokens`
+is reused as-is (`app.integrations.adapters.get_oauth_adapter`) — it's a
+pure code-for-token HTTP call that doesn't care what scope was granted,
+so reusing it for login is free. The authorization URL is **not** reused:
+`GoogleAdapter`/`MicrosoftAdapter`'s `authorization_url()` requests the
+full Integrations scope set (Calendar, Gmail, Drive for Google; Calendar,
+Outlook Mail for Microsoft, per ADR-0042's Integrations widening) —
+requesting that for a *login* would mean every SSO sign-in silently grants
+calendar/email read access the user never asked for. `app.identity.sso`
+builds its own authorization URL directly, with a real minimal identity
+scope (`openid email` / `openid email profile User.Read`) that still
+exchanges cleanly through the shared, unmodified `exchange_code_for_tokens`
+call. Identity resolution (the real email address a login needs) is a
+new, separate call against each provider's real userinfo/me endpoint —
+deliberately not folded into the Integrations `HealthResult`/`SyncResult`
+shapes, which were designed for connection-health/data-sync, not login
+identity, and widening them would be a scope leak in the other direction.
+
+A pre-login CSRF state token needed its own table
+(`SsoLoginAttempt`/migration `d00cf4861648`) rather than reusing
+`IntegrationConnection.oauth_state`, since that field belongs to an
+already-authenticated, org-scoped connection row that doesn't exist yet
+during a login flow — the same "capability token" pattern, applied where
+no prior row exists to hang it off of. A first-time SSO login (no
+matching `User.email`) auto-provisions a brand-new Organization using the
+identical shape `app.identity.service.signup` already establishes (new
+`User`, default `LegalEntity`, `org_admin` `Membership`) rather than
+inventing a second onboarding path — the password field is a random,
+never-shared value (this account can only ever authenticate via SSO,
+which is honest given how it was created) and `email_verified_at` is set
+immediately, since the identity provider's own verification is a stronger
+real signal than this build's own email-link verification. `start_sso_login`
+refuses (400) outright when a provider isn't actually configured — this
+build never falls back to `MockOAuthAdapter` for SSO the way Integrations
+does for a demo connection, since a mocked *login* would mean creating a
+real `User`/`Session` from a fabricated identity, not a labeled demo.

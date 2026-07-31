@@ -91,3 +91,12 @@ class AcceptInvitationRequest(BaseModel):
 class AcceptInvitationResponse(BaseModel):
     user: UserOut
     organization: OrganizationOut
+
+
+class SsoStartResponse(BaseModel):
+    authorization_url: str
+
+
+class SsoProviderStatusOut(BaseModel):
+    provider: str
+    configured: bool

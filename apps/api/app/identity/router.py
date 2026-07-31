@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.invitations import accept_invitation
 from app.db.session import get_db
 from app.dependencies import get_current_user
-from app.identity import service
+from app.identity import service, sso
 from app.identity.models import Session as SessionModel
 from app.identity.models import User
 from app.identity.schemas import (
@@ -22,9 +25,12 @@ from app.identity.schemas import (
     ResetPasswordRequest,
     SignupRequest,
     SignupResponse,
+    SsoProviderStatusOut,
+    SsoStartResponse,
     UserOut,
     VerifyEmailRequest,
 )
+from app.integrations.adapters import is_provider_configured
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -70,6 +76,69 @@ async def login_endpoint(
     )
     _set_session_cookie(response, session.raw_token)  # type: ignore[attr-defined]
     return LoginResponse(user=UserOut.model_validate(user), mfa_required=mfa_required)
+
+
+@router.get("/sso/providers", response_model=list[SsoProviderStatusOut])
+async def sso_providers_endpoint() -> list[SsoProviderStatusOut]:
+    """Public — no auth, since this backs the pre-login page. Reveals only
+    a boolean, the same non-secret `configured` field the (authenticated)
+    Integrations provider catalog already exposes."""
+    return [
+        SsoProviderStatusOut(provider=provider, configured=is_provider_configured(provider))
+        for provider in sso.SSO_PROVIDERS
+    ]
+
+
+@router.get("/sso/{provider}/start", response_model=SsoStartResponse)
+async def sso_start_endpoint(
+    provider: str, db: AsyncSession = Depends(get_db)
+) -> SsoStartResponse:
+    """No session dependency — this is the pre-login entry point (spec
+    §59 SSO). Raises 400 if the provider isn't really configured rather
+    than returning a URL that would fail at Google/Microsoft."""
+    url = await sso.start_sso_login(db, provider=provider)
+    return SsoStartResponse(authorization_url=url)
+
+
+@router.get("/sso/{provider}/callback")
+async def sso_callback_endpoint(
+    provider: str,
+    code: str,
+    state: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    """No session dependency — a top-level browser redirect from the
+    provider. `state` (not a cookie) proves this belongs to a login this
+    server actually started, the same pattern
+    `app.routers.integrations.oauth_callback` uses. Sets the session
+    cookie directly on the returned `RedirectResponse` rather than the
+    usual injected `response: Response` dependency — FastAPI does not
+    merge that dependency's cookies onto a `Response` subclass an endpoint
+    returns directly, only onto a response it constructs itself from a
+    plain return value."""
+    try:
+        user, session, mfa_required, is_new_user = await sso.complete_sso_login(
+            db,
+            provider=provider,
+            code=code,
+            state=state,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except (ValueError, HTTPException) as exc:
+        await db.rollback()
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        return RedirectResponse(url=f"{settings.app_url}/login?error={quote(str(detail))}")
+
+    if mfa_required:
+        redirect = RedirectResponse(url=f"{settings.app_url}/mfa-challenge")
+    elif is_new_user:
+        redirect = RedirectResponse(url=f"{settings.app_url}/onboarding")
+    else:
+        redirect = RedirectResponse(url=f"{settings.app_url}/")
+    _set_session_cookie(redirect, session.raw_token)  # type: ignore[attr-defined]
+    return redirect
 
 
 @router.post("/logout")
