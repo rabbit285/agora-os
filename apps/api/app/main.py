@@ -25,6 +25,7 @@ from app.routers import (
     approvals,
     automation,
     billing,
+    briefing,
     compliance,
     files,
     health,
@@ -150,3 +151,4 @@ app.include_router(trust_center.router)
 app.include_router(search.router)
 app.include_router(reporting.router)
 app.include_router(recommendations.router)
+app.include_router(briefing.router)

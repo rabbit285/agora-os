@@ -2169,3 +2169,43 @@ alternative (always overwrite, or re-surface a dismissed item once its
 count changes) would make "Dismiss" meaningless — a user who dismissed
 "3 controls need attention" would see it reappear the moment a 4th
 control was added, training them to ignore the feature.
+
+## ADR-0054 — The Daily Briefing is a real per-organization-per-day cached artifact, not a live-recomputed view, and its "AI suggestion" reuses the Recommendation Engine outright
+
+**Decision**: spec §88 literally names the feature "AI **Daily** Briefing"
+— a cadence word, not just a feature name. `app.briefing.Briefing` is
+therefore modeled as one row per `(organization_id, briefing_date)`
+(migration `ef62f447e486`), generated on the first `GET /briefing` call
+of a calendar day and returned unchanged for every subsequent call that
+same day, rather than recomputed live like `app.recommendations` (ADR-
+0053) — a test proves this explicitly: creating a new critical security
+alert *after* the day's briefing was generated does not change the
+already-generated briefing's Urgent section. This mirrors what "daily"
+actually implies for a real user: a stable morning snapshot to act on,
+not a number that shifts every time the page reloads.
+
+Each of the 5 spec-named sections (Urgent/Revenue/Customers/Risk/
+Operations) queries one real table directly rather than reusing a
+prior aggregate, because none of the other modules' existing dashboards
+compute quite the right shape — Security Overview counts open critical
+*alerts* across all severities differently than "how many need
+attention today," Sales Intelligence's `pipeline_value_by_stage` is a
+per-stage breakdown rather than a single open-pipeline total. Where a
+prior computation genuinely fit, it was reused: the "AI suggestion"
+line is not a sixth generator — it calls `app.recommendations.
+service.refresh_recommendations`/`list_recommendations` directly and
+surfaces the single highest-risk active recommendation's own
+`suggested_action`, honestly returning nothing when there are no
+active recommendations rather than inventing a suggestion. This is the
+same reuse discipline as every prior cluster, applied here specifically
+because spec §88's own example ends with "AI suggestion: Automate your
+support escalation process" immediately after listing recommendation-
+shaped concerns — the two features are clearly meant to share a spine,
+not run two independent judgment engines that could disagree.
+
+Every section's empty state is an honest sentence ("No critical
+security alerts open," "No DSARs approaching deadline") rather than a
+zero or an omitted section — spec §82's discipline applied to a
+feature whose whole premise is surfacing what's wrong; a briefing that
+silently omits a clean section would look identical to one that failed
+to check it.

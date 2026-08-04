@@ -556,8 +556,18 @@ after the change.
   page. 6 backend + 3 frontend tests; live-verified against a fresh org and the seeded demo
   org (a live grammar bug found during verification — "1 account have" — was fixed on the
   spot). See `SPEC_TRACEABILITY_MATRIX.md` BIZ-02.
-- **MISSING**: BIZ-03 AI Daily Briefing, BIZ-04 Business AI Memory, BIZ-05 Business Rules
-  Engine — none implemented yet.
+- **[FIXED 2026-08-04]** ~~BIZ-03 AI Daily Briefing — not implemented~~ — one real briefing
+  per organization per calendar day (generated on first request, held stable for the rest
+  of the day — spec's "daily" semantic). All 5 spec-named sections (Urgent/Revenue/
+  Customers/Risk/Operations) are computed from real rows: open critical security alerts,
+  real open-pipeline value, a real week-over-week ticket volume delta, DSARs due within 3
+  days, workflow failures in the last 24h — never the spec's own literal example numbers,
+  and each item links into the module that owns it. The "AI suggestion" line reuses BIZ-02's
+  Recommendation Engine outright rather than a second generator. New `/briefing` page. 5
+  backend + 2 frontend tests; live-verified against the seeded demo org. See
+  `SPEC_TRACEABILITY_MATRIX.md` BIZ-03.
+- **MISSING**: BIZ-04 Business AI Memory, BIZ-05 Business Rules Engine — none implemented
+  yet.
 - **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
   Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
   strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`

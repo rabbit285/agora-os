@@ -233,6 +233,26 @@ export type Recommendation = {
   created_at: string;
 };
 
+export type BriefingItem = {
+  text: string;
+  link: string | null;
+};
+
+export type BriefingSection = {
+  key: string;
+  label: string;
+  headline: string;
+  items: BriefingItem[];
+};
+
+export type Briefing = {
+  id: string;
+  briefing_date: string;
+  sections: BriefingSection[];
+  ai_suggestion: string | null;
+  created_at: string;
+};
+
 export type KnowledgeBase = {
   id: string;
   name: string;
