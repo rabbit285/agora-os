@@ -41,6 +41,7 @@ PERMISSIONS: dict[str, str] = {
     "org.users.manage": "Invite, suspend, and manage user memberships and roles",
     "org.entities.manage": "Create and archive legal entities and teams",
     "compliance.controls.manage": "Create controls, map requirements, record assessments",
+    "compliance.frameworks.manage": "Create custom compliance frameworks and their requirements",
     "compliance.evidence.manage": "Attach and manage evidence",
     "compliance.risks.manage": "Create and update risks",
     "compliance.policies.manage": "Create and publish policies",
@@ -79,6 +80,7 @@ PERMISSIONS: dict[str, str] = {
 
 COMPLIANCE_PERMISSIONS = [
     "compliance.controls.manage",
+    "compliance.frameworks.manage",
     "compliance.evidence.manage",
     "compliance.risks.manage",
     "compliance.policies.manage",

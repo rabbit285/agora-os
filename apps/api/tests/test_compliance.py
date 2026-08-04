@@ -1291,6 +1291,67 @@ async def test_audit_rejects_framework_from_another_org(client: AsyncClient) -> 
     assert response.status_code == 404
 
 
+async def test_org_admin_can_create_custom_framework_with_requirements(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "customfw1@example.com", "Custom Framework Org")
+    response = await client.post(
+        "/api/v1/compliance/frameworks",
+        json={
+            "name": "Internal Security Baseline",
+            "requirements": [{"reference_code": "ISB-1", "title": "Quarterly access review"}],
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["is_custom"] is True
+    framework_id = body["id"]
+
+    listed = await client.get("/api/v1/compliance/frameworks")
+    names = {f["name"] for f in listed.json()}
+    assert "Internal Security Baseline" in names
+
+    requirements = await client.get(f"/api/v1/compliance/frameworks/{framework_id}/requirements")
+    assert requirements.status_code == 200
+    assert [r["reference_code"] for r in requirements.json()] == ["ISB-1"]
+
+
+async def test_employee_role_cannot_create_custom_framework(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    _, org_id = await _signup(client, "customfw2@example.com", "Custom Framework Org 2")
+    token = await _create_member_with_role(
+        db_session, organization_id=org_id, email="employee-fw@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+
+    response = await client.post(
+        "/api/v1/compliance/frameworks", json={"name": "Should be forbidden", "requirements": []}
+    )
+    assert response.status_code == 403
+
+
+async def test_custom_framework_is_not_visible_to_another_org(client: AsyncClient) -> None:
+    await _signup(client, "customfw3a@example.com", "Custom Framework Org 3a")
+    created = await client.post(
+        "/api/v1/compliance/frameworks",
+        json={"name": "Org 1 Only Framework", "requirements": []},
+    )
+    assert created.status_code == 201
+    framework_id = created.json()["id"]
+    # Signing up as a second org reuses the same client (matches this
+    # file's existing single-client cross-org pattern elsewhere), issuing
+    # a fresh session that replaces the first org's cookie.
+    await _signup(client, "customfw3@example.com", "Custom Framework Org 3")
+
+    listed = await client.get("/api/v1/compliance/frameworks")
+    names = {f["name"] for f in listed.json()}
+    assert "Org 1 Only Framework" not in names
+
+    requirements = await client.get(f"/api/v1/compliance/frameworks/{framework_id}/requirements")
+    assert requirements.status_code == 404
+
+
 async def test_audit_from_other_org_returns_not_found(client: AsyncClient) -> None:
     await _signup(client, "cross-audit1@example.com", "Cross Audit Org 1")
     audit_id = await _create_audit(client, "Org 1 audit")

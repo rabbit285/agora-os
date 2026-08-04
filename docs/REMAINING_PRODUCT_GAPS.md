@@ -712,6 +712,19 @@ after the change.
   native HTML form GET submission instead of the client-side handler; this is a dev-server
   concurrency artifact, not a product bug, and does not reproduce running serially or
   against a production build.
+- **[FIXED 2026-08-04]** ~~Only 3 of spec §12's named compliance frameworks (GDPR, EU AI
+  Act, ISO 27001) were seeded with catalog content~~ — all 7 named regulatory frameworks
+  from spec §12's own list are now seeded (added ISO 42001, SOC 2, NIS2, DORA). The list's
+  8th item, "Custom Frameworks," was not a catalog gap at all but a distinct, entirely
+  unbuilt capability — an organization creating its own private framework — which is now
+  real: `POST /compliance/frameworks` (name + nested requirements in one call), permission-
+  gated (`compliance.frameworks.manage`), and correctly invisible to every other tenant.
+  Building this surfaced a real pre-existing tenant-isolation gap: `Framework` had no
+  per-row organization check anywhere (`GET .../requirements`, `.../dashboard` did a bare
+  `db.get()` with no scoping) because every row used to be global catalog data — harmless
+  until a tenant-owned row type was added to the same table. Fixed with a shared
+  `_get_visible_framework` helper enforcing "global (organization_id is null) or belongs
+  to this org" everywhere a framework is looked up by ID.
 
 ---
 

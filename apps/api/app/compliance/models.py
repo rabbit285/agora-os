@@ -125,14 +125,24 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, utcnow
 
 
 class Framework(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """Catalog data: GDPR, EU AI Act, ISO 27001, etc. Seeded once,
-    shared across every organization — never tenant-scoped."""
+    """Catalog data: GDPR, EU AI Act, ISO 27001, etc. Seeded once, shared
+    across every organization. `organization_id` is null for these global
+    catalog frameworks; an organization can also define its own private
+    "Custom Framework" (spec §12's own named "Custom Frameworks" item),
+    which sets `organization_id` and is only ever visible to that org."""
 
     __tablename__ = "frameworks"
 
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=True, index=True
+    )
     key: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    @property
+    def is_custom(self) -> bool:
+        return self.organization_id is not None
 
 
 class Requirement(UUIDPrimaryKeyMixin, Base):

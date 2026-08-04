@@ -1437,9 +1437,24 @@ function EvidenceLibrarySection() {
 }
 
 function FrameworksSection() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+
   const { data: frameworks } = useQuery<Framework[]>({
     queryKey: ["compliance", "frameworks"],
     queryFn: () => apiFetch<Framework[]>("/api/v1/compliance/frameworks"),
+  });
+
+  const createFramework = useMutation({
+    mutationFn: () =>
+      apiFetch<Framework>("/api/v1/compliance/frameworks", {
+        method: "POST",
+        body: { name, requirements: [] },
+      }),
+    onSuccess: () => {
+      setName("");
+      queryClient.invalidateQueries({ queryKey: ["compliance", "frameworks"] });
+    },
   });
 
   return (
@@ -1447,14 +1462,30 @@ function FrameworksSection() {
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
         Frameworks
       </h2>
-      <div className="flex flex-wrap gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {frameworks?.map((framework) => (
           <Link key={framework.id} href={`/compliance/frameworks/${framework.id}`}>
             <Badge variant="secondary" className="cursor-pointer hover:bg-neutral-300">
               {framework.name}
+              {framework.is_custom && " (custom)"}
             </Badge>
           </Link>
         ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Custom framework name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="min-w-[200px] flex-1"
+        />
+        <Button
+          size="sm"
+          disabled={!name.trim() || createFramework.isPending}
+          onClick={() => createFramework.mutate()}
+        >
+          Add custom framework
+        </Button>
       </div>
     </div>
   );

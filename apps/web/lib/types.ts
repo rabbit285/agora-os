@@ -364,6 +364,7 @@ export type Framework = {
   key: string;
   name: string;
   description: string | null;
+  is_custom: boolean;
 };
 
 export type Policy = {

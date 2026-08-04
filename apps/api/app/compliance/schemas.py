@@ -11,6 +11,7 @@ class FrameworkOut(BaseModel):
     key: str
     name: str
     description: str | None
+    is_custom: bool
 
     model_config = {"from_attributes": True}
 
@@ -22,6 +23,21 @@ class RequirementOut(BaseModel):
     description: str | None
 
     model_config = {"from_attributes": True}
+
+
+class RequirementCreate(BaseModel):
+    reference_code: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=2000)
+
+
+class FrameworkCreate(BaseModel):
+    """spec §12's own named "Custom Frameworks" item — an organization's
+    own private framework, distinct from the shared global catalog."""
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    requirements: list[RequirementCreate] = Field(default_factory=list)
 
 
 class FrameworkDashboardControlOut(BaseModel):

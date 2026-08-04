@@ -537,6 +537,34 @@ CATALOG_FRAMEWORKS: dict[str, tuple[str, list[tuple[str, str]]]] = {
             ("A.8.1", "Inventory of information and other associated assets"),
         ],
     ),
+    "iso42001": (
+        "ISO 42001",
+        [
+            ("6.1", "Actions to address risks and opportunities (AI management system)"),
+            ("8.4", "Third-party relationships in the AI system lifecycle"),
+        ],
+    ),
+    "soc2": (
+        "SOC 2",
+        [
+            ("CC6.1", "Logical and physical access controls"),
+            ("CC7.2", "System monitoring to detect security events"),
+        ],
+    ),
+    "nis2": (
+        "NIS2",
+        [
+            ("Art. 21", "Cybersecurity risk-management measures"),
+            ("Art. 23", "Reporting obligations for significant incidents"),
+        ],
+    ),
+    "dora": (
+        "DORA",
+        [
+            ("Art. 5", "ICT risk management framework"),
+            ("Art. 17", "ICT-related incident management process"),
+        ],
+    ),
 }
 
 

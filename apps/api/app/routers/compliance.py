@@ -65,6 +65,7 @@ from app.compliance.schemas import (
     DSARStatusUpdate,
     EvidenceCreate,
     EvidenceOut,
+    FrameworkCreate,
     FrameworkDashboardControlOut,
     FrameworkDashboardOut,
     FrameworkDashboardRequirementOut,
@@ -135,21 +136,82 @@ router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])
 
 @router.get("/frameworks", response_model=list[FrameworkOut])
 async def list_frameworks(
-    db: AsyncSession = Depends(get_db), _: OrgContext = Depends(get_org_context)
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
 ) -> list[Framework]:
-    result = await db.execute(select(Framework).order_by(Framework.name))
+    result = await db.execute(
+        select(Framework)
+        .where(
+            (Framework.organization_id.is_(None))
+            | (Framework.organization_id == context.organization_id)
+        )
+        .order_by(Framework.name)
+    )
     return list(result.scalars().all())
+
+
+@router.post("/frameworks", response_model=FrameworkOut, status_code=status.HTTP_201_CREATED)
+async def create_framework(
+    payload: FrameworkCreate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.frameworks.manage")),
+) -> Framework:
+    """spec §12's own named "Custom Frameworks" item — private to this
+    organization, never visible to any other tenant."""
+    framework = Framework(
+        organization_id=context.organization_id,
+        key=f"custom-{uuid.uuid4().hex[:12]}",
+        name=payload.name,
+        description=payload.description,
+    )
+    db.add(framework)
+    await db.flush()
+
+    for requirement in payload.requirements:
+        db.add(
+            Requirement(
+                framework_id=framework.id,
+                reference_code=requirement.reference_code,
+                title=requirement.title,
+                description=requirement.description,
+            )
+        )
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.framework.created",
+        object_type="framework",
+        object_id=str(framework.id),
+        after_state={"name": framework.name},
+    )
+    await db.commit()
+    await db.refresh(framework)
+    return framework
+
+
+async def _get_visible_framework(
+    db: AsyncSession, framework_id: uuid.UUID, organization_id: uuid.UUID
+) -> Framework:
+    """A framework is visible if it's global catalog data (organization_id
+    is null) or a custom framework belonging to this exact org — a custom
+    framework from another org must 404, same as any other tenant-scoped
+    row, even though `Framework` itself predates per-tenant scoping."""
+    framework = await db.get(Framework, framework_id)
+    if framework is None or (
+        framework.organization_id is not None and framework.organization_id != organization_id
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework not found")
+    return framework
 
 
 @router.get("/frameworks/{framework_id}/requirements", response_model=list[RequirementOut])
 async def list_requirements(
     framework_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: OrgContext = Depends(get_org_context),
+    context: OrgContext = Depends(get_org_context),
 ) -> list[Requirement]:
-    framework = await db.get(Framework, framework_id)
-    if framework is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework not found")
+    await _get_visible_framework(db, framework_id, context.organization_id)
     result = await db.execute(
         select(Requirement)
         .where(Requirement.framework_id == framework_id)
@@ -170,9 +232,7 @@ async def get_framework_dashboard(
     (a requirement with zero mapped controls) and unfinished work (mapped
     but not yet `implemented`) visible per-framework, not just as one flat
     control list."""
-    framework = await db.get(Framework, framework_id)
-    if framework is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Framework not found")
+    framework = await _get_visible_framework(db, framework_id, context.organization_id)
 
     requirements = list(
         (
