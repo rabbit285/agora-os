@@ -545,9 +545,17 @@ after the change.
 - **MISSING (Business Intelligence layer, spec §86-90)**: Business Process Discovery, AI
   Recommendation Engine, AI Daily Briefing, Business AI Memory, Business Rules Engine —
   none implemented.
-- **PARTIAL**: Main Dashboard (`apps/web/app/(app)/page.tsx`) shows 2 of 4 metric tiles as
-  real data (Open Tasks, Pending Approvals); the other 2 are honest hardcoded "Not
-  available yet" strings, not fabricated numbers.
+- **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
+  Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
+  strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`
+  and computes the same implemented/total percentage Onboarding's readiness score already
+  uses (`app.onboarding.service._compliance_percent`'s formula, so the two numbers never
+  independently drift), with an honest "No controls yet" state instead of a misleading 0%
+  for a brand-new org. Security Posture fetches the existing `GET /security/overview` and
+  shows its real `security_score` (e.g. "80/100"). Both endpoints only require org
+  membership (no elevated permission), matching the Dashboard's own visibility to every
+  role. 2 new frontend tests; live-verified against the seeded demo org (1 of 2 controls
+  implemented -> 50%, security score 80/100, both matching the live API response).
 - **API gaps**: no pagination, no idempotency-key support, no rate-limiting visible
   anywhere in the 119-path OpenAPI surface (see `ROUTE_API_INVENTORY.md`).
 - **MISSING**: no CI/CD pipeline configuration exists in the repository (no `.github/`

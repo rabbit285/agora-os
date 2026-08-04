@@ -29,7 +29,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 
 | Route | Type | Notes |
 |---|---|---|
-| `/` | ○ | Unified Dashboard — 2 of 4 metric tiles real, 2 honest "Not available yet" |
+| `/` | ○ | Unified Dashboard — all 4 metric tiles real (Open Tasks, Pending Approvals, Compliance Health, Security Posture) |
 | `/_not-found` | ○ | — |
 | `/login` | ○ | Redirects to `/mfa-challenge` when the account has TOTP enabled |
 | `/signup` | ○ | Redirects to `/onboarding` on success (spec §68) |
