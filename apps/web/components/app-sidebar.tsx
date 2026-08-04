@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, X } from "lucide-react";
 
+import { useSidebar } from "@/components/sidebar-context";
 import { NAVIGATION, type NavItem } from "@/lib/navigation";
 import { useCurrentPermissions } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -23,36 +24,55 @@ export function AppSidebar() {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const { data: permissions } = useCurrentPermissions();
   const permissionSet = permissions ? new Set(permissions) : null;
+  const { mobileOpen, setMobileOpen } = useSidebar();
 
   return (
-    <nav
-      aria-label="Primary"
-      className={cn(
-        "flex shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)] transition-[width] duration-[var(--transition-base)]",
-        collapsed ? "w-[var(--sidebar-width-collapsed)]" : "w-[var(--sidebar-width)]",
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-[var(--gray-950)]/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
       )}
-    >
-      <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--border-default)] px-3">
-        {!collapsed && (
-          <Link href="/" className="text-sm font-semibold text-[var(--fg-default)]">
-            Agora Origin
-          </Link>
+      <nav
+        aria-label="Primary"
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)] transition-transform duration-[var(--transition-base)] md:static md:z-auto md:translate-x-0 md:transition-[width]",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          "w-[var(--sidebar-width)]",
+          collapsed ? "md:w-[var(--sidebar-width-collapsed)]" : "md:w-[var(--sidebar-width)]",
         )}
-        <button
-          type="button"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)]"
-        >
-          {collapsed ? (
-            <ChevronsRight className="h-4 w-4" aria-hidden="true" />
-          ) : (
-            <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+      >
+        <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--border-default)] px-3">
+          {!collapsed && (
+            <Link href="/" className="text-sm font-semibold text-[var(--fg-default)]">
+              Agora Origin
+            </Link>
           )}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:hidden"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="ml-auto hidden h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:flex"
+          >
+            {collapsed ? (
+              <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        </div>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
         {NAVIGATION.map((group) => {
           const visibleItems = group.items.filter((item) => isItemVisible(item, permissionSet));
           if (visibleItems.length === 0) return null;
@@ -80,6 +100,7 @@ export function AppSidebar() {
                       <Link
                         href={href}
                         title={collapsed ? item.label : undefined}
+                        onClick={() => setMobileOpen(false)}
                         className={cn(
                           "flex flex-1 items-center gap-2.5 rounded-[var(--radius-md)] px-2 py-1.5 text-sm transition-colors duration-[var(--transition-fast)]",
                           active
@@ -128,6 +149,7 @@ export function AppSidebar() {
                             <Link
                               key={child.href}
                               href={child.implemented ? child.href : "/coming-soon"}
+                              onClick={() => setMobileOpen(false)}
                               className={cn(
                                 "truncate rounded-[var(--radius-sm)] px-2 py-1 text-[13px] transition-colors duration-[var(--transition-fast)]",
                                 childActive
@@ -147,7 +169,8 @@ export function AppSidebar() {
             </div>
           );
         })}
-      </div>
-    </nav>
+        </div>
+      </nav>
+    </>
   );
 }

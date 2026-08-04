@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ClipboardCheck, LogOut, Search, Settings, User as UserIcon } from "lucide-react";
+import { Bell, ClipboardCheck, LogOut, Menu, Search, Settings, User as UserIcon } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
 import { GlobalCreateButton } from "@/components/global-create-button";
 import { ModuleSwitcher } from "@/components/module-switcher";
+import { useSidebar } from "@/components/sidebar-context";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,7 @@ function NavIconLink({
 export function TopNavigation() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { setMobileOpen } = useSidebar();
   const [searchValue, setSearchValue] = useState("");
   const { data: user } = useCurrentUser();
   const { data: organization } = useCurrentOrganization();
@@ -91,10 +93,20 @@ export function TopNavigation() {
 
   return (
     <header className="flex h-[var(--header-height)] shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-4">
-      <ModuleSwitcher />
-      <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        aria-label="Open menu"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:hidden"
+      >
+        <Menu className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <div className="hidden md:block">
+        <ModuleSwitcher />
+      </div>
+      <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
         <GlobalCreateButton />
-        <div className="relative w-56">
+        <div className="relative hidden w-56 lg:block">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--fg-subtle)]"
             aria-hidden="true"
