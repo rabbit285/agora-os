@@ -18,7 +18,9 @@ const tasks: Task[] = [
   { id: "t1", title: "Task 1", status: "open" } as Task,
   { id: "t2", title: "Task 2", status: "done" } as Task,
 ];
-const approvals: Approval[] = [{ id: "a1", status: "pending" } as Approval];
+const approvals: Approval[] = [
+  { id: "a1", status: "pending", action_type: "test.action", risk_class: "low", module: "compliance" } as Approval,
+];
 const controls: Control[] = [
   { id: "c1", status: "implemented" } as Control,
   { id: "c2", status: "not_started" } as Control,

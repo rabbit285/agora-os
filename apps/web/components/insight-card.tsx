@@ -14,8 +14,11 @@ export function InsightCard({
   sources,
   confidence,
   suggestedAction,
+  actLabel = "Act on this",
   onAct,
   onDismiss,
+  isActing,
+  isDismissing,
   className,
 }: {
   title: string;
@@ -23,8 +26,11 @@ export function InsightCard({
   sources?: string[];
   confidence?: "low" | "medium" | "high";
   suggestedAction?: string;
+  actLabel?: string;
   onAct?: () => void;
   onDismiss?: () => void;
+  isActing?: boolean;
+  isDismissing?: boolean;
   className?: string;
 }) {
   return (
@@ -61,12 +67,12 @@ export function InsightCard({
         {(onAct || onDismiss) && (
           <div className="flex gap-2">
             {onAct && (
-              <Button size="sm" variant="ai" onClick={onAct}>
-                Act on this
+              <Button size="sm" variant="ai" disabled={isActing} onClick={onAct}>
+                {isActing ? "Working…" : actLabel}
               </Button>
             )}
             {onDismiss && (
-              <Button size="sm" variant="ghost" onClick={onDismiss}>
+              <Button size="sm" variant="ghost" disabled={isDismissing} onClick={onDismiss}>
                 Dismiss
               </Button>
             )}

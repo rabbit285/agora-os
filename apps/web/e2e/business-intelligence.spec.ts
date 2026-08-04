@@ -47,7 +47,8 @@ test("Daily Briefing: all 5 spec §88 sections render with real data", async ({ 
   await signup(page, "briefing");
   await page.goto("/briefing");
 
+  const main = page.getByRole("main");
   for (const section of ["Urgent", "Revenue", "Customers", "Risk", "Operations"]) {
-    await expect(page.getByText(section, { exact: true })).toBeVisible();
+    await expect(main.getByText(section, { exact: true })).toBeVisible();
   }
 });

@@ -16,8 +16,9 @@ test("Tasks: create a task and mark it done", async ({ page }) => {
 
   const row = page.getByText(title);
   await expect(row).toBeVisible();
-  await page.getByRole("button", { name: "Mark done" }).first().click();
-  await expect(page.getByRole("button", { name: "Mark done" })).toHaveCount(0);
+  await page.getByRole("button", { name: `Actions for ${title}` }).click();
+  await page.getByRole("menuitem", { name: "Mark done" }).click();
+  await expect(page.getByRole("button", { name: `Actions for ${title}` })).toHaveCount(0);
 });
 
 test("Compliance: create a control", async ({ page }) => {
