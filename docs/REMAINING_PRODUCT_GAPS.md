@@ -598,6 +598,34 @@ after the change.
   is a time-based condition this build's event-driven dispatch doesn't evaluate — the same
   honest precedent Automation itself already established for 4 of its 16 named trigger
   types with no real source. See `SPEC_TRACEABILITY_MATRIX.md` BIZ-05.
+- **[FIXED 2026-08-04]** ~~Data export/deletion execution capability — spec §B3/§B5
+  "support export and deletion" was previously only DSAR *status tracking* (COMP-09):
+  "fulfilled" flipped an enum with no real data operation behind it~~ — real execution now
+  exists as new PLAT-26. **Export**: `GET /organizations/current/data-export?format=` reuses
+  the Reporting module's own rendering pipeline outright (no second export implementation)
+  to bundle 20 real sections of this organization's own data — members, compliance, security,
+  sales, support, knowledge, automation, business memory, business rules — into a genuine
+  downloadable PDF/DOCX/XLSX/CSV. **Deletion**: a real, two-step, org-name-confirmed flow —
+  `POST .../deletion-request` sets a visible, cancellable, audited precursor state;
+  `POST .../deletion-request/execute` performs a genuine, irreversible cascade delete across
+  every one of the 70+ organization-scoped tables in one transaction (PostgreSQL's
+  `session_replication_role = replica`, rather than hand-ordering every table by FK
+  dependency), including that organization's own `audit_events` — a real erasure has to erase
+  its own audit trail too, not leave it permanently stuck. A schema-drift safety check fails
+  loudly rather than silently under-deleting if a future migration adds an org-scoped table
+  this doesn't know about yet. `User` accounts are deliberately never deleted (a login
+  identity is separate from organization membership everywhere in this codebase). New
+  `/settings/data-management` page (the exact spec §67 screen name). 8 backend + 4 frontend
+  tests; live-verified against real Postgres — created a test org, deleted it, confirmed via
+  direct `psql` every row (including its own audit trail) was actually gone; downloaded and
+  confirmed a real 16.6KB XLSX export. Two real bugs found and fixed during verification:
+  SQLite can't bind a raw `uuid.UUID` parameter in raw SQL (and separately, a dashed
+  `str(uuid)` silently matched zero rows against SQLAlchemy's actual non-dashed storage
+  format — both fixed by using `.hex`), and stale ORM identity-map objects after raw-SQL
+  bulk deletes (fixed with `db.expire_all()`). **Disclosed scope**: no automated scheduled
+  purge after a grace window exists — execution is explicit (organization-name-confirmed),
+  not automatically triggered by a Temporal schedule after N days. See
+  `SPEC_TRACEABILITY_MATRIX.md` PLAT-26 and the clarified COMP-09.
 - **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
   Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
   strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`

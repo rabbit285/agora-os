@@ -32,6 +32,13 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # directly (see app.routers.billing), disclosed in
     # docs/KNOWN_LIMITATIONS.md rather than faking a Stripe checkout.
     plan_key: Mapped[str] = mapped_column(String(20), default="starter")
+    # spec §B5 "Customer Data Control" — export; deletion. Requesting
+    # deletion is a real, visible, cancellable, audited precursor state;
+    # the actual irreversible purge only runs via a separately-confirmed
+    # execute call (see app.core.organization_deletion).
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):

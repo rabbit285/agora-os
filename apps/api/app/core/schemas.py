@@ -55,6 +55,7 @@ class OrganizationSettingsOut(BaseModel):
     name: str
     slug: str
     notification_webhook_url: str | None
+    deletion_requested_at: datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -64,6 +65,14 @@ class OrganizationSettingsUpdate(BaseModel):
     # spec §66 Webhook notification channel target. Not in
     # model_fields_set means "leave unchanged"; explicit null clears it.
     notification_webhook_url: str | None = Field(default=None, max_length=500)
+
+
+class OrganizationDeletionConfirm(BaseModel):
+    # Typing the exact current organization name is the confirmation
+    # gate for both requesting and executing deletion — the same
+    # "type the name to confirm" pattern real danger-zone UIs use,
+    # checked against the organization's real current name server-side.
+    confirm_name: str = Field(min_length=1, max_length=200)
 
 
 class LegalEntityCreate(BaseModel):

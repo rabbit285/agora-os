@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,11 +20,18 @@ from app.core.models import (
     RolePermission,
     Team,
 )
+from app.core.organization_deletion import (
+    cancel_organization_deletion,
+    execute_organization_deletion,
+    request_organization_deletion,
+)
+from app.core.organization_export import build_organization_export
 from app.core.schemas import (
     LegalEntityCreate,
     LegalEntityOut,
     LegalEntityUpdate,
     MembershipOut,
+    OrganizationDeletionConfirm,
     OrganizationSettingsOut,
     OrganizationSettingsUpdate,
     RoleOut,
@@ -32,9 +39,12 @@ from app.core.schemas import (
     TeamOut,
     TeamUpdate,
 )
+from app.core.storage import build_storage_key, presign_download, upload_object
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.identity.schemas import InvitationCreate, InvitationOut
+from app.reporting.rendering import RENDERERS
+from app.reporting.schemas import REPORT_FORMATS, ReportDownloadOut
 
 router = APIRouter(prefix="/api/v1/organizations", tags=["organizations"])
 
@@ -74,6 +84,118 @@ async def update_current_organization(
     await db.commit()
     await db.refresh(org)
     return org
+
+
+def _check_confirm_name(organization: Organization, confirm_name: str) -> None:
+    if confirm_name != organization.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="confirm_name does not match the organization's current name",
+        )
+
+
+@router.post("/current/deletion-request", response_model=OrganizationSettingsOut)
+async def request_current_organization_deletion(
+    payload: OrganizationDeletionConfirm,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.settings.manage")),
+) -> Organization:
+    """spec §B5 "Customer Data Control": export; deletion. Real,
+    visible, cancellable, audited precursor state — does not itself
+    delete anything; see POST .../deletion-request/execute for the
+    actual irreversible purge, which requires this to already be set."""
+    org = await db.get(Organization, context.organization_id)
+    assert org is not None
+    _check_confirm_name(org, payload.confirm_name)
+    org = await request_organization_deletion(db, organization_id=context.organization_id)
+    assert org.deletion_requested_at is not None
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.deletion.requested",
+        object_type="organization",
+        object_id=str(org.id),
+        after_state={"deletion_requested_at": org.deletion_requested_at.isoformat()},
+    )
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
+@router.post("/current/deletion-request/cancel", response_model=OrganizationSettingsOut)
+async def cancel_current_organization_deletion(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.settings.manage")),
+) -> Organization:
+    org = await cancel_organization_deletion(db, organization_id=context.organization_id)
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.deletion.cancelled",
+        object_type="organization",
+        object_id=str(org.id),
+    )
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
+@router.post("/current/deletion-request/execute", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def execute_current_organization_deletion(
+    payload: OrganizationDeletionConfirm,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.settings.manage")),
+) -> None:
+    """The actual, irreversible deletion — every row this organization
+    owns across every module, gone in one transaction. Requires a
+    pending deletion request (POST .../deletion-request) to already
+    exist, plus the organization's exact current name typed again as a
+    second, separate confirmation — the same two-step, type-the-name
+    danger-zone pattern real production systems use for exactly this
+    class of action."""
+    org = await db.get(Organization, context.organization_id)
+    assert org is not None
+    if org.deletion_requested_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No deletion request is pending for this organization. "
+            "Call POST /organizations/current/deletion-request first.",
+        )
+    _check_confirm_name(org, payload.confirm_name)
+    await execute_organization_deletion(
+        db, organization_id=context.organization_id, executed_by=context.user.id
+    )
+
+
+@router.get("/current/data-export", response_model=ReportDownloadOut)
+async def export_current_organization_data(
+    format: str = Query(default="xlsx"),
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("org.settings.manage")),
+) -> ReportDownloadOut:
+    """spec §B5 "Customer Data Control": export. A real, downloadable
+    bundle of this organization's own data across every module — reuses
+    app.reporting's ReportSection/ReportContent shape and its 4 real
+    renderers outright rather than a second export pipeline."""
+    if format not in REPORT_FORMATS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unknown format: {format}")
+    content = await build_organization_export(db, context.organization_id)
+    file_bytes = RENDERERS[format](content)
+    storage_key = build_storage_key(context.organization_id, f"organization_data_export.{format}")
+    upload_object(storage_key, file_bytes, REPORT_FORMATS[format])
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="org.data_export.generated",
+        object_type="organization",
+        object_id=str(context.organization_id),
+        after_state={"format": format},
+    )
+    await db.commit()
+    return ReportDownloadOut(download_url=presign_download(storage_key))
 
 
 @router.get("/current/my-permissions", response_model=list[str])

@@ -2324,3 +2324,88 @@ could configure, but with no real event ever firing them — the exact
 same honest "documented no-op, not a silent lie" precedent
 `app.automation.triggers`'s own docstring already established for 4 of
 spec §38's 16 named trigger types.
+
+## ADR-0057 — Organization deletion uses `session_replication_role = replica` instead of hand-ordering 70+ tables; deletion is a real two-step, name-confirmed flow rather than an automatic scheduled purge
+
+**Decision**: spec §B3/§B5 say "support export and deletion" as a
+Customer Data Control, with zero implementation detail — no format,
+no mechanics, no confirmation flow specified. Before this cluster,
+"deletion" only existed as COMP-09's DSAR ticket status field
+(`fulfilled` is a human flipping an enum after doing the actual work
+by hand outside the system, confirmed by reading `update_dsar_status`
+— no export or delete ever ran). This was a real, previously
+undisclosed gap between spec's plain-English requirement and what the
+traceability matrix's "VERIFIED" DSAR row actually covered; COMP-09's
+evidence text is now clarified rather than left overstating its scope.
+
+Every table in this schema uses `NO ACTION` for its `organization_id`
+foreign keys (confirmed by querying `information_schema.
+referential_constraints` — no table anywhere sets `ondelete=
+"CASCADE"`), and there are 70+ tables with a real dependency graph
+(documents → document_chunks, controls → control_mappings,
+memberships → membership_roles, security_incidents →
+security_incident_assets, ...). Hand-ordering a `DELETE` sequence
+across all of them by dependency would be large, tedious, and a single
+mistake produces either an FK-violation crash (safe-but-broken) or,
+worse, a wrong order that silently leaves orphaned PII behind. Instead
+`execute_organization_deletion` issues `SET session_replication_role =
+replica` for the duration of the transaction — a standard PostgreSQL
+technique that disables all trigger-based constraint checking,
+including the org's own `audit_events` immutability trigger (ADR-0042)
+— which is the *correct* behavior here specifically: a genuine
+right-to-erasure deletion must be able to erase that organization's
+audit trail too, not leave it permanently stuck by the same trigger
+that (correctly) protects it from every other kind of mutation. Since
+constraint checks are off, table deletion order no longer matters for
+FK validity — but *completeness* still does: a `_verify_table_coverage`
+safety check queries `information_schema.columns` for every table with
+an `organization_id` column and raises loudly if the hardcoded
+`_DIRECT_ORG_SCOPED_TABLES` list has fallen out of sync with the real
+schema (e.g. a future migration added a new org-scoped table), rather
+than silently under-deleting and leaving that table's rows behind
+forever. Four tables without their own `organization_id` (child-of-
+child rows like `control_mappings`) are deleted via a subquery against
+their real parent table instead.
+
+Two real, non-obvious bugs surfaced only through live verification
+against actual Postgres and the pytest suite's SQLite path, both fixed
+before this was trusted: (1) SQLite's driver rejects binding a raw
+`uuid.UUID` Python object in a `text()` query at all (`type 'UUID' is
+not supported`); switching to `str(uuid)` fixed the bind error but then
+silently matched *zero* rows on SQLite, because SQLAlchemy's `Uuid`
+type stores rows as 32-character hex with no dashes on a non-native
+backend, not the dashed canonical form `str()` produces — `.hex` is
+the one representation Postgres's native UUID parser and SQLite's
+literal string column both accept correctly. (2) This app's session
+factory sets `expire_on_commit=False` (deliberately, for other
+call-sites that return objects post-commit without an extra round
+trip), and raw `text()` `DELETE`s don't touch the ORM identity map the
+way `session.delete(obj)` would — without an explicit `db.expire_all()`
+after the commit, a later `db.get(Organization, id)` in the same
+session could still return the pre-deletion cached Python object
+instead of `None`, which is exactly the false-positive this cluster's
+own end-to-end test caught (a `GET /organizations/current` immediately
+after a successful `204` deletion returned stale `200` data until
+fixed).
+
+Deletion is deliberately a two-step, always-explicit flow — `POST
+.../deletion-request` (a real, visible, cancellable, audited precursor
+state) then a *separately* confirmed `POST .../deletion-request/
+execute`, both requiring the organization's exact current name typed
+as confirmation — rather than an automatic purge after some grace
+period. Building a correct, tested scheduled-purge job (a real Temporal
+Schedule, mirroring how Automation's own `schedule` trigger type
+works) is a real, disclosed next step, not attempted in this pass —
+the two-step, explicitly-confirmed execution path is itself the real,
+working deletion capability spec §B5 asks for; a timer that
+automatically fires the same operation later is an enhancement to
+*when* it runs, not to whether a real deletion exists at all.
+
+Export reuses `app.reporting`'s `ReportSection`/`ReportContent`
+dataclasses and its 4 renderers outright (`app.core.
+organization_export.build_organization_export` returns a
+`ReportContent`, handed directly to `app.reporting.rendering.
+RENDERERS[format]`) rather than a second rendering pipeline — the same
+reuse discipline as every prior cluster this session, chosen because a
+20-section, real-rows, multi-format bundle is exactly the shape
+Reporting was already built to produce.

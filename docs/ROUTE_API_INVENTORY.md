@@ -23,7 +23,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (68 total, from `npm run build` output, 2026-08-04)
+## Frontend routes (69 total, from `npm run build` output, 2026-08-04)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -92,6 +92,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/settings/ai-providers` | ○ | Real-time status per spec §57 provider (has-adapter/configured/active) |
 | `/settings/memory` | ○ | Business AI Memory — 7 spec §89 categories, real provenance, admin correct/delete (BIZ-04) |
 | `/settings/business-rules` | ○ | Real condition → approval/notify rules, evaluated on the same events Automation triggers on (spec §90, BIZ-05) |
+| `/settings/data-management` | ○ | Real org data export (20 sections, reuses Reporting) + two-step, name-confirmed org deletion (spec §67/§B5, PLAT-26) |
 | `/settings/billing` | ○ | 4 plans, current plan + user count, per-entitlement comparison grid, self-service plan switch (no payment collection — PLAT-19) |
 | `/notifications` | ○ | Inbox (list, mark-read) + per-channel preference toggles |
 | `/reports` | ○ | 14 spec §65 report types × 4 export formats, generate + past-reports list + secure download link (PLAT-20) |
@@ -106,7 +107,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
 also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (199 paths, from live `/openapi.json`, 2026-08-04)
+## Backend API surface (203 paths, from live `/openapi.json`, 2026-08-04)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -117,7 +118,7 @@ also in this list at earlier audit points; all 6 are now built — see above.)
 | `/briefing` | 1 | get-or-create-for-today — 5 real sections + an AI suggestion reused from Recommendations (spec §88, BIZ-03) |
 | `/memory` | 2 | list/create (GET/POST), correct/delete (PATCH/DELETE) — 7 spec §89 categories, real provenance, one automatic hook (Policy publish), narrower `business_memory.manage` permission (BIZ-04) |
 | `/business-rules` | 2 | list/create (GET/POST), update/delete (PATCH/DELETE) — real condition → require_approval/notify, evaluated via `app.automation.triggers.dispatch_event` (spec §90, BIZ-05) |
-| `/organizations` | 12 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
+| `/organizations` | 16 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE), current/data-export (GET, PLAT-26), current/deletion-request (POST) + cancel/execute (PLAT-26) |
 | `/onboarding` | 10 | status, company, goals, compliance-profile, security-profile, sales-profile, support-profile, advance, readiness, complete — spec §68 |
 | `/tasks`, `/approvals` | 4 | core primitives |
 | `/notifications` | 4 | list, mark-read, preferences (GET/PUT) — real multi-channel dispatch (email/webhook real, Slack/Teams honestly non-deliverable) |

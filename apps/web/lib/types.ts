@@ -253,6 +253,14 @@ export type Briefing = {
   created_at: string;
 };
 
+export type OrganizationSettings = {
+  id: string;
+  name: string;
+  slug: string;
+  notification_webhook_url: string | null;
+  deletion_requested_at: string | null;
+};
+
 export const BUSINESS_RULE_TRIGGER_TYPES = [
   "new_employee",
   "control_failed",

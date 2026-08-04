@@ -68,6 +68,7 @@ export const NAVIGATION: NavGroup[] = [
       { label: "AI Providers", href: "/settings/ai-providers", implemented: true },
       { label: "Business Memory", href: "/settings/memory", implemented: true },
       { label: "Business Rules", href: "/settings/business-rules", implemented: true },
+      { label: "Data Management", href: "/settings/data-management", implemented: true },
     ],
   },
 ];

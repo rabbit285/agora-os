@@ -40,7 +40,11 @@ implied to work.
   high-risk-gates-on-Approval pattern for directly-created ones, and
   auto-created linked to a high/unacceptable-risk `AISystem` — ADR-0029),
   and DSARs (`DSAR`, 30-day due date, received→in_progress→fulfilled/
-  rejected lifecycle). AI Incidents (`AIIncident`) also now exist — a
+  rejected lifecycle — this is real *ticket* tracking; marking a DSAR
+  `fulfilled` is a human-operated status flip, not an automatic trigger
+  of the real export/deletion execution capability added 2026-08-04,
+  PLAT-26, below — a case worker still connects the two manually).
+  AI Incidents (`AIIncident`) also now exist — a
   `critical`-severity incident reuses `SecurityIncident`'s exact
   critical-severity chain (linked Risk + response Task + owner
   Notification, ADR-0030). Vendor Risk (`Vendor`/`VendorAssessment`) also
@@ -472,6 +476,20 @@ implied to work.
   inventing one. Every other report type is a live aggregate over this
   org's own rows (verified: generating and downloading real PDF/DOCX/
   XLSX/CSV files, not just checking for a 201 response).
+- **Customer Data Control — export/deletion (spec §B3/§B5) is now real
+  execution, not just DSAR status tracking** (fixed 2026-08-04,
+  PLAT-26). Export (`GET /organizations/current/data-export`) bundles
+  20 real sections of an organization's own data into a genuine
+  downloadable file, reusing the Reporting module's own rendering
+  pipeline. Deletion (`POST /organizations/current/deletion-request`
+  then a separately-confirmed `.../execute`) performs a real,
+  irreversible cascade delete across every organization-scoped table —
+  live-verified against real Postgres. **Disclosed scope**: no
+  automated scheduled purge exists after a grace window — execution is
+  always an explicit, organization-name-confirmed action, not a timer;
+  a real Temporal-scheduled auto-purge (mirroring Automation's own
+  `schedule` trigger mechanism) is a real next step, not attempted in
+  this pass.
 
 ## Trust and progressive access model (spec §B)
 
