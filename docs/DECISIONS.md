@@ -2119,3 +2119,53 @@ by hand after every cluster, catching the same class of failure that
 `Suspense` build failure found on the SSO login page, ADR-0048) —
 `next build` is a distinct, necessary step, not redundant with the
 faster checks.
+
+## ADR-0053 — BIZ-01 is a disclosed spec-native deferral, not a build; BIZ-02's 5 recommendation generators only ever cite real rows and dedup by a stable per-category key so a dismissal is permanent
+
+**Decision**: spec §86 ("Business Process Discovery") opens with "Long-
+term capability:" attached to its entire core mechanism — "AI analyzes
+connected systems and finds repetitive workflows" — before any example
+or button. This differs structurally from every qualifier this session
+has applied so far (§53's "Future:" tier, §59's "SAML architecture"/
+"SCIM architecture", §64's "Plans architecture:"), which all attached
+to a *sub-item* within an otherwise-real, buildable section. Here the
+qualifier covers the section's only mechanism; there is no unqualified
+remainder to build. Genuinely mining cross-system workflow patterns
+without fabricating the pattern-detection step would also require real
+outbound read connectors this build doesn't have (spec's own
+progressive trust model, `KNOWN_LIMITATIONS.md`), reinforcing that
+attempting a stripped-down version here would produce exactly the kind
+of fake feature spec §82 forbids, not a scoped-down real one. BIZ-01 is
+therefore tracked as MISSING with an explicit "(spec's own deferral)"
+annotation — the same treatment PLAT-17 (parent-org/agency-mode)
+received — rather than built or silently dropped from the matrix.
+
+§87-90 carry no such qualifier and were built. BIZ-02 (AI Recommendation
+Engine)'s five generators (`app.recommendations.service`) each scan one
+domain's real rows and return a `RecommendationDraft` only when a
+concrete, disclosed threshold is actually crossed — no generator ever
+returns a recommendation "because it's due" or on a schedule. Three
+reuse an existing computed aggregate outright rather than a new query
+(automation reuses `compute_workflow_analytics`'s success rate at an
+80% floor; support reuses `compute_support_analytics`'s CSAT at a
+3.5/5 floor; sales reuses the exact ICP-fit-without-a-lead query
+Onboarding's readiness score already computes) — the same reuse
+discipline as every prior cluster this session. `estimated_value` is
+populated for exactly one generator (sales, using Sales Intelligence's
+real `average_deal_size`) and left `None` everywhere else, rather than
+inventing a plausible-looking number for the other four — a genuinely
+unknown value said so, matching Reporting's Automation ROI report's
+same choice (ADR-0050).
+
+Each `Recommendation` row is deduplicated by `(organization_id,
+source_key)` where `source_key` is a stable string per generator
+("compliance_gaps", "security_critical_findings", ...), not a random
+id — this is what makes `refresh_recommendations` idempotent and
+dismissal permanent. Every `GET /recommendations` call recomputes all
+five drafts and upserts, but only ever touches a row whose `status` is
+still `new`: a `dismissed` or `actioned` row is left completely alone,
+even if the underlying condition still holds on the next refresh. The
+alternative (always overwrite, or re-surface a dismissed item once its
+count changes) would make "Dismiss" meaningless — a user who dismissed
+"3 controls need attention" would see it reappear the moment a 4th
+control was added, training them to ignore the feature.

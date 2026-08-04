@@ -542,9 +542,22 @@ after the change.
 - **MISSING (spec §57, surfaced while building the AI Providers status page above)**: Azure
   OpenAI has no adapter — the only spec §57 Model Gateway provider without an explicit
   "architecture"/"future" qualifier that still has zero implementation.
-- **MISSING (Business Intelligence layer, spec §86-90)**: Business Process Discovery, AI
-  Recommendation Engine, AI Daily Briefing, Business AI Memory, Business Rules Engine —
-  none implemented.
+- **Business Intelligence layer (spec §86-90)**: **BIZ-01 Business Process Discovery is a
+  spec-native deferral, not a gap** — §86 opens with "Long-term capability:" attached to
+  the section's entire core mechanism, unlike §87-90, none of which carry any qualifier
+  (see `SPEC_TRACEABILITY_MATRIX.md` BIZ-01).
+- **[FIXED 2026-08-04]** ~~BIZ-02 AI Recommendation Engine — not implemented~~ — 5 real
+  generators (compliance control gaps, critical/high security findings, ICP-fit sales
+  accounts with no lead, automation failure-rate, support CSAT trend) scan this org's own
+  data and only fire on a genuine, disclosed threshold; every recommendation names the
+  exact source rows it came from, and `estimated_value` is left honestly unset except for
+  the one case with a real historical basis to derive it from. Dismissing/actioning a
+  recommendation is permanent — the next refresh never resurrects it. New `/recommendations`
+  page. 6 backend + 3 frontend tests; live-verified against a fresh org and the seeded demo
+  org (a live grammar bug found during verification — "1 account have" — was fixed on the
+  spot). See `SPEC_TRACEABILITY_MATRIX.md` BIZ-02.
+- **MISSING**: BIZ-03 AI Daily Briefing, BIZ-04 Business AI Memory, BIZ-05 Business Rules
+  Engine — none implemented yet.
 - **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
   Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
   strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`

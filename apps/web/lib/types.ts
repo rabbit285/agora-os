@@ -217,6 +217,22 @@ export type Report = {
 // here — see apps/api/app/reporting/models.py.
 export const REPORT_FORMATS = ["pdf", "docx", "xlsx", "csv"] as const;
 
+export type Recommendation = {
+  id: string;
+  category: string;
+  title: string;
+  business_impact: string;
+  reason: string;
+  sources: string[];
+  confidence: string;
+  estimated_value: string | null;
+  suggested_action: string;
+  risk: string;
+  required_approval: boolean;
+  status: string;
+  created_at: string;
+};
+
 export type KnowledgeBase = {
   id: string;
   name: string;

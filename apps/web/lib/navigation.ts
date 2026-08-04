@@ -25,6 +25,7 @@ export const NAVIGATION: NavGroup[] = [
       { label: "Approvals", href: "/approvals", implemented: true },
       { label: "Notifications", href: "/notifications", implemented: true },
       { label: "Reports", href: "/reports", implemented: true },
+      { label: "Recommendations", href: "/recommendations", implemented: true },
     ],
   },
   {

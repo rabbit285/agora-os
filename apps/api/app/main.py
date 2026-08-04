@@ -33,6 +33,7 @@ from app.routers import (
     notifications,
     onboarding,
     organizations,
+    recommendations,
     reporting,
     sales,
     search,
@@ -148,3 +149,4 @@ app.include_router(integrations.router)
 app.include_router(trust_center.router)
 app.include_router(search.router)
 app.include_router(reporting.router)
+app.include_router(recommendations.router)

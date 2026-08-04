@@ -72,6 +72,7 @@ PERMISSIONS: dict[str, str] = {
     "knowledge.documents.manage": "Upload documents and manage knowledge bases",
     "ai.copilot.ask": "Ask the AI Copilot questions grounded in organizational knowledge",
     "reports.generate": "Generate and download reports",
+    "business_intelligence.view": "View AI recommendations and the daily business briefing",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -127,12 +128,14 @@ INTEGRATIONS_PERMISSIONS = [
     "integrations.connections.manage",
 ]
 
-# Knowledge, the AI Copilot, and Reporting are cross-cutting capabilities
-# (spec §7-11, §55-58, §65 — Board/Executive reports in particular are
-# meant for leadership across every function) used by every specialized
-# role, not owned by one business function the way Sales/Security/etc.
-# are — so every role below except `read_only` gets all three, in
-# addition to its own module's permissions.
+# Knowledge, the AI Copilot, Reporting, and Business Intelligence
+# (Recommendations/Briefing) are cross-cutting capabilities (spec
+# §7-11, §55-58, §65, §87-88 — Board/Executive reports and daily
+# briefings in particular are meant for leadership across every
+# function) used by every specialized role, not owned by one business
+# function the way Sales/Security/etc. are — so every role below
+# except `read_only` gets all four, in addition to its own module's
+# permissions.
 KNOWLEDGE_PERMISSIONS = [
     "knowledge.documents.manage",
 ]
@@ -142,7 +145,15 @@ AI_PERMISSIONS = [
 REPORTING_PERMISSIONS = [
     "reports.generate",
 ]
-_CROSS_CUTTING_PERMISSIONS = KNOWLEDGE_PERMISSIONS + AI_PERMISSIONS + REPORTING_PERMISSIONS
+BUSINESS_INTELLIGENCE_PERMISSIONS = [
+    "business_intelligence.view",
+]
+_CROSS_CUTTING_PERMISSIONS = (
+    KNOWLEDGE_PERMISSIONS
+    + AI_PERMISSIONS
+    + REPORTING_PERMISSIONS
+    + BUSINESS_INTELLIGENCE_PERMISSIONS
+)
 
 # Only org_admin gets the full Phase 1 permission set; module-specific
 # roles get only their own module's permissions plus the cross-cutting
