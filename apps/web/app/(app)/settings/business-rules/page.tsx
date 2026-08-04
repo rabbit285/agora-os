@@ -53,8 +53,8 @@ function CreateRuleForm() {
   return (
     <Card className="mb-6 max-w-3xl">
       <CardContent className="flex flex-col gap-3 pt-6">
-        <h2 className="text-sm font-semibold text-neutral-900">Add a business rule</h2>
-        <p className="text-xs text-neutral-500">
+        <h2 className="text-sm font-semibold text-[var(--fg-default)]">Add a business rule</h2>
+        <p className="text-xs text-[var(--fg-muted)]">
           A structured condition against a real event — never text embedded in an AI prompt.
         </p>
         <Input placeholder="Rule name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -107,7 +107,7 @@ function CreateRuleForm() {
           </Select>
         </div>
         {create.isError && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-[var(--critical-600)]">
             {create.error instanceof ApiError ? create.error.message : "Could not save rule."}
           </p>
         )}
@@ -147,12 +147,12 @@ function RuleRow({ rule }: { rule: BusinessRule }) {
       <CardContent className="flex items-center justify-between pt-6">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-medium text-neutral-900">{rule.name}</span>
+            <span className="font-medium text-[var(--fg-default)]">{rule.name}</span>
             <Badge variant={rule.is_active ? "default" : "outline"}>
               {rule.is_active ? "Active" : "Inactive"}
             </Badge>
           </div>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-[var(--fg-muted)]">
             When <span className="capitalize">{rule.trigger_type.replace(/_/g, " ")}</span>: {rule.condition_field}{" "}
             {rule.condition_operator} {rule.condition_value} → {rule.action_type.replace(/_/g, " ")} (
             {rule.action_role_key})
@@ -187,9 +187,9 @@ export default function BusinessRulesPage() {
 
       <CreateRuleForm />
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
       {rules && rules.length === 0 && (
-        <p className="text-sm text-neutral-500">No business rules configured yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No business rules configured yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {rules?.map((rule) => (

@@ -26,8 +26,8 @@ function ExportSection() {
   return (
     <Card className="mb-6 max-w-2xl">
       <CardContent className="flex flex-col gap-3 pt-6">
-        <h2 className="text-sm font-semibold text-neutral-900">Export organization data</h2>
-        <p className="text-xs text-neutral-500">
+        <h2 className="text-sm font-semibold text-[var(--fg-default)]">Export organization data</h2>
+        <p className="text-xs text-[var(--fg-muted)]">
           spec §B5 — a real, downloadable bundle of your organization&apos;s own data across every
           module: members, compliance records, security data, sales, support, knowledge, automation,
           business memory, and business rules.
@@ -45,7 +45,7 @@ function ExportSection() {
           </Button>
         </div>
         {exportData.isError && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-[var(--critical-600)]">
             {exportData.error instanceof ApiError ? exportData.error.message : "Could not generate export."}
           </p>
         )}
@@ -96,13 +96,13 @@ function DeletionSection() {
   const pending = org?.deletion_requested_at != null;
 
   return (
-    <Card className="max-w-2xl border-red-300">
+    <Card className="max-w-2xl border-[var(--critical-500)]">
       <CardContent className="flex flex-col gap-3 pt-6">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-red-700">Delete organization</h2>
+          <h2 className="text-sm font-semibold text-[var(--critical-700)]">Delete organization</h2>
           {pending && <Badge variant="destructive">Deletion requested</Badge>}
         </div>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-[var(--fg-muted)]">
           spec §B5 — permanently deletes this organization and every record it owns across every
           module. This does not delete member user accounts themselves (a login identity is separate
           from organization membership). Irreversible once executed.
@@ -110,7 +110,7 @@ function DeletionSection() {
 
         {pending ? (
           <>
-            <p className="text-xs text-neutral-600">
+            <p className="text-xs text-[var(--fg-muted)]">
               Deletion requested at {org?.deletion_requested_at}. Cancel below, or type the
               organization&apos;s exact name to permanently execute the deletion now.
             </p>
@@ -153,7 +153,7 @@ function DeletionSection() {
           </>
         )}
         {(requestDeletion.isError || executeDeletion.isError) && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-[var(--critical-600)]">
             {requestDeletion.error instanceof ApiError
               ? requestDeletion.error.message
               : executeDeletion.error instanceof ApiError

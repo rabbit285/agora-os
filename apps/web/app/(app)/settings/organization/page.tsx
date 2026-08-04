@@ -60,8 +60,8 @@ function LegalEntitiesSection() {
     <Card className="max-w-2xl">
       <CardContent className="flex flex-col gap-4 pt-6">
         <div>
-          <h2 className="text-sm font-semibold text-neutral-900">Legal Entities</h2>
-          <p className="text-xs text-neutral-500">
+          <h2 className="text-sm font-semibold text-[var(--fg-default)]">Legal Entities</h2>
+          <p className="text-xs text-[var(--fg-muted)]">
             spec §53 multi-tenancy — every organization has one default entity; parent-org/
             subsidiary hierarchy is not yet built (see docs/KNOWN_LIMITATIONS.md).
           </p>
@@ -71,12 +71,12 @@ function LegalEntitiesSection() {
           {activeEntities.map((entity) => (
             <div
               key={entity.id}
-              className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded border border-[var(--border-default)] px-3 py-2 text-sm"
             >
               <div className="flex items-center gap-2">
-                <span className="font-medium text-neutral-900">{entity.name}</span>
+                <span className="font-medium text-[var(--fg-default)]">{entity.name}</span>
                 {entity.country && (
-                  <span className="text-xs text-neutral-400">{entity.country}</span>
+                  <span className="text-xs text-[var(--fg-subtle)]">{entity.country}</span>
                 )}
                 {entity.is_default && <Badge variant="outline">Default</Badge>}
               </div>
@@ -105,7 +105,7 @@ function LegalEntitiesSection() {
             </div>
           ))}
           {activeEntities.length === 0 && (
-            <p className="text-sm text-neutral-500">No legal entities yet.</p>
+            <p className="text-sm text-[var(--fg-muted)]">No legal entities yet.</p>
           )}
         </div>
 
@@ -169,18 +169,18 @@ function TeamsSection({ entities }: { entities: LegalEntity[] | undefined }) {
   return (
     <Card className="max-w-2xl">
       <CardContent className="flex flex-col gap-4 pt-6">
-        <h2 className="text-sm font-semibold text-neutral-900">Teams</h2>
+        <h2 className="text-sm font-semibold text-[var(--fg-default)]">Teams</h2>
 
         <div className="flex flex-col gap-2">
           {activeTeams.map((team) => (
             <div
               key={team.id}
-              className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded border border-[var(--border-default)] px-3 py-2 text-sm"
             >
               <div className="flex items-center gap-2">
-                <span className="font-medium text-neutral-900">{team.name}</span>
+                <span className="font-medium text-[var(--fg-default)]">{team.name}</span>
                 {entityName(team.legal_entity_id) && (
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-[var(--fg-subtle)]">
                     {entityName(team.legal_entity_id)}
                   </span>
                 )}
@@ -195,13 +195,13 @@ function TeamsSection({ entities }: { entities: LegalEntity[] | undefined }) {
               </Button>
             </div>
           ))}
-          {activeTeams.length === 0 && <p className="text-sm text-neutral-500">No teams yet.</p>}
+          {activeTeams.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No teams yet.</p>}
         </div>
 
         <div className="flex gap-2">
           <Input placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} />
           <select
-            className="flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm"
+            className="flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
             value={legalEntityId}
             onChange={(e) => setLegalEntityId(e.target.value)}
           >
@@ -282,7 +282,7 @@ export default function OrganizationSettingsPage() {
         <CardContent className="flex flex-col gap-4 pt-6">
           <div>
             <Label htmlFor="notification-webhook-url">Notification webhook URL</Label>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-[var(--fg-muted)]">
               spec §66 Webhook channel — a real HTTP POST is sent here whenever a user with
               the webhook channel enabled receives a notification. Leave blank to disable.
             </p>
@@ -305,7 +305,7 @@ export default function OrganizationSettingsPage() {
       </Card>
 
       {entitiesError ? (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-[var(--critical-600)]">
           Could not load legal entities and teams (requires the org.entities.manage permission).
         </p>
       ) : (
