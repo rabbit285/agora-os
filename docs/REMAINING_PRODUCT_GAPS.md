@@ -135,17 +135,26 @@ originally-flagged routes are now either accurately documented as `[ ]` (the two
 `/onboarding/company`/`/onboarding/goals` mentions were superseded by the single `/onboarding`
 route) or built and `[x]`.
 
-### A4. `apps/api/app/audit/models.py` docstring claims a DB-level `REVOKE UPDATE/DELETE` on `audit_events` that does not exist
+### A4. [FIXED — 2026-07-30, doc entry corrected 2026-08-04] `apps/api/app/audit/models.py` docstring claimed a DB-level `REVOKE UPDATE/DELETE` on `audit_events` that did not exist
 
-Grepped every one of the 21 migration files: zero `REVOKE` statements anywhere.
-Append-only-ness of the audit trail is enforced only by application code convention (no
-`UPDATE`/`DELETE` calls against `AuditEvent` anywhere in the service layer), not by a
-database privilege. A superuser or a future buggy migration could mutate history
-undetected.
+Grepped every one of the 21 migration files at the time: zero `REVOKE` statements
+anywhere. Append-only-ness of the audit trail was enforced only by application code
+convention (no `UPDATE`/`DELETE` calls against `AuditEvent` anywhere in the service
+layer), not by a database privilege.
 
-**Exact missing work**: either add the migration that actually revokes `UPDATE`/`DELETE`
-on `audit_events` from the application's database role, or correct the docstring to not
-claim a protection that isn't there.
+**Fix applied**: rather than a `REVOKE`, a real `BEFORE UPDATE OR DELETE` Postgres
+trigger (`prevent_audit_event_mutation`, MIG `7f2a9c1d4e6b`) now unconditionally raises
+on any mutation attempt against `audit_events` — genuine DB-level enforcement, and
+deliberately not a `REVOKE`: this table's owning role is the same role Alembic migrations
+run as, and Postgres table owners bypass ordinary GRANT/REVOKE ACL checks, so a revoke
+against an owner-equivalent role would have had no real effect (see ADR-0042 in
+`docs/DECISIONS.md`). The model's docstring now documents this reasoning instead of the
+old inaccurate claim. Covered by `tests/test_audit_events_immutable.py`; live-reverified
+this session — a direct `UPDATE`/`DELETE` against a real row in the running Postgres
+container both correctly raised `audit_events is append-only`. This fix shipped earlier
+in this backlog (the same commit that added the trigger); this entry's "not yet fixed"
+status was simply never updated to match — `SPEC_TRACEABILITY_MATRIX.md`'s PLAT-07 row
+had the same staleness, also corrected now.
 
 ### A5. [FIXED — 2026-07-30] `ensure_system_roles()`'s own docstring said "safe to call on every startup" but nothing called it at startup
 
