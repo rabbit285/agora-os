@@ -22,7 +22,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [isLoading, isError, user, router]);
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center text-neutral-400">Loading…</div>;
+    return (
+      <div
+        role="status"
+        aria-label="Loading"
+        className="flex h-screen items-center justify-center bg-[var(--bg-app)] text-sm text-[var(--fg-subtle)]"
+      >
+        Loading…
+      </div>
+    );
   }
   if (isError || !user) {
     return null;

@@ -2,12 +2,49 @@
 // render in the sidebar (so the module switcher always shows the full
 // product) but link to /coming-soon instead of a working page or a dead
 // link — see docs/ROUTES_AND_SCREENS.md and spec section 82 (No Fake
-// Features).
+// Features). `permission` is an optional gate: the item is hidden entirely
+// unless the current user holds at least one of the listed permission
+// keys — omit it for anything readable by every org member.
+
+import type { LucideIcon } from "lucide-react";
+import {
+  Bell,
+  BookOpen,
+  Boxes,
+  Brain,
+  Briefcase,
+  Building2,
+  Cpu,
+  ClipboardCheck,
+  CreditCard,
+  Database,
+  FileBarChart2,
+  FileClock,
+  Gauge,
+  GitBranch,
+  Headset,
+  KeyRound,
+  Lightbulb,
+  Lock,
+  Newspaper,
+  Plug,
+  ScrollText,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Workflow,
+} from "lucide-react";
 
 export type NavItem = {
   label: string;
   href: string;
   implemented: boolean;
+  icon?: LucideIcon;
+  /** Any one of these permissions makes the item visible; omit for
+   * everyone-can-read items. */
+  permission?: string[];
+  children?: NavItem[];
 };
 
 export type NavGroup = {
@@ -17,58 +54,117 @@ export type NavGroup = {
 
 export const NAVIGATION: NavGroup[] = [
   {
-    label: "Overview",
+    label: "Command Center",
     items: [
-      { label: "Dashboard", href: "/", implemented: true },
-      { label: "AI Copilot", href: "/copilot", implemented: true },
-      { label: "Tasks", href: "/tasks", implemented: true },
-      { label: "Approvals", href: "/approvals", implemented: true },
-      { label: "Notifications", href: "/notifications", implemented: true },
-      { label: "Reports", href: "/reports", implemented: true },
-      { label: "Recommendations", href: "/recommendations", implemented: true },
-      { label: "Daily Briefing", href: "/briefing", implemented: true },
+      { label: "Overview", href: "/", implemented: true, icon: Gauge },
+      { label: "AI Copilot", href: "/copilot", implemented: true, icon: Sparkles },
+      { label: "Tasks", href: "/tasks", implemented: true, icon: ClipboardCheck },
+      { label: "Approvals", href: "/approvals", implemented: true, icon: ShieldCheck },
+      { label: "Recommendations", href: "/recommendations", implemented: true, icon: Lightbulb },
+      { label: "Daily Briefing", href: "/briefing", implemented: true, icon: Newspaper },
+      { label: "Reports", href: "/reports", implemented: true, icon: FileBarChart2 },
+      { label: "Notifications", href: "/notifications", implemented: true, icon: Bell },
     ],
   },
   {
-    label: "Compliance",
-    items: [{ label: "Compliance", href: "/compliance", implemented: true }],
+    label: "Governance",
+    items: [
+      { label: "Compliance", href: "/compliance", implemented: true, icon: ScrollText },
+      { label: "Security", href: "/security", implemented: true, icon: ShieldAlert },
+    ],
   },
   {
-    label: "Security",
-    items: [{ label: "Security", href: "/security", implemented: true }],
+    label: "Growth",
+    items: [
+      {
+        label: "Sales",
+        href: "/sales",
+        implemented: true,
+        icon: Briefcase,
+        children: [
+          { label: "ICP Builder", href: "/sales/icp", implemented: true },
+          { label: "Sales Inbox", href: "/sales/inbox", implemented: true },
+          { label: "Meetings", href: "/sales/meetings", implemented: true },
+          { label: "Campaigns", href: "/sales/campaigns", implemented: true },
+        ],
+      },
+    ],
   },
   {
-    label: "Sales",
-    items: [{ label: "Sales", href: "/sales", implemented: true }],
+    label: "Customer Operations",
+    items: [
+      {
+        label: "Support",
+        href: "/support",
+        implemented: true,
+        icon: Headset,
+        children: [
+          { label: "Conversations", href: "/support/conversations", implemented: true },
+          { label: "Knowledge Base", href: "/support/knowledge", implemented: true },
+          { label: "AI Agent", href: "/support/ai-agent", implemented: true },
+        ],
+      },
+    ],
   },
   {
-    label: "Support",
-    items: [{ label: "Customer Support", href: "/support", implemented: true }],
-  },
-  {
-    label: "Automation",
-    items: [{ label: "Workflows", href: "/automation", implemented: true }],
+    label: "Operations",
+    items: [
+      {
+        label: "Automation",
+        href: "/automation",
+        implemented: true,
+        icon: Workflow,
+        children: [
+          { label: "Connections", href: "/automation/connections", implemented: true },
+          { label: "Templates", href: "/automation/templates", implemented: true },
+        ],
+      },
+      {
+        label: "Integrations",
+        href: "/settings/integrations",
+        implemented: true,
+        icon: Plug,
+        permission: ["integrations.connections.manage"],
+      },
+    ],
   },
   {
     label: "Knowledge",
     items: [
-      { label: "Documents", href: "/knowledge", implemented: true },
-      { label: "Knowledge Graph", href: "/knowledge/graph", implemented: true },
+      { label: "Documents", href: "/knowledge", implemented: true, icon: BookOpen },
+      { label: "Knowledge Graph", href: "/knowledge/graph", implemented: true, icon: Boxes },
     ],
   },
   {
-    label: "Settings",
+    label: "Administration",
     items: [
-      { label: "Organization", href: "/settings/organization", implemented: true },
-      { label: "Users", href: "/settings/users", implemented: true },
-      { label: "Roles", href: "/settings/roles", implemented: true },
-      { label: "Billing", href: "/settings/billing", implemented: true },
-      { label: "Security", href: "/settings/security", implemented: true },
-      { label: "Integrations", href: "/settings/integrations", implemented: true },
-      { label: "AI Providers", href: "/settings/ai-providers", implemented: true },
-      { label: "Business Memory", href: "/settings/memory", implemented: true },
-      { label: "Business Rules", href: "/settings/business-rules", implemented: true },
-      { label: "Data Management", href: "/settings/data-management", implemented: true },
+      {
+        label: "Organization",
+        href: "/settings/organization",
+        implemented: true,
+        icon: Building2,
+      },
+      {
+        label: "Users",
+        href: "/settings/users",
+        implemented: true,
+        icon: Users,
+        permission: ["org.users.manage"],
+      },
+      {
+        label: "Roles",
+        href: "/settings/roles",
+        implemented: true,
+        icon: KeyRound,
+        permission: ["org.users.manage"],
+      },
+      { label: "Billing", href: "/settings/billing", implemented: true, icon: CreditCard },
+      { label: "AI Providers", href: "/settings/ai-providers", implemented: true, icon: Cpu },
+      { label: "Business Memory", href: "/settings/memory", implemented: true, icon: Brain },
+      { label: "Business Rules", href: "/settings/business-rules", implemented: true, icon: GitBranch },
+      { label: "Data Management", href: "/settings/data-management", implemented: true, icon: Database },
+      { label: "Audit Logs", href: "/settings/audit-logs", implemented: false, icon: FileClock },
+      { label: "Security", href: "/settings/security", implemented: true, icon: Lock },
     ],
   },
 ];
