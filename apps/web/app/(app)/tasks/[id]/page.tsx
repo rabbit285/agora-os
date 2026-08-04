@@ -64,12 +64,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     },
   });
 
-  if (isLoading) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-[var(--fg-muted)]">Loading…</p>;
 
   if (error) {
     const status = error instanceof ApiError ? error.status : null;
     return (
-      <p className="text-sm text-neutral-500">
+      <p className="text-sm text-[var(--fg-muted)]">
         {status === 404 || status === 403
           ? "Task not found."
           : "Could not load this task. Please try again."}
@@ -103,15 +103,15 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Checklist
         </h2>
         {checklist.length === 0 && (
-          <p className="mb-2 text-sm text-neutral-500">No checklist items yet.</p>
+          <p className="mb-2 text-sm text-[var(--fg-muted)]">No checklist items yet.</p>
         )}
         <div className="mb-3 flex flex-col gap-2">
           {checklist.map((item, index) => (
-            <label key={index} className="flex items-center gap-2 text-sm text-neutral-700">
+            <label key={index} className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
               <input
                 type="checkbox"
                 checked={item.done}
@@ -123,7 +123,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
                   updateChecklist.mutate(next);
                 }}
               />
-              <span className={item.done ? "line-through text-neutral-400" : undefined}>
+              <span className={item.done ? "line-through text-[var(--fg-subtle)]" : undefined}>
                 {item.text}
               </span>
             </label>
@@ -151,16 +151,16 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Evidence
         </h2>
         {evidence && evidence.length === 0 && (
-          <p className="text-sm text-neutral-500">No evidence attached.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No evidence attached.</p>
         )}
         <div className="flex flex-col gap-2">
           {evidence?.map((item) => (
             <Card key={item.id}>
-              <CardContent className="pt-6 text-sm text-neutral-700">
+              <CardContent className="pt-6 text-sm text-[var(--fg-muted)]">
                 File {item.file_id}
               </CardContent>
             </Card>
@@ -169,18 +169,18 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Comments
         </h2>
         {comments && comments.length === 0 && (
-          <p className="mb-2 text-sm text-neutral-500">No comments yet.</p>
+          <p className="mb-2 text-sm text-[var(--fg-muted)]">No comments yet.</p>
         )}
         <div className="mb-3 flex flex-col gap-2">
           {comments?.map((comment) => (
             <Card key={comment.id}>
               <CardContent className="pt-6">
-                <p className="text-sm text-neutral-700">{comment.body}</p>
-                <p className="mt-1 text-xs text-neutral-400">
+                <p className="text-sm text-[var(--fg-muted)]">{comment.body}</p>
+                <p className="mt-1 text-xs text-[var(--fg-subtle)]">
                   {new Date(comment.created_at).toLocaleString()}
                 </p>
               </CardContent>
@@ -188,7 +188,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           ))}
         </div>
         {addComment.isError && (
-          <p className="mb-2 text-sm text-red-600">
+          <p className="mb-2 text-sm text-[var(--critical-600)]">
             {addComment.error instanceof ApiError ? addComment.error.message : "Could not post comment."}
           </p>
         )}
@@ -209,16 +209,16 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Activity
         </h2>
         {activity && activity.length === 0 && (
-          <p className="text-sm text-neutral-500">No activity recorded yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No activity recorded yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {activity?.map((event, index) => (
-            <div key={index} className="text-xs text-neutral-500">
-              <span className="font-medium text-neutral-700">{event.action}</span>{" "}
+            <div key={index} className="text-xs text-[var(--fg-muted)]">
+              <span className="font-medium text-[var(--fg-muted)]">{event.action}</span>{" "}
               {new Date(event.created_at).toLocaleString()}
             </div>
           ))}
