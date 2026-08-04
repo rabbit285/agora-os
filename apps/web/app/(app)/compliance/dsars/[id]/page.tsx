@@ -11,7 +11,7 @@ import { apiFetch } from "@/lib/api";
 import type { DSAR, DSARStatus } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 export default function DSARDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -49,12 +49,12 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-[var(--fg-muted)]">
           Due {dueDate.toLocaleDateString()}
-          {isOverdue && <span className="ml-1 text-red-600">(overdue)</span>}
+          {isOverdue && <span className="ml-1 text-[var(--critical-600)]">(overdue)</span>}
         </span>
         {dsar.fulfilled_at && (
-          <span className="text-sm text-neutral-500">
+          <span className="text-sm text-[var(--fg-muted)]">
             · Fulfilled {new Date(dsar.fulfilled_at).toLocaleDateString()}
           </span>
         )}
@@ -63,7 +63,7 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-3 pt-6">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-500">Status:</span>
+            <span className="text-sm text-[var(--fg-muted)]">Status:</span>
             <select
               className={selectClassName}
               value={dsar.status}
@@ -75,7 +75,7 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
               <option value="rejected">Rejected</option>
             </select>
           </div>
-          {dsar.notes && <p className="text-sm text-neutral-700">Notes: {dsar.notes}</p>}
+          {dsar.notes && <p className="text-sm text-[var(--fg-muted)]">Notes: {dsar.notes}</p>}
           <div className="flex gap-2">
             <Input
               placeholder="Add notes (saved with the next status change)"
@@ -85,7 +85,7 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
             />
           </div>
           {updateStatus.isError && (
-            <span className="text-xs text-red-600">{(updateStatus.error as Error).message}</span>
+            <span className="text-xs text-[var(--critical-600)]">{(updateStatus.error as Error).message}</span>
           )}
         </CardContent>
       </Card>

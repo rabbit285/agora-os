@@ -12,7 +12,7 @@ import { apiFetch } from "@/lib/api";
 import type { Approval, DPIA, DPIAStatus } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 export default function DPIADetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -55,12 +55,12 @@ export default function DPIADetailPage({ params }: { params: Promise<{ id: strin
         {dpia.ai_system_id && (
           <Link
             href={`/compliance/ai-systems/${dpia.ai_system_id}`}
-            className="text-sm text-neutral-500 hover:underline"
+            className="text-sm text-[var(--fg-muted)] hover:underline"
           >
             View linked AI system →
           </Link>
         )}
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={dpia.status} />
         <select
           className={selectClassName}
@@ -73,41 +73,41 @@ export default function DPIADetailPage({ params }: { params: Promise<{ id: strin
           <option value="rejected">Rejected</option>
         </select>
         {updateStatus.isError && (
-          <span className="text-xs text-red-600">{(updateStatus.error as Error).message}</span>
+          <span className="text-xs text-[var(--critical-600)]">{(updateStatus.error as Error).message}</span>
         )}
       </div>
 
       {dpia.approval_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Required Approval
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               This DPIA&apos;s high risk level automatically requires sign-off before it can be
               marked approved (GDPR Article 35).
             </p>
             {linkedApproval ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-700">
+              <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
                 <Link href="/approvals" className="hover:underline">
                   {linkedApproval.action_type}
                 </Link>
                 <StatusBadge status={linkedApproval.status} />
               </div>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Findings
         </h2>
         <Card>
           <CardContent className="flex flex-col gap-2 pt-6">
-            {dpia.findings && <p className="text-sm text-neutral-700">{dpia.findings}</p>}
+            {dpia.findings && <p className="text-sm text-[var(--fg-muted)]">{dpia.findings}</p>}
             <Input
               placeholder="Record findings (saved with the next status change)"
               value={findings}

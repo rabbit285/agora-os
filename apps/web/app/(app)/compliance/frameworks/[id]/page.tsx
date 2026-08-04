@@ -22,10 +22,10 @@ export default function FrameworkDashboardPage({
     queryFn: () => apiFetch<FrameworkDashboard>(`/api/v1/compliance/frameworks/${id}/dashboard`),
   });
 
-  if (isLoading) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-[var(--fg-muted)]">Loading…</p>;
   if (error) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-[var(--critical-600)]">
         {error instanceof ApiError ? error.message : "Could not load this framework."}
       </p>
     );
@@ -39,7 +39,7 @@ export default function FrameworkDashboardPage({
         description={data.framework.description ?? undefined}
         actions={
           <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-500">Coverage</span>
+            <span className="text-sm text-[var(--fg-muted)]">Coverage</span>
             <Badge variant={data.coverage_percent === 100 ? "success" : "outline"}>
               {data.coverage_percent}%
             </Badge>
@@ -48,7 +48,7 @@ export default function FrameworkDashboardPage({
       />
 
       {data.requirements.length === 0 && (
-        <p className="text-sm text-neutral-500">This framework has no requirements yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">This framework has no requirements yet.</p>
       )}
 
       <div className="flex flex-col gap-3">
@@ -57,10 +57,10 @@ export default function FrameworkDashboardPage({
             <CardContent className="pt-6">
               <div className="mb-2 flex items-center justify-between">
                 <div>
-                  <span className="font-mono text-xs text-neutral-400">
+                  <span className="font-mono text-xs text-[var(--fg-subtle)]">
                     {requirement.reference_code}
                   </span>
-                  <div className="font-medium text-neutral-900">{requirement.title}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{requirement.title}</div>
                 </div>
                 {requirement.controls.length === 0 && (
                   <Badge variant="destructive">No control mapped</Badge>
@@ -70,7 +70,7 @@ export default function FrameworkDashboardPage({
                 <div className="flex flex-wrap gap-2">
                   {requirement.controls.map((control) => (
                     <Link key={control.id} href={`/compliance/controls/${control.id}`}>
-                      <Badge variant="secondary" className="cursor-pointer hover:bg-neutral-300">
+                      <Badge variant="secondary" className="cursor-pointer hover:bg-[var(--gray-200)]">
                         {control.title}
                       </Badge>
                     </Link>

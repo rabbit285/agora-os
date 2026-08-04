@@ -13,7 +13,7 @@ import { apiFetch } from "@/lib/api";
 import type { AuditDetail, AuditStatus, Severity } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 export default function AuditDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -72,7 +72,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <select
           className={selectClassName}
           value={audit.status}
@@ -83,14 +83,14 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
           <option value="completed">Completed</option>
         </select>
         {audit.completed_at && (
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-[var(--fg-subtle)]">
             Completed {new Date(audit.completed_at).toLocaleString()}
           </span>
         )}
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Add Finding
         </h2>
         <Card>
@@ -124,7 +124,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
               value={findingDescription}
               onChange={(e) => setFindingDescription(e.target.value)}
             />
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-[var(--fg-subtle)]">
               A high or critical finding automatically creates a remediation task.
             </p>
           </CardContent>
@@ -132,23 +132,23 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Findings
         </h2>
         {audit.findings.length === 0 && (
-          <p className="text-sm text-neutral-500">No findings recorded yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No findings recorded yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {audit.findings.map((finding) => (
             <Card key={finding.id}>
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{finding.title}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{finding.title}</div>
                   {finding.description && (
-                    <div className="text-sm text-neutral-700">{finding.description}</div>
+                    <div className="text-sm text-[var(--fg-muted)]">{finding.description}</div>
                   )}
                   {finding.related_task_id && (
-                    <div className="text-xs text-neutral-400">Remediation task created</div>
+                    <div className="text-xs text-[var(--fg-subtle)]">Remediation task created</div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">

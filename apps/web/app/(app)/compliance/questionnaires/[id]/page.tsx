@@ -19,7 +19,7 @@ import type {
 } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 function QuestionRow({
   questionnaireId,
@@ -64,14 +64,14 @@ function QuestionRow({
     <Card>
       <CardContent className="flex flex-col gap-2 pt-6">
         <div className="flex items-center justify-between">
-          <div className="font-medium text-neutral-900">{question.text}</div>
+          <div className="font-medium text-[var(--fg-default)]">{question.text}</div>
           <div className="flex items-center gap-2">
             <Badge variant="outline">{question.category}</Badge>
             <StatusBadge status={status} />
           </div>
         </div>
         {sourceType && (
-          <div className="text-xs text-neutral-400">source: {sourceType.replace(/_/g, " ")}</div>
+          <div className="text-xs text-[var(--fg-subtle)]">source: {sourceType.replace(/_/g, " ")}</div>
         )}
         <Input
           placeholder="Answer text"
@@ -161,7 +161,7 @@ export default function QuestionnaireDetailPage({
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <select
           className={selectClassName}
           value={questionnaire.status}
@@ -172,14 +172,14 @@ export default function QuestionnaireDetailPage({
           <option value="completed">Completed</option>
         </select>
         {missingCount > 0 && (
-          <span className="text-xs text-red-600">
+          <span className="text-xs text-[var(--critical-600)]">
             {missingCount} question{missingCount === 1 ? "" : "s"} missing an answer
           </span>
         )}
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Add Question
         </h2>
         <Card>
@@ -209,11 +209,11 @@ export default function QuestionnaireDetailPage({
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Questions
         </h2>
         {questionnaire.questions.length === 0 && (
-          <p className="text-sm text-neutral-500">No questions added yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No questions added yet.</p>
         )}
         <div className="flex flex-col gap-3">
           {questionnaire.questions.map((question) => (
