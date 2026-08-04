@@ -1,5 +1,20 @@
 # Implementation Status
 
+**⚠ Superseded as a completeness source, 2026-08-04**: this file is a
+point-in-time phase-tracking narrative frozen at 2026-07-30 — it predates
+a full implementation backlog pass covering Billing, Reporting, SSO,
+Onboarding, the entire Business Intelligence layer (BIZ-01 through
+BIZ-05), data export/deletion, a real Playwright E2E suite, all 4 of
+spec §69's cross-module scenarios reaching 100% (previously partial),
+Pipedrive/Intercom connectors, and dozens of smaller fixes. It now
+significantly **understates** real progress in several sections below
+(Sales sequences/meetings, Support SLA/QA scoring, Automation's step
+vocabulary, Testing's E2E row, and the entire Cross-Module Intelligence
+section are all further along than what's written here). **Use
+`docs/SPEC_TRACEABILITY_MATRIX.md` and `docs/REMAINING_PRODUCT_GAPS.md`
+as the current, authoritative source of truth** — this file is kept for
+historical phase-sequencing context only, not corrected line-by-line.
+
 Legend: `[x]` Complete · `[~]` In Progress · `[ ]` Not Started · `[!]` Blocked
 
 Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 4 Security, Phase 5 Sales, Phase 6 Customer Support, and Phase 7 Business Automation backbones; Phase 8 now has four of spec §69's five named cross-module scenarios fully implemented — Support Upsell Signal, Security Incident chain, New Customer, and Enterprise Sales Security Review — plus a partial fifth (New AI Tool Adoption); Phase 9's Webhook connector and provider-neutral OAuth2 framework completed with six real (credential-gated) adapters — HubSpot, Google, Microsoft, GitHub, Slack, Salesforce — Temporal-backed sync, and a frontend permission preview — verified end-to-end; **Compliance/Trust program complete: all six requested items done — Vendor Risk, Security Questionnaires, Audits, Trust Center, Enterprise Sales Security Review, Data Transfers**)

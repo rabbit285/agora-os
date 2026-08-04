@@ -1,5 +1,16 @@
 # Acceptance Test Evidence — 25 Required End-to-End Scenarios
 
+**⚠ Superseded as a completeness source, 2026-08-04**: every 🟡 PARTIAL/
+🔴 MISSING scenario below predates a full implementation backlog pass.
+Confirmed fixed since this doc was written: #11 Support Upsell Signal
+(now 4/4 steps, SCEN-05), #12 New Customer (now 8/8 steps, SCEN-04), #23
+Data export/deletion (now a real executable capability, PLAT-26) — and
+#9/#10/#17/#25's underlying capabilities (Sales Sequences, Support
+AI-grounded replies, Automation's full step vocabulary) all show
+VERIFIED in `docs/SPEC_TRACEABILITY_MATRIX.md` from work that happened
+the same day this doc was frozen. Cross-reference
+`docs/SPEC_TRACEABILITY_MATRIX.md` before trusting any 🟡/🔴 mark below.
+
 Audit date: 2026-07-30. Evidence combines (a) the existing 206-test pytest suite (fresh
 run this audit, 206 passed / 0 failed, 386.69s, `docker exec agora-origin-api-1 sh -lc
 "cd /app && python -m pytest -q"`), (b) 9 parallel subagent code-level verifications, and

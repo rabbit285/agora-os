@@ -23,7 +23,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (69 total, from `npm run build` output, 2026-08-04)
+## Frontend routes (70 total, from `npm run build` output, 2026-08-04)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -40,7 +40,8 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/invite/[token]` | ƒ | Accepts an org invitation, creating or attaching the user |
 | `/mfa-challenge` | ○ | TOTP code entry, unlocks `get_org_context`-gated endpoints |
 | `/tasks` | ○ | — |
-| `/approvals` | ○ | — |
+| `/tasks/[id]` | ƒ | Checklist, evidence, comments, real activity timeline reused from `audit_events` (spec §44, PLAT-09) |
+| `/approvals` | ○ | Module/AI-generated/due badges now shown per spec §45 (PLAT-09) |
 | `/copilot` | ○ | Retrieval-grounded Q&A with citations |
 | `/knowledge` | ○ | List + upload — PDF/DOCX/TXT/MD/CSV/XLSX/HTML all real extractors |
 | `/knowledge/[id]` | ƒ | Detail with chunk viewer |
@@ -107,7 +108,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
 also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (203 paths, from live `/openapi.json`, 2026-08-04)
+## Backend API surface (205 paths, from live `/openapi.json`, 2026-08-04 — 2 new paths added by this session's COMP-02/PLAT-09 work: `POST /compliance/frameworks`, `PATCH /compliance/vendors/{id}/dpa-status`, plus `/tasks/{id}` sub-resource routes counted under the existing `/tasks` row below)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -120,7 +121,7 @@ also in this list at earlier audit points; all 6 are now built — see above.)
 | `/business-rules` | 2 | list/create (GET/POST), update/delete (PATCH/DELETE) — real condition → require_approval/notify, evaluated via `app.automation.triggers.dispatch_event` (spec §90, BIZ-05) |
 | `/organizations` | 16 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE), current/data-export (GET, PLAT-26), current/deletion-request (POST) + cancel/execute (PLAT-26) |
 | `/onboarding` | 10 | status, company, goals, compliance-profile, security-profile, sales-profile, support-profile, advance, readiness, complete — spec §68 |
-| `/tasks`, `/approvals` | 4 | core primitives |
+| `/tasks`, `/approvals` | 10 | core primitives — spec §44/45 fields (created_by/entity link/checklist, module/AI-generated/due) plus real `/{id}`, `/{id}/comments`, `/{id}/evidence`, `/{id}/activity` sub-resources reusing the existing audit trail for Activity (PLAT-09) |
 | `/notifications` | 4 | list, mark-read, preferences (GET/PUT) — real multi-channel dispatch (email/webhook real, Slack/Teams honestly non-deliverable) |
 | `/files` | 2 | upload-url, get |
 | `/ai` | 2 | `/copilot/ask` (real reranking now runs between retrieval and generation), `/providers` (real-time status per spec §57 provider) |

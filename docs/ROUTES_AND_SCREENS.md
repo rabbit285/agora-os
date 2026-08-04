@@ -1,5 +1,15 @@
 # Routes and Screens
 
+**⚠ Known stale (see `REMAINING_PRODUCT_GAPS.md` §A3 and
+`docs/ROUTE_API_INVENTORY.md`, which takes its frontend route list from a
+fresh `npm run build` output rather than this hand-maintained file)**:
+several rows below still mark now-real, fully-built pages as `[~]`
+placeholder (e.g. the Unified Dashboard's metric tiles are all real data,
+not placeholders — see `SPEC_TRACEABILITY_MATRIX.md`). This file is kept
+for spec-to-route mapping context, not as a live completeness source —
+use `docs/ROUTE_API_INVENTORY.md` and `docs/SPEC_TRACEABILITY_MATRIX.md`
+for current status.
+
 Full target screen inventory is spec §67 (Required Product Screens) and §6
 (Application Navigation). This document tracks the frontend route map and
 marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded

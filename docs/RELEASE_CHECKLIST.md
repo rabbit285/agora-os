@@ -1,5 +1,14 @@
 # Release Checklist
 
+**⚠ Superseded as a completeness source, 2026-08-04**: several items
+below are stale in the *understating* direction — e.g. "Frontend
+automated tests (Playwright/unit) — not yet written" (a real Playwright
+E2E suite now exists and runs in CI) and "Invitation flow, MFA
+enforcement — schema only, no flow" (both are real, tested flows). See
+`docs/SPEC_TRACEABILITY_MATRIX.md` and `docs/REMAINING_PRODUCT_GAPS.md`
+for current, authoritative status; this file is not corrected
+line-by-line given how much has changed since 2026-07-30.
+
 Honest status against the spec's "Definition of Full Completion" (§J) and
 "Definition of Done" (§83). This is a **Phase 1 + Phase 2 + partial
 Phases 3-9 / local-only** checkpoint, not a production release — most
