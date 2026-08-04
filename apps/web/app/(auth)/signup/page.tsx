@@ -53,33 +53,33 @@ export default function SignupPage() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="full_name">Your name</Label>
             <Input id="full_name" autoComplete="name" {...register("full_name")} />
-            {errors.full_name && <p className="text-xs text-red-600">{errors.full_name.message}</p>}
+            {errors.full_name && <p className="text-xs text-[var(--critical-600)]">{errors.full_name.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="organization_name">Organization name</Label>
             <Input id="organization_name" {...register("organization_name")} />
             {errors.organization_name && (
-              <p className="text-xs text-red-600">{errors.organization_name.message}</p>
+              <p className="text-xs text-[var(--critical-600)]">{errors.organization_name.message}</p>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Work email</Label>
             <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-[var(--critical-600)]">{errors.email.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
-            {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-[var(--critical-600)]">{errors.password.message}</p>}
           </div>
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-neutral-500">
+        <p className="mt-4 text-center text-sm text-[var(--fg-muted)]">
           Already have an account?{" "}
-          <Link href="/login" className="text-neutral-900 hover:underline">
+          <Link href="/login" className="text-[var(--fg-default)] hover:underline">
             Log in
           </Link>
         </p>

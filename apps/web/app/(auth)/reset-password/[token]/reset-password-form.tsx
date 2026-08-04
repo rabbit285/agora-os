@@ -54,16 +54,16 @@ export function ResetPasswordForm({ token }: { token: string }) {
               {...register("new_password")}
             />
             {errors.new_password && (
-              <p className="text-xs text-red-600">{errors.new_password.message}</p>
+              <p className="text-xs text-[var(--critical-600)]">{errors.new_password.message}</p>
             )}
           </div>
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Saving…" : "Save new password"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-neutral-500">
-          <Link href="/login" className="text-neutral-900 hover:underline">
+        <p className="mt-4 text-center text-sm text-[var(--fg-muted)]">
+          <Link href="/login" className="text-[var(--fg-default)] hover:underline">
             Back to login
           </Link>
         </p>

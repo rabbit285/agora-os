@@ -42,7 +42,7 @@ export default function MfaChallengePage() {
         <CardTitle>Two-factor verification</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="mb-4 text-sm text-neutral-500">
+        <p className="mb-4 text-sm text-[var(--fg-muted)]">
           Enter the 6-digit code from your authenticator app.
         </p>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
@@ -55,9 +55,9 @@ export default function MfaChallengePage() {
               autoFocus
               {...register("code")}
             />
-            {errors.code && <p className="text-xs text-red-600">{errors.code.message}</p>}
+            {errors.code && <p className="text-xs text-[var(--critical-600)]">{errors.code.message}</p>}
           </div>
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Verifying…" : "Verify"}
           </Button>

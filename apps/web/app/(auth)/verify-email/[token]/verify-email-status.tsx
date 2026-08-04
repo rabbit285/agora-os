@@ -35,14 +35,14 @@ export function VerifyEmailStatus({ token }: { token: string }) {
         <CardTitle>Email verification</CardTitle>
       </CardHeader>
       <CardContent>
-        {status === "verifying" && <p className="text-sm text-neutral-500">Verifying your email…</p>}
+        {status === "verifying" && <p className="text-sm text-[var(--fg-muted)]">Verifying your email…</p>}
         {status === "success" && (
-          <p className="text-sm text-neutral-900">
+          <p className="text-sm text-[var(--fg-default)]">
             Your email address has been verified. You&apos;re all set.
           </p>
         )}
         {status === "error" && (
-          <p className="text-sm text-red-600">{errorMessage ?? "This link is invalid or expired."}</p>
+          <p className="text-sm text-[var(--critical-600)]">{errorMessage ?? "This link is invalid or expired."}</p>
         )}
         <div className="mt-4 text-center">
           <Button asChild>

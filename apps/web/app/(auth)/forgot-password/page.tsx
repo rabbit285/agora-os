@@ -53,14 +53,14 @@ export default function ForgotPasswordPage() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-[var(--critical-600)]">{errors.email.message}</p>}
           </div>
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Sending…" : "Send reset link"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-neutral-500">
-          <Link href="/login" className="text-neutral-900 hover:underline">
+        <p className="mt-4 text-center text-sm text-[var(--fg-muted)]">
+          <Link href="/login" className="text-[var(--fg-default)] hover:underline">
             Back to login
           </Link>
         </p>
