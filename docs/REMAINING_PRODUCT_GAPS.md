@@ -683,6 +683,35 @@ after the change.
   `next build` — the same 4 checks this session's own workflow ran by hand after every
   cluster. This is CI configuration only (AWS deployment itself remains AWS-excluded); no
   CD/deploy step exists since there's no AWS target to deploy to in this build.
+- **[FIXED 2026-08-04]** ~~No real end-to-end suite — only unit/component tests exist, none
+  of which drive a real browser against the real running stack~~ — a real Playwright suite
+  (`apps/web/e2e/`, 18 tests across 5 spec files) now drives an actual Chromium browser
+  against the actual running dev stack (real Postgres, real API, real Next.js dev server —
+  no mocked network layer anywhere in these specs). Coverage: signup/login/wrong-password
+  (`auth.spec.ts`); the full 9-screen onboarding wizard including its real, live-computed
+  Business AI Readiness screen and resume-after-reload (`onboarding.spec.ts`); a
+  create-record journey through Tasks, Compliance, Security, Sales, Support (customer then
+  ticket), and Automation (`modules.spec.ts`); Business Rules create/deactivate, Business
+  Memory manual-entry creation, a real compliance-gap-to-Recommendation journey, and all 5
+  spec §88 Daily Briefing sections rendering real data (`business-intelligence.spec.ts`);
+  and Billing plan-switching plus Data Management's real export download and real two-step
+  name-confirmed organization deletion ending in an actual forced logout
+  (`settings.spec.ts`). Runs from the Windows host against the docker-compose host-mapped
+  port (the web container's slim image has no Chromium system dependencies), and now also
+  runs in CI as a fifth `e2e` job (`.github/workflows/ci.yml`) against the same full stack
+  brought up via the same compose file, uploading the Playwright HTML report as a build
+  artifact on any failure. One real infra gotcha found and fixed during this work: adding
+  new page routes to an already-running `next dev` container doesn't always get picked up
+  by its route manifest — a container restart was required before 5 new routes
+  (`/recommendations`, `/briefing`, `/settings/business-rules`, `/settings/memory`,
+  `/settings/data-management`) stopped 404ing; documented here since it could otherwise
+  look like a real app bug during future local verification. Playwright's `workers` is
+  pinned to `1` (not just serial within a file) — running multiple specs concurrently
+  against a single dev-mode server caused compile/hydration contention where a click could
+  race ahead of React attaching its handlers, observed as a signup falling through to a
+  native HTML form GET submission instead of the client-side handler; this is a dev-server
+  concurrency artifact, not a product bug, and does not reproduce running serially or
+  against a production build.
 
 ---
 

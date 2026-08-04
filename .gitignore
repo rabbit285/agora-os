@@ -44,3 +44,8 @@ Thumbs.db
 
 # Local infra data volumes
 infra/docker/.data/
+
+# Playwright
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/blob-report/
