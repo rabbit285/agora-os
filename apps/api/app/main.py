@@ -31,6 +31,7 @@ from app.routers import (
     health,
     integrations,
     knowledge,
+    memory,
     notifications,
     onboarding,
     organizations,
@@ -152,3 +153,4 @@ app.include_router(search.router)
 app.include_router(reporting.router)
 app.include_router(recommendations.router)
 app.include_router(briefing.router)
+app.include_router(memory.router)

@@ -561,6 +561,12 @@ async def update_policy_status(
         before_state={"status": before_status},
         after_state={"status": policy.status},
     )
+    if payload.status == "published" and before_status != "published":
+        from app.memory.service import record_policy_published_memory
+
+        await record_policy_published_memory(
+            db, organization_id=context.organization_id, policy_id=policy.id, policy_title=policy.title
+        )
     await db.commit()
     await db.refresh(policy)
     return policy

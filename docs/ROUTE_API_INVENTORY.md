@@ -23,7 +23,7 @@ missing at audit time have since been built and are listed below). Backend route
 from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, container
 `agora-origin-api-1`).
 
-## Frontend routes (66 total, from `npm run build` output, 2026-08-04)
+## Frontend routes (67 total, from `npm run build` output, 2026-08-04)
 
 ○ = static, ƒ = server-rendered dynamic.
 
@@ -90,6 +90,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 | `/settings/security` | ○ | Email verification status/resend, TOTP MFA enroll/confirm/disable |
 | `/settings/integrations` | ○ | Provider catalog, OAuth connections, webhooks |
 | `/settings/ai-providers` | ○ | Real-time status per spec §57 provider (has-adapter/configured/active) |
+| `/settings/memory` | ○ | Business AI Memory — 7 spec §89 categories, real provenance, admin correct/delete (BIZ-04) |
 | `/settings/billing` | ○ | 4 plans, current plan + user count, per-entitlement comparison grid, self-service plan switch (no payment collection — PLAT-19) |
 | `/notifications` | ○ | Inbox (list, mark-read) + per-channel preference toggles |
 | `/reports` | ○ | 14 spec §65 report types × 4 export formats, generate + past-reports list + secure download link (PLAT-20) |
@@ -104,7 +105,7 @@ from a fresh `GET /openapi.json` fetch against the running dev API (port 8001, c
 the MFA challenge, `/notifications`, `/settings/roles`, and `/settings/ai-providers` were
 also in this list at earlier audit points; all 6 are now built — see above.)
 
-## Backend API surface (195 paths, from live `/openapi.json`, 2026-08-04)
+## Backend API surface (197 paths, from live `/openapi.json`, 2026-08-04)
 
 | Prefix | Paths | Notes |
 |---|---|---|
@@ -113,6 +114,7 @@ also in this list at earlier audit points; all 6 are now built — see above.)
 | `/reports` | 4 | types (catalog of 14 spec §65 report types), list/create (GET/POST), detail (GET), download (GET, mints a fresh signed link) — real PDF/DOCX/XLSX/CSV generation from live organization data (spec §65, PLAT-20) |
 | `/recommendations` | 3 | list (recomputes then returns active), dismiss, action — 5 real generators over Compliance/Security/Sales/Automation/Support (spec §87, BIZ-02) |
 | `/briefing` | 1 | get-or-create-for-today — 5 real sections + an AI suggestion reused from Recommendations (spec §88, BIZ-03) |
+| `/memory` | 2 | list/create (GET/POST), correct/delete (PATCH/DELETE) — 7 spec §89 categories, real provenance, one automatic hook (Policy publish), narrower `business_memory.manage` permission (BIZ-04) |
 | `/organizations` | 12 | current (GET/PATCH incl. notification_webhook_url), current/members (GET), current/invitations (GET/POST) + revoke, current/my-permissions (GET), current/roles (GET), current/legal-entities (GET/POST/PATCH/DELETE), current/teams (GET/POST/PATCH/DELETE) |
 | `/onboarding` | 10 | status, company, goals, compliance-profile, security-profile, sales-profile, support-profile, advance, readiness, complete — spec §68 |
 | `/tasks`, `/approvals` | 4 | core primitives |

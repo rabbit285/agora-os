@@ -253,6 +253,28 @@ export type Briefing = {
   created_at: string;
 };
 
+export const MEMORY_ENTRY_TYPES = [
+  "approved_fact",
+  "approved_answer",
+  "policy",
+  "business_rule",
+  "preference",
+  "past_decision",
+  "workflow_outcome",
+] as const;
+
+export type MemoryEntry = {
+  id: string;
+  entry_type: string;
+  content: string;
+  provenance_type: string;
+  provenance_id: string | null;
+  created_by: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type KnowledgeBase = {
   id: string;
   name: string;

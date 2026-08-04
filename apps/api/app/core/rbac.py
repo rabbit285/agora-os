@@ -73,6 +73,7 @@ PERMISSIONS: dict[str, str] = {
     "ai.copilot.ask": "Ask the AI Copilot questions grounded in organizational knowledge",
     "reports.generate": "Generate and download reports",
     "business_intelligence.view": "View AI recommendations and the daily business briefing",
+    "business_memory.manage": "Create, correct, and delete structured organization memory entries",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -155,6 +156,13 @@ _CROSS_CUTTING_PERMISSIONS = (
     + BUSINESS_INTELLIGENCE_PERMISSIONS
 )
 
+# Business AI Memory (spec §89) writes define what the organization
+# treats as ground truth — narrower than the cross-cutting set above,
+# granted only to governance-adjacent roles rather than every role.
+BUSINESS_MEMORY_PERMISSIONS = [
+    "business_memory.manage",
+]
+
 # Only org_admin gets the full Phase 1 permission set; module-specific
 # roles get only their own module's permissions plus the cross-cutting
 # Knowledge/Copilot permissions above. `read_only` is deliberately seeded
@@ -171,15 +179,20 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
         *INTEGRATIONS_PERMISSIONS,
         *_CROSS_CUTTING_PERMISSIONS,
     ],
-    "compliance_manager": COMPLIANCE_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "compliance_manager": (
+        COMPLIANCE_PERMISSIONS + BUSINESS_MEMORY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+    ),
     "dpo": (
         COMPLIANCE_PERMISSIONS
         + AI_GOVERNANCE_PERMISSIONS
         + PRIVACY_PERMISSIONS
+        + BUSINESS_MEMORY_PERMISSIONS
         + _CROSS_CUTTING_PERMISSIONS
     ),
     "security_manager": SECURITY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
-    "ai_governance_manager": AI_GOVERNANCE_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "ai_governance_manager": (
+        AI_GOVERNANCE_PERMISSIONS + BUSINESS_MEMORY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+    ),
     "sales_manager": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "sales_representative": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "support_manager": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,

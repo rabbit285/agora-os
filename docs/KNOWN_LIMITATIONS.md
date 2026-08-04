@@ -321,7 +321,16 @@ implied to work.
   that data all exists now but nothing wires any of it into Copilot
   retrieval. There's also no cross-module intent router —
   every question goes through the same single retrieval path over
-  Knowledge chunks only.
+  Knowledge chunks only. This now also includes **Business AI Memory**
+  (spec §89, fixed 2026-08-04, BIZ-04): `app.memory` is a real, structured,
+  provenance-tracked store (approved facts/answers, policies, business
+  rules, preferences, past decisions, workflow outcomes) with real
+  admin correct/delete — but `app.ai.copilot.ask_copilot`'s retrieval
+  path was deliberately left unmodified in this pass rather than risk
+  destabilizing that already-tested, security-sensitive prompt-
+  construction code under time pressure. The storage/provenance/
+  correction subsystem spec §89 actually names is complete; grounding
+  Copilot answers in it is a disclosed, real next step, not done yet.
 - **Compliance frameworks/requirements are a fixed seeded catalog**, not
   an editable admin feature — GDPR, EU AI Act, and ISO 27001 are seeded
   with a handful of representative requirements each (not the complete

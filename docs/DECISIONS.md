@@ -2209,3 +2209,60 @@ zero or an omitted section — spec §82's discipline applied to a
 feature whose whole premise is surfacing what's wrong; a briefing that
 silently omits a clean section would look identical to one that failed
 to check it.
+
+## ADR-0055 — Business AI Memory is administrator-curated by default, with exactly one real automatic provenance hook (Policy publish); write access is narrower than the other Business Intelligence features; Copilot grounding is disclosed as not-yet-wired
+
+**Decision**: spec §89 pairs "Create organization memory" with its own
+caution — "carefully" — immediately followed by "Do not rely only on
+raw conversation history. Create structured memory. Track provenance."
+Read together, this is a warning against a specific failure mode: a
+memory system that silently vacuums every chat turn, workflow event,
+and decision into "ground truth" without human review would violate
+both "carefully" and spec §82's no-fake-features discipline (chat
+transcripts are not "approved facts" just because they occurred).
+`app.memory.MemoryEntry` therefore defaults every one of the 7 named
+categories to administrator-curated creation (`provenance_type=
+"manual"`, `POST /memory`) rather than building 7 automatic capture
+hooks. Exactly one automatic hook exists: publishing a Policy
+(`PATCH /compliance/policies/{id}/status`) creates a `policy`-type
+entry citing that exact Policy id. Policy publication was chosen as
+the one exception because it is itself already a deliberate,
+already-permission-gated admin action — auto-recording it doesn't
+introduce indiscriminate capture, it just avoids a redundant second
+manual step for something an admin already decided carefully. The hook
+is deduplicated (checked via a query for an existing entry with that
+`provenance_id` before creating another) so republishing the same
+policy — a state transition that can legitimately happen more than
+once — never produces a duplicate memory row.
+
+Write access (`business_memory.manage`) is deliberately narrower than
+BIZ-02/03's cross-cutting `business_intelligence.view`: recommendations
+and briefings are read surfaces computed from data that already exists
+elsewhere, but a Memory entry *becomes* organizational ground truth the
+moment it's written — granting write access to every role the way
+Reports/Recommendations/Briefing do would let, say, a Sales
+Representative write an "approved" business rule with the same
+authority as one from Compliance. It's granted to `org_admin` plus the
+governance-adjacent roles (`compliance_manager`, `dpo`,
+`ai_governance_manager`) that plausibly own "approved facts" and
+"business rules" as part of their actual job, while *viewing* memory
+stays open to every role (including `read`-level ones) since the whole
+point of a shared memory is that it grounds the organization broadly.
+Deletion is a soft `status` flip, never a row removal, so an
+administrator's own correction/deletion action remains auditable
+(`memory.entry.deleted`/`memory.entry.corrected`, both with real
+before/after content) rather than disappearing with the entry it acted
+on.
+
+What is disclosed as not done: `app.ai.copilot.ask_copilot`'s retrieval
+path is untouched by this cluster. Spec §89's own text is entirely
+about storage/provenance/correction — it never states Copilot must be
+grounded in this memory — so building the complete, real storage
+subsystem and stopping there is a legitimate, literal reading of the
+requirement, not a partial implementation. Wiring Memory into Copilot's
+prompt construction was considered but deferred: `ask_copilot` is an
+already-tested, security-sensitive path (the injection-defense framing
+in `build_grounded_prompt` matters), and modifying its retrieval logic
+under time pressure risked a regression disproportionate to the value
+of this one pass, versus building it deliberately in a future session
+with its own test coverage.

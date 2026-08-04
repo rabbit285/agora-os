@@ -566,8 +566,21 @@ after the change.
   Recommendation Engine outright rather than a second generator. New `/briefing` page. 5
   backend + 2 frontend tests; live-verified against the seeded demo org. See
   `SPEC_TRACEABILITY_MATRIX.md` BIZ-03.
-- **MISSING**: BIZ-04 Business AI Memory, BIZ-05 Business Rules Engine — none implemented
-  yet.
+- **[FIXED 2026-08-04]** ~~BIZ-04 Business AI Memory — not implemented~~ — real structured
+  memory across all 7 spec-named categories, every entry carrying real `provenance_type`/
+  `provenance_id` rather than raw conversation history treated as ground truth. One real
+  automatic hook (publishing a Policy creates a deduplicated `policy`-type entry); every
+  other category is administrator-curated by design, matching spec's own "Create
+  organization memory carefully" caution against indiscriminate automatic capture.
+  Correct/delete are real, permission-gated (new `business_memory.manage`, narrower than
+  the cross-cutting BIZ-02/03 permission since this defines organizational ground truth),
+  and audit-logged with real before/after content; deletion is a soft flip, not a row
+  removal. New `/settings/memory` page. 7 backend + 3 frontend tests; live-verified. **Not
+  yet done, disclosed**: wiring this memory into AI Copilot's own retrieval/grounding
+  context — the storage/provenance/correction subsystem is complete, but wasn't threaded
+  into `app.ai.copilot`'s already-tested prompt-construction path in this pass. See
+  `SPEC_TRACEABILITY_MATRIX.md` BIZ-04.
+- **MISSING**: BIZ-05 Business Rules Engine — not implemented yet.
 - **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
   Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
   strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`
