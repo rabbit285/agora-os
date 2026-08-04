@@ -59,7 +59,7 @@ export default function CampaignsPage() {
             onChange={(e) => setName(e.target.value)}
           />
           <select
-            className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-sm"
+            className="h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 text-sm"
             value={sequenceId}
             onChange={(e) => setSequenceId(e.target.value)}
           >
@@ -72,7 +72,7 @@ export default function CampaignsPage() {
           </select>
           <select
             multiple
-            className="h-24 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            className="h-24 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm"
             value={selectedContactIds}
             onChange={(e) =>
               setSelectedContactIds(Array.from(e.target.selectedOptions, (o) => o.value))
@@ -93,13 +93,13 @@ export default function CampaignsPage() {
           </Button>
         </CardContent>
       </Card>
-      {campaigns?.length === 0 && <p className="text-sm text-neutral-500">No campaigns yet.</p>}
+      {campaigns?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No campaigns yet.</p>}
       <div className="flex flex-col gap-2">
         {campaigns?.map((campaign) => (
           <Link key={campaign.id} href={`/sales/campaigns/${campaign.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{campaign.name}</div>
+                <div className="font-medium text-[var(--fg-default)]">{campaign.name}</div>
                 <StatusBadge status={campaign.status} />
               </CardContent>
             </Card>

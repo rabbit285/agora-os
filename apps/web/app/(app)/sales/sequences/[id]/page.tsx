@@ -68,13 +68,13 @@ export default function SequenceDetailPage({ params }: { params: Promise<{ id: s
       />
 
       <div className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Steps
         </h2>
         <Card className="mb-3">
           <CardContent className="flex flex-col gap-2 pt-6">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-neutral-700">Wait days before this step:</label>
+              <label className="text-sm text-[var(--fg-muted)]">Wait days before this step:</label>
               <Input
                 type="number"
                 className="w-24"
@@ -101,10 +101,10 @@ export default function SequenceDetailPage({ params }: { params: Promise<{ id: s
           {sequence.steps.map((step) => (
             <Card key={step.id}>
               <CardContent className="pt-6">
-                <div className="mb-1 text-xs text-neutral-500">
+                <div className="mb-1 text-xs text-[var(--fg-muted)]">
                   Step {step.order_index + 1} — {step.wait_days} day(s) wait — {step.channel}
                 </div>
-                <p className="text-sm text-neutral-900">{step.body_template}</p>
+                <p className="text-sm text-[var(--fg-default)]">{step.body_template}</p>
               </CardContent>
             </Card>
           ))}
@@ -112,14 +112,14 @@ export default function SequenceDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Enrollments
         </h2>
         {availableContacts.length > 0 && (
           <Card className="mb-3">
             <CardContent className="flex items-center gap-2 pt-6">
               <select
-                className="h-9 flex-1 rounded-md border border-neutral-300 bg-white px-3 text-sm"
+                className="h-9 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 text-sm"
                 value={selectedContactId}
                 onChange={(e) => setSelectedContactId(e.target.value)}
               >
@@ -141,13 +141,13 @@ export default function SequenceDetailPage({ params }: { params: Promise<{ id: s
           </Card>
         )}
         {sequence.enrollments.length === 0 && (
-          <p className="text-sm text-neutral-500">No contacts enrolled yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No contacts enrolled yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {sequence.enrollments.map((enrollment) => (
             <Card key={enrollment.id}>
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="text-sm text-neutral-900">
+                <div className="text-sm text-[var(--fg-default)]">
                   Step {enrollment.current_step_index + 1}
                 </div>
                 <StatusBadge status={enrollment.status} />

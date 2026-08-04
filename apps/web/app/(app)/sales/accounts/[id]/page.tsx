@@ -90,7 +90,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
             </Button>
             <Link
               href={`/knowledge/graph?type=sales_account&id=${id}`}
-              className="text-sm text-neutral-500 hover:underline"
+              className="text-sm text-[var(--fg-muted)] hover:underline"
             >
               View in Knowledge Graph
             </Link>
@@ -99,7 +99,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
         }
       />
       {enrich.data && (
-        <p className="mb-4 text-xs text-neutral-500">
+        <p className="mb-4 text-xs text-[var(--fg-muted)]">
           {enrich.data.configured
             ? enrich.data.updated_fields.length > 0
               ? `Enriched: updated ${enrich.data.updated_fields.join(", ")}.`
@@ -109,7 +109,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
       )}
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Contacts
         </h2>
         <div className="flex flex-col gap-2">
@@ -119,11 +119,11 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                 <div>
                   <Link
                     href={`/sales/contacts/${contact.id}`}
-                    className="font-medium text-neutral-900 hover:underline"
+                    className="font-medium text-[var(--fg-default)] hover:underline"
                   >
                     {contact.full_name}
                   </Link>
-                  <div className="text-xs text-neutral-400">{contact.email}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">{contact.email}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {contact.do_not_contact && <Badge variant="destructive">Do not contact</Badge>}
@@ -155,7 +155,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
 
       {selectedContactId && (
         <div className="mb-8">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
             Compose Outreach
           </h2>
           <Card>
@@ -172,7 +172,7 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
               >
                 Send
               </Button>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-[var(--fg-subtle)]">
                 Sending is blocked automatically if the contact is marked do-not-contact
                 (spec section 91 — compliance governs outreach).
               </p>
@@ -182,11 +182,11 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
       )}
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Opportunities
         </h2>
         {account.opportunities.length === 0 && (
-          <p className="text-sm text-neutral-500">No opportunities yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No opportunities yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {account.opportunities.map((opportunity) => {
@@ -197,19 +197,19 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
                   <div>
                     <Link
                       href={`/sales/opportunities/${opportunity.id}`}
-                      className="font-medium text-neutral-900 hover:underline"
+                      className="font-medium text-[var(--fg-default)] hover:underline"
                     >
                       {opportunity.title}
                     </Link>
                     {opportunity.onboarding_customer_id && (
-                      <Link href="/support" className="text-xs text-neutral-500 hover:underline">
+                      <Link href="/support" className="text-xs text-[var(--fg-muted)] hover:underline">
                         Onboarded as a Support customer →
                       </Link>
                     )}
                     {review && (
                       <Link
                         href={`/compliance/security-reviews/${review.id}`}
-                        className="block text-xs text-neutral-500 hover:underline"
+                        className="block text-xs text-[var(--fg-muted)] hover:underline"
                       >
                         {review.is_deal_blocker ? "Deal blocked by security review →" : "Security review →"}
                       </Link>
@@ -224,10 +224,10 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Outreach History
         </h2>
-        {outreach?.length === 0 && <p className="text-sm text-neutral-500">No outreach yet.</p>}
+        {outreach?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No outreach yet.</p>}
         <div className="flex flex-col gap-2">
           {outreach
             ?.filter((m) => account.contacts.some((c) => c.id === m.contact_id))
@@ -235,9 +235,9 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
               <Card key={message.id}>
                 <CardContent className="flex items-center justify-between pt-6">
                   <div>
-                    <div className="text-sm text-neutral-700">{message.body}</div>
+                    <div className="text-sm text-[var(--fg-muted)]">{message.body}</div>
                     {message.blocked_reason && (
-                      <div className="text-xs text-red-600">{message.blocked_reason}</div>
+                      <div className="text-xs text-[var(--critical-600)]">{message.blocked_reason}</div>
                     )}
                   </div>
                   <StatusBadge status={message.status} />

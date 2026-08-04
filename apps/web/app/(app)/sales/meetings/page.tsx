@@ -66,7 +66,7 @@ export default function MeetingsPage() {
             onChange={(e) => setTitle(e.target.value)}
           />
           <select
-            className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-sm"
+            className="h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 text-sm"
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
           >
@@ -91,20 +91,20 @@ export default function MeetingsPage() {
           </Button>
         </CardContent>
       </Card>
-      {meetings?.length === 0 && <p className="text-sm text-neutral-500">No meetings yet.</p>}
+      {meetings?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No meetings yet.</p>}
       <div className="flex flex-col gap-2">
         {meetings?.map((meeting) => (
           <Card key={meeting.id}>
             <CardContent className="pt-6">
               <div className="mb-1 flex items-center justify-between">
-                <div className="font-medium text-neutral-900">{meeting.title}</div>
+                <div className="font-medium text-[var(--fg-default)]">{meeting.title}</div>
                 <StatusBadge status={meeting.status} />
               </div>
-              <div className="mb-2 text-xs text-neutral-400">
+              <div className="mb-2 text-xs text-[var(--fg-subtle)]">
                 {new Date(meeting.scheduled_at).toLocaleString()}
               </div>
               {meeting.prep_notes ? (
-                <p className="text-sm text-neutral-700">{meeting.prep_notes}</p>
+                <p className="text-sm text-[var(--fg-muted)]">{meeting.prep_notes}</p>
               ) : (
                 <Button
                   size="sm"
