@@ -65,6 +65,7 @@ _DIRECT_ORG_SCOPED_TABLES: tuple[str, ...] = (
     "dsars",
     "evidence",
     "files",
+    "frameworks",
     "integration_connections",
     "integration_sync_runs",
     "integration_webhook_events",
@@ -126,6 +127,8 @@ _CHILD_TABLE_DELETES: tuple[tuple[str, str, str], ...] = (
     ("membership_roles", "membership_id", "memberships"),
     ("role_permissions", "role_id", "roles"),
     ("security_incident_assets", "incident_id", "security_incidents"),
+    ("task_comments", "task_id", "tasks"),
+    ("task_evidence", "task_id", "tasks"),
 )
 
 # `roles`/`role_permissions` deliberately include only organization-
