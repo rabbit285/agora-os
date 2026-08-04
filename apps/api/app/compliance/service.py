@@ -199,6 +199,7 @@ async def register_ai_system(
             action_type=f"Approve high-risk AI system: {name}",
             risk_class="critical" if risk_classification == "unacceptable" else "high",
             requested_by=actor_user_id,
+            module="compliance",
         )
         db.add(approval)
         await db.flush()
@@ -298,6 +299,7 @@ async def create_dpia(
             action_type=f"Approve high-risk DPIA: {title}",
             risk_class="high",
             requested_by=actor_user_id,
+            module="compliance",
         )
         db.add(approval)
         await db.flush()
@@ -453,6 +455,8 @@ async def create_ai_incident(
             module="compliance",
             priority="urgent",
             assignee_id=owner_id,
+            entity_type="ai_incident",
+            entity_id=str(incident.id),
         )
         db.add(response_task)
         await db.flush()
@@ -464,8 +468,7 @@ async def create_ai_incident(
                 organization_id=organization_id,
                 user_id=owner_id,
                 title="Critical AI incident assigned to you",
-                body=f'"{title}" was just declared critical and needs immediate '
-                "investigation.",
+                body=f'"{title}" was just declared critical and needs immediate ' "investigation.",
                 link="/compliance",
                 channels=["email"],
             )
@@ -753,6 +756,8 @@ async def record_audit_finding(
             module="compliance",
             priority="high" if severity == "high" else "urgent",
             assignee_id=audit.owner_id,
+            entity_type="audit_finding",
+            entity_id=str(finding.id),
         )
         db.add(remediation_task)
         await db.flush()
@@ -834,6 +839,7 @@ async def start_security_review(
             action_type=f"Clear security review: {opportunity.title}",
             risk_class="high",
             requested_by=actor_user_id,
+            module="sales",
         )
         db.add(approval)
         await db.flush()

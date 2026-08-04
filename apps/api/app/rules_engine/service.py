@@ -50,7 +50,9 @@ async def create_business_rule(
     return rule
 
 
-async def list_business_rules(db: AsyncSession, *, organization_id: uuid.UUID) -> list[BusinessRule]:
+async def list_business_rules(
+    db: AsyncSession, *, organization_id: uuid.UUID
+) -> list[BusinessRule]:
     result = await db.execute(
         select(BusinessRule)
         .where(BusinessRule.organization_id == organization_id)
@@ -120,7 +122,9 @@ def _condition_matches(actual: Any, operator: str, expected_raw: str) -> bool:
     return False
 
 
-async def _users_with_role(db: AsyncSession, *, organization_id: uuid.UUID, role_key: str) -> list[User]:
+async def _users_with_role(
+    db: AsyncSession, *, organization_id: uuid.UUID, role_key: str
+) -> list[User]:
     result = await db.execute(
         select(User)
         .join(Membership, Membership.user_id == User.id)
@@ -151,7 +155,9 @@ async def evaluate_rules(
     for rule in rules:
         if rule.condition_field not in payload:
             continue
-        if not _condition_matches(payload[rule.condition_field], rule.condition_operator, rule.condition_value):
+        if not _condition_matches(
+            payload[rule.condition_field], rule.condition_operator, rule.condition_value
+        ):
             continue
 
         if rule.action_type == "require_approval" and actor_user_id is not None:
@@ -160,6 +166,7 @@ async def evaluate_rules(
                 action_type=f"business_rule:{rule.name}",
                 risk_class=rule.action_risk_class or "moderate",
                 requested_by=actor_user_id,
+                module="business_rules",
             )
             db.add(approval)
             await db.flush()
@@ -173,7 +180,9 @@ async def evaluate_rules(
                 after_state={"approval_id": str(approval.id)},
             )
         elif rule.action_type == "notify":
-            users = await _users_with_role(db, organization_id=organization_id, role_key=rule.action_role_key)
+            users = await _users_with_role(
+                db, organization_id=organization_id, role_key=rule.action_role_key
+            )
             for user in users:
                 await notify(
                     db,

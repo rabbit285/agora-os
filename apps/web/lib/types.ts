@@ -17,6 +17,11 @@ export type Organization = {
   notification_webhook_url: string | null;
 };
 
+export type ChecklistItem = {
+  text: string;
+  done: boolean;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -26,6 +31,32 @@ export type Task = {
   priority: "low" | "normal" | "high" | "urgent";
   assignee_id: string | null;
   due_at: string | null;
+  created_by: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  checklist: ChecklistItem[];
+  created_at: string;
+};
+
+export type TaskComment = {
+  id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+};
+
+export type TaskEvidence = {
+  id: string;
+  file_id: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type TaskActivity = {
+  action: string;
+  actor_user_id: string | null;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
   created_at: string;
 };
 
@@ -37,6 +68,9 @@ export type Approval = {
   requested_by: string;
   decided_by: string | null;
   decided_at: string | null;
+  module: string | null;
+  ai_generated: boolean;
+  due_at: string | null;
   created_at: string;
 };
 

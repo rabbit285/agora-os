@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -64,7 +65,12 @@ export default function TasksPage() {
           <Card key={task.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{task.title}</div>
+                <Link
+                  href={`/tasks/${task.id}`}
+                  className="font-medium text-neutral-900 hover:underline"
+                >
+                  {task.title}
+                </Link>
                 <div className="text-xs text-neutral-400">Priority: {task.priority}</div>
               </div>
               <div className="flex items-center gap-3">

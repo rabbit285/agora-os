@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+class ChecklistItem(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    done: bool = False
 
 
 class TaskCreate(BaseModel):
@@ -12,10 +18,50 @@ class TaskCreate(BaseModel):
     priority: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
     assignee_id: uuid.UUID | None = None
     due_at: datetime | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
+    checklist: list[ChecklistItem] = Field(default_factory=list)
 
 
 class TaskUpdate(BaseModel):
-    status: str = Field(pattern="^(open|in_progress|done|cancelled)$")
+    status: str | None = Field(default=None, pattern="^(open|in_progress|done|cancelled)$")
+    checklist: list[ChecklistItem] | None = None
+
+
+class TaskCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class TaskCommentOut(BaseModel):
+    id: uuid.UUID
+    author_id: uuid.UUID
+    body: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaskEvidenceCreate(BaseModel):
+    file_id: uuid.UUID
+
+
+class TaskEvidenceOut(BaseModel):
+    id: uuid.UUID
+    file_id: uuid.UUID
+    created_by: uuid.UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaskActivityOut(BaseModel):
+    action: str
+    actor_user_id: uuid.UUID | None
+    before_state: dict[str, Any] | None
+    after_state: dict[str, Any] | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class TaskOut(BaseModel):
@@ -27,6 +73,10 @@ class TaskOut(BaseModel):
     priority: str
     assignee_id: uuid.UUID | None
     due_at: datetime | None
+    created_by: uuid.UUID | None
+    entity_type: str | None
+    entity_id: str | None
+    checklist: list[dict[str, Any]]
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -45,6 +95,9 @@ class ApprovalOut(BaseModel):
     requested_by: uuid.UUID
     decided_by: uuid.UUID | None
     decided_at: datetime | None
+    module: str | None
+    ai_generated: bool
+    due_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -149,6 +149,7 @@ async def _handle_human_approval(ctx: StepContext) -> WorkflowStepRun:
         action_type=ctx.config.get("action_type", f"Workflow approval: {ctx.workflow.name}"),
         risk_class=ctx.config.get("risk_class", "moderate"),
         requested_by=ctx.run.triggered_by or ctx.actor_user_id,
+        module="automation",
     )
     ctx.db.add(approval)
     await ctx.db.flush()

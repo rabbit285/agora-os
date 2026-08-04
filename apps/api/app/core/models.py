@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -176,6 +177,52 @@ class Task(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nullable: rows created before this field existed have no recorded
+    # creator. Every task created going forward always sets it.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # Generic link back to the record this task concerns (spec §44's
+    # "Entity" field) — a string pair like AuditEvent.object_type/object_id
+    # rather than 8+ nullable FK columns, one per possible origin module.
+    entity_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # [{"text": str, "done": bool}, ...] — spec §44's "Checklist" field.
+    checklist: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+
+
+class TaskComment(UUIDPrimaryKeyMixin, Base):
+    """spec §44's "Comments" field."""
+
+    __tablename__ = "task_comments"
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(String(2000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskEvidence(UUIDPrimaryKeyMixin, Base):
+    """spec §44's "Evidence" field — attaches an already-uploaded `File`
+    (the same upload primitive Compliance's own Evidence model attaches)
+    rather than a second file-upload pipeline."""
+
+    __tablename__ = "task_evidence"
+
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+    )
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=False
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Approval(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -197,6 +244,16 @@ class Approval(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nullable: rows created before this field existed have no recorded
+    # module. Every approval created going forward always sets it (spec
+    # §45's Approval Center "Module" column).
+    module: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # spec §45's "AI-generated?" column — real and available, but every
+    # current call site is a deterministic rule/policy/workflow trigger, not
+    # an AI model authoring free-text content awaiting sign-off, so it is
+    # honestly always False today (see docs/DECISIONS.md).
+    ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class File(UUIDPrimaryKeyMixin, Base):
