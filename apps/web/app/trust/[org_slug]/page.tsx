@@ -65,8 +65,8 @@ export default function TrustCenterPublicPage({
   if (isError || !trustCenter) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-neutral-900">Trust Center not found</h1>
-        <p className="mt-2 text-sm text-neutral-500">
+        <h1 className="text-xl font-semibold text-[var(--fg-default)]">Trust Center not found</h1>
+        <p className="mt-2 text-sm text-[var(--fg-muted)]">
           We couldn&apos;t find a public Trust Center at this address.
         </p>
       </div>
@@ -75,29 +75,29 @@ export default function TrustCenterPublicPage({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
-      <h1 className="text-3xl font-semibold text-neutral-900">
+      <h1 className="text-3xl font-semibold text-[var(--fg-default)]">
         {trustCenter.organization_name} Trust Center
       </h1>
-      <p className="mt-2 text-sm text-neutral-500">
+      <p className="mt-2 text-sm text-[var(--fg-muted)]">
         Security, privacy, and compliance information for {trustCenter.organization_name}.
       </p>
 
       <div className="mt-10 flex flex-col gap-4">
         {trustCenter.items.length === 0 && (
-          <p className="text-sm text-neutral-500">No information has been published yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No information has been published yet.</p>
         )}
         {trustCenter.items.map((item) => (
           <Card key={item.category}>
             <CardContent className="flex flex-col gap-2 pt-6">
               <div className="flex items-center justify-between">
-                <div className="font-medium text-neutral-900">
+                <div className="font-medium text-[var(--fg-default)]">
                   {item.title || categoryLabel(item.category)}
                 </div>
                 <Badge variant="secondary">{STATUS_LABELS[item.status] ?? item.status}</Badge>
               </div>
-              {item.content && <p className="text-sm text-neutral-700">{item.content}</p>}
+              {item.content && <p className="text-sm text-[var(--fg-muted)]">{item.content}</p>}
               {item.policy && (
-                <div className="text-xs text-neutral-500">
+                <div className="text-xs text-[var(--fg-muted)]">
                   Downloadable document: {item.policy.title}
                 </div>
               )}
@@ -107,8 +107,8 @@ export default function TrustCenterPublicPage({
       </div>
 
       <div className="mt-12">
-        <h2 className="mb-3 text-lg font-semibold text-neutral-900">Request Evidence</h2>
-        <p className="mb-4 text-sm text-neutral-500">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--fg-default)]">Request Evidence</h2>
+        <p className="mb-4 text-sm text-[var(--fg-muted)]">
           Need a document or answer that isn&apos;t published here? Send us a request and our
           team will follow up.
         </p>

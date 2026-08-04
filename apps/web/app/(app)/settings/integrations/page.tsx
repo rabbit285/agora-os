@@ -20,7 +20,7 @@ import type {
 } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 const IN_FLIGHT_SYNC_STATUSES = new Set(["running"]);
 
@@ -67,8 +67,8 @@ function WebhookConnectionCard({
       <CardContent className="flex flex-col gap-3 pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="font-medium text-neutral-900">{connection.name}</div>
-            <div className="text-xs text-neutral-400">{connection.connector_key}</div>
+            <div className="font-medium text-[var(--fg-default)]">{connection.name}</div>
+            <div className="text-xs text-[var(--fg-subtle)]">{connection.connector_key}</div>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={connection.status} />
@@ -79,18 +79,18 @@ function WebhookConnectionCard({
         </div>
 
         <div className="flex flex-col gap-1">
-          <span className="text-xs uppercase tracking-wide text-neutral-400">Webhook URL</span>
+          <span className="text-xs uppercase tracking-wide text-[var(--fg-subtle)]">Webhook URL</span>
           <Input readOnly value={webhookUrl} className="font-mono text-xs" />
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs uppercase tracking-wide text-neutral-400">
+          <span className="text-xs uppercase tracking-wide text-[var(--fg-subtle)]">
             Secret (HMAC-SHA256 the raw request body, send as X-Webhook-Signature)
           </span>
           <Input readOnly value={connection.webhook_secret ?? ""} className="font-mono text-xs" />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500">Linked workflow:</span>
+          <span className="text-xs text-[var(--fg-muted)]">Linked workflow:</span>
           <select
             className={selectClassName}
             value={connection.linked_workflow_id ?? ""}
@@ -104,18 +104,18 @@ function WebhookConnectionCard({
             ))}
           </select>
           {webhookWorkflows.length === 0 && (
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-[var(--fg-subtle)]">
               No workflows with trigger_type=&ldquo;webhook&rdquo; yet.
             </span>
           )}
         </div>
 
         {connection.last_error && (
-          <p className="text-xs text-red-600">Last error: {connection.last_error}</p>
+          <p className="text-xs text-[var(--critical-600)]">Last error: {connection.last_error}</p>
         )}
 
         <button
-          className="self-start text-xs text-neutral-500 hover:underline"
+          className="self-start text-xs text-[var(--fg-muted)] hover:underline"
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? "Hide" : "Show"} received events
@@ -123,17 +123,17 @@ function WebhookConnectionCard({
         {expanded && (
           <div className="flex flex-col gap-1">
             {events?.length === 0 && (
-              <p className="text-xs text-neutral-400">No events received yet.</p>
+              <p className="text-xs text-[var(--fg-subtle)]">No events received yet.</p>
             )}
             {events?.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs"
+                className="flex items-center justify-between rounded border border-[var(--border-default)] px-2 py-1 text-xs"
               >
                 <span>{new Date(event.received_at).toLocaleString()}</span>
                 <div className="flex items-center gap-2">
                   {event.triggered_run_id && (
-                    <span className="text-neutral-400">triggered a run</span>
+                    <span className="text-[var(--fg-subtle)]">triggered a run</span>
                   )}
                   <StatusBadge status={event.verified ? "succeeded" : "failed"} />
                 </div>
@@ -208,8 +208,8 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
       <CardContent className="flex flex-col gap-3 pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="font-medium text-neutral-900">{connection.name}</div>
-            <div className="text-xs text-neutral-400">
+            <div className="font-medium text-[var(--fg-default)]">{connection.name}</div>
+            <div className="text-xs text-[var(--fg-subtle)]">
               {connection.connector_key}
               {connection.external_account_id && ` · account ${connection.external_account_id}`}
             </div>
@@ -221,11 +221,11 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
         </div>
 
         {connection.scopes && connection.scopes.length > 0 && (
-          <div className="text-xs text-neutral-500">Scopes: {connection.scopes.join(", ")}</div>
+          <div className="text-xs text-[var(--fg-muted)]">Scopes: {connection.scopes.join(", ")}</div>
         )}
 
         {connection.last_error && (
-          <p className="text-xs text-red-600">Last error: {connection.last_error}</p>
+          <p className="text-xs text-[var(--critical-600)]">Last error: {connection.last_error}</p>
         )}
 
         {isConnected && (
@@ -251,7 +251,7 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
         )}
 
         <button
-          className="self-start text-xs text-neutral-500 hover:underline"
+          className="self-start text-xs text-[var(--fg-muted)] hover:underline"
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? "Hide" : "Show"} sync history
@@ -259,24 +259,24 @@ function OAuthConnectionCard({ connection }: { connection: IntegrationConnection
         {expanded && (
           <div className="flex flex-col gap-1">
             {syncRuns?.length === 0 && (
-              <p className="text-xs text-neutral-400">No syncs run yet.</p>
+              <p className="text-xs text-[var(--fg-subtle)]">No syncs run yet.</p>
             )}
             {syncRuns?.map((run) => (
               <div
                 key={run.id}
-                className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs"
+                className="flex items-center justify-between rounded border border-[var(--border-default)] px-2 py-1 text-xs"
               >
                 <div className="flex flex-col">
                   <span>{new Date(run.started_at).toLocaleString()}</span>
                   {run.cursor_used && (
-                    <span className="font-mono text-neutral-400">
+                    <span className="font-mono text-[var(--fg-subtle)]">
                       resumed from checkpoint
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   {run.items_synced !== null && (
-                    <span className="text-neutral-400">{run.items_synced} items</span>
+                    <span className="text-[var(--fg-subtle)]">{run.items_synced} items</span>
                   )}
                   <StatusBadge status={run.status} />
                 </div>
@@ -313,7 +313,7 @@ function ProviderCatalogSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         OAuth Connectors
       </h2>
       <div className="flex flex-col gap-2">
@@ -324,8 +324,8 @@ function ProviderCatalogSection() {
               <CardContent className="flex flex-col gap-3 pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-neutral-900">{provider.name}</div>
-                    <div className="text-xs text-neutral-400">
+                    <div className="font-medium text-[var(--fg-default)]">{provider.name}</div>
+                    <div className="text-xs text-[var(--fg-subtle)]">
                       {provider.scopes.length} permission
                       {provider.scopes.length === 1 ? "" : "s"} requested
                     </div>
@@ -349,15 +349,15 @@ function ProviderCatalogSection() {
                 </div>
 
                 {isPreviewing && (
-                  <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="mb-2 text-xs font-medium text-neutral-600">
+                  <div className="rounded border border-[var(--border-default)] bg-[var(--bg-sunken)] p-3">
+                    <p className="mb-2 text-xs font-medium text-[var(--fg-muted)]">
                       Connecting {provider.name} will request:
                     </p>
                     <ul className="mb-3 flex flex-col gap-1">
                       {provider.scopes.map((scope) => (
                         <li
                           key={scope}
-                          className="font-mono text-xs text-neutral-700 before:mr-1.5 before:content-['•']"
+                          className="font-mono text-xs text-[var(--fg-muted)] before:mr-1.5 before:content-['•']"
                         >
                           {scope}
                         </li>
@@ -378,7 +378,7 @@ function ProviderCatalogSection() {
         })}
       </div>
       {oauthProviders.some((p) => !p.configured) && (
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-xs text-[var(--fg-subtle)]">
           Set the provider&apos;s client ID/secret in the environment to enable a real connection —
           see .env.example. Without them, &ldquo;Connect&rdquo; is disabled rather than faking a
           connected state.
@@ -444,7 +444,7 @@ export default function IntegrationsSettingsPage() {
       {banner && (
         <Card className="mb-4">
           <CardContent className="pt-6">
-            <p className={banner.kind === "error" ? "text-sm text-red-600" : "text-sm text-green-700"}>
+            <p className={banner.kind === "error" ? "text-sm text-[var(--critical-600)]" : "text-sm text-[var(--success-700)]"}>
               {banner.text}
             </p>
           </CardContent>
@@ -455,7 +455,7 @@ export default function IntegrationsSettingsPage() {
 
       {oauthConnections.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
             OAuth Connections
           </h2>
           <div className="flex flex-col gap-3">
@@ -467,7 +467,7 @@ export default function IntegrationsSettingsPage() {
       )}
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Webhook Connections
         </h2>
         <Card className="mb-4">
@@ -487,7 +487,7 @@ export default function IntegrationsSettingsPage() {
         </Card>
 
         {webhookConnections.length === 0 && (
-          <p className="text-sm text-neutral-500">No webhook connections yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No webhook connections yet.</p>
         )}
         <div className="flex flex-col gap-3">
           {webhookConnections.map((connection) => (
