@@ -10,6 +10,7 @@ instructions to follow.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 
@@ -72,11 +73,25 @@ async def _retrieve_and_rerank(
     return reranked[:top_k]
 
 
+def _neutralize_forged_source_tags(content: str) -> str:
+    """A malicious document chunk could contain a literal `</source>` (or
+    a fake `<source id="99">`) hoping to forge an early tag boundary in the
+    rendered prompt and have subsequent injected text appear to sit outside
+    the untrusted zone. Since retrieved content is never trusted (spec F5),
+    any occurrence of the real delimiter syntax inside it is neutralized —
+    case-insensitively, since an LLM reads "</SOURCE>" as the same
+    structural cue as "</source>"."""
+    return re.sub(
+        r"</?\s*source\b", lambda m: m.group(0).replace("<", "&lt;"), content, flags=re.IGNORECASE
+    )
+
+
 def build_grounded_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
     """Pure function so the injection-defense framing can be unit tested
     without a database or an AI provider."""
     sources = "\n\n".join(
-        f'<source id="{i + 1}">\n{chunk.content}\n</source>' for i, chunk in enumerate(chunks)
+        f'<source id="{i + 1}">\n{_neutralize_forged_source_tags(chunk.content)}\n</source>'
+        for i, chunk in enumerate(chunks)
     )
     return (
         "You are answering a question using ONLY the numbered <source> blocks below.\n"
