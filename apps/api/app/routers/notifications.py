@@ -3,11 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import Notification, NotificationPreference
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.core.schemas import (
     NotificationOut,
     NotificationPreferenceOut,
@@ -21,9 +22,12 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 @router.get("", response_model=list[NotificationOut])
 async def list_notifications(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Notification]:
-    result = await db.execute(
+    stmt = (
         select(Notification)
         .where(
             Notification.organization_id == context.organization_id,
@@ -31,7 +35,7 @@ async def list_notifications(
         )
         .order_by(Notification.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/{notification_id}/read", response_model=NotificationOut)

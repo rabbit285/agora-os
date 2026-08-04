@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,6 +124,7 @@ from app.compliance.service import (
     update_security_review_status,
 )
 from app.core.models import Approval, File
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -226,14 +227,17 @@ async def get_framework_dashboard(
 
 @router.get("/controls", response_model=list[ControlOut])
 async def list_controls(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Control]:
-    result = await db.execute(
+    stmt = (
         select(Control)
         .where(Control.organization_id == context.organization_id)
         .order_by(Control.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/controls", response_model=ControlOut, status_code=status.HTTP_201_CREATED)
@@ -352,14 +356,17 @@ async def create_assessment(
 
 @router.get("/evidence", response_model=list[EvidenceOut])
 async def list_evidence(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Evidence]:
-    result = await db.execute(
+    stmt = (
         select(Evidence)
         .where(Evidence.organization_id == context.organization_id)
         .order_by(Evidence.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 async def _get_org_evidence(
@@ -419,14 +426,17 @@ async def create_evidence(
 
 @router.get("/risks", response_model=list[RiskOut])
 async def list_risks(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Risk]:
-    result = await db.execute(
+    stmt = (
         select(Risk)
         .where(Risk.organization_id == context.organization_id)
         .order_by(Risk.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/risks", response_model=RiskOut, status_code=status.HTTP_201_CREATED)
@@ -997,14 +1007,17 @@ async def update_ai_incident_status_endpoint(
 
 @router.get("/vendors", response_model=list[VendorOut])
 async def list_vendors(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Vendor]:
-    result = await db.execute(
+    stmt = (
         select(Vendor)
         .where(Vendor.organization_id == context.organization_id)
         .order_by(Vendor.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/vendors", response_model=VendorOut, status_code=status.HTTP_201_CREATED)
@@ -1350,14 +1363,17 @@ async def update_answer(
 
 @router.get("/audits", response_model=list[AuditOut])
 async def list_audits(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Audit]:
-    result = await db.execute(
+    stmt = (
         select(Audit)
         .where(Audit.organization_id == context.organization_id)
         .order_by(Audit.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/audits", response_model=AuditOut, status_code=status.HTTP_201_CREATED)

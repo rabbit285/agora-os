@@ -35,6 +35,15 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    # spec §E7 "API Quality": rate limiting. Real Redis-backed per-IP fixed-
+    # window cap (app.core.rate_limit) — the test suite overrides this to a
+    # very high number (see tests/conftest.py) since it issues thousands of
+    # requests from one loopback identity, which a production-tuned limit
+    # would otherwise trip; tests/test_rate_limit.py monkeypatches it back
+    # down to prove real enforcement.
+    rate_limit_max_requests_per_minute: int = Field(
+        default=300, alias="RATE_LIMIT_MAX_REQUESTS_PER_MINUTE"
+    )
 
     # Temporal
     temporal_address: str = Field(default="localhost:7233", alias="TEMPORAL_ADDRESS")

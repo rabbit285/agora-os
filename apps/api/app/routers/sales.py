@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.sales.enrichment import enrich_account
@@ -74,14 +75,17 @@ router = APIRouter(prefix="/api/v1/sales", tags=["sales"])
 
 @router.get("/accounts", response_model=list[AccountOut])
 async def list_accounts(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Account]:
-    result = await db.execute(
+    stmt = (
         select(Account)
         .where(Account.organization_id == context.organization_id)
         .order_by(Account.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/accounts", response_model=AccountOut, status_code=status.HTTP_201_CREATED)
@@ -145,14 +149,17 @@ async def get_account(
 
 @router.get("/contacts", response_model=list[ContactOut])
 async def list_contacts(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Contact]:
-    result = await db.execute(
+    stmt = (
         select(Contact)
         .where(Contact.organization_id == context.organization_id)
         .order_by(Contact.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/contacts", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
@@ -221,14 +228,17 @@ async def get_contact(
 
 @router.get("/leads", response_model=list[LeadOut])
 async def list_leads(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Lead]:
-    result = await db.execute(
+    stmt = (
         select(Lead)
         .where(Lead.organization_id == context.organization_id)
         .order_by(Lead.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/leads", response_model=LeadOut, status_code=status.HTTP_201_CREATED)
@@ -319,14 +329,17 @@ async def find_leads(
 
 @router.get("/opportunities", response_model=list[OpportunityOut])
 async def list_opportunities(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Opportunity]:
-    result = await db.execute(
+    stmt = (
         select(Opportunity)
         .where(Opportunity.organization_id == context.organization_id)
         .order_by(Opportunity.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/opportunities", response_model=OpportunityOut, status_code=status.HTTP_201_CREATED)

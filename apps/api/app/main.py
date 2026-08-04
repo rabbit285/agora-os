@@ -14,6 +14,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.billing.service import ensure_plan_catalog
 from app.config import settings
+from app.core.idempotency import IdempotencyKeyMiddleware
+from app.core.rate_limit import RateLimitMiddleware
 from app.core.rbac import ensure_system_roles
 from app.core.storage import ensure_bucket
 from app.db.session import AsyncSessionLocal
@@ -60,6 +62,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Agora Origin API", version="0.1.0", lifespan=lifespan)
 
+# spec §E7 "API Quality": rate limiting and idempotency for side effects.
+# Both fail open on a Redis outage. Added before CORSMiddleware: Starlette
+# wraps whichever middleware is added *last* as the outermost layer, so
+# CORS — added last, below — stays outermost and still attaches its
+# headers to a 429 or a replayed response, rather than those short-circuit
+# responses bypassing CORS entirely and surfacing to the browser as an
+# opaque CORS failure instead of the real error.
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(IdempotencyKeyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.app_url],

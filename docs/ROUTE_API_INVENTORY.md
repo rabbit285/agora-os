@@ -133,9 +133,13 @@ standalone frontend usage — both fixed 2026-07-30: Policy via the Evidence-Lib
 section on `/compliance`, frameworks via the new `/compliance/frameworks/[id]`
 dashboard.)
 
-**API-level gaps** (apply across the whole surface, not one module): no pagination
-parameters on any list endpoint observed in the schema; no `Idempotency-Key` header
-support; no visible rate-limiting; no bulk/batch endpoints.
+**API-level, fixed 2026-08-04** (spec §E7, apply across the whole surface, not one
+module): real Redis-backed rate limiting (per-IP, global middleware) and real
+`Idempotency-Key` support (global middleware, opt-in) now cover every endpoint; real
+`limit`/`offset` pagination with an `X-Total-Count` header now covers 18 of the highest-
+cardinality list endpoints (see `REMAINING_PRODUCT_GAPS.md` for the exact list and the
+disclosed reasoning for which ~42 catalog/child-collection endpoints were left
+unpaginated). **Still genuinely missing**: no bulk/batch endpoints.
 
 ## Docker / infra configuration (inspected this audit)
 

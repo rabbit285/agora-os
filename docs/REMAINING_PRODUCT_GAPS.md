@@ -556,8 +556,38 @@ after the change.
   membership (no elevated permission), matching the Dashboard's own visibility to every
   role. 2 new frontend tests; live-verified against the seeded demo org (1 of 2 controls
   implemented -> 50%, security score 80/100, both matching the live API response).
-- **API gaps**: no pagination, no idempotency-key support, no rate-limiting visible
-  anywhere in the 119-path OpenAPI surface (see `ROUTE_API_INVENTORY.md`).
+- **[FIXED 2026-08-04, scoped]** ~~API gaps: no pagination, no idempotency-key support, no
+  rate-limiting visible anywhere in the API surface~~ — spec §E7 "API Quality" is a real,
+  unqualified cross-cutting requirement; 3 of its items were genuine gaps (the rest —
+  consistent error envelope, request/correlation IDs, OpenAPI docs, input limits via
+  Pydantic field constraints, permission failures returning 404 rather than leaking
+  existence — were already real). **Rate limiting**: real, Redis-backed, per-client-IP
+  fixed-window limiter (`app.core.rate_limit`), applied globally to every request via
+  middleware — full API-wide coverage, not a token endpoint. **Idempotency for side
+  effects**: real, Redis-backed `Idempotency-Key` header support (`app.core.idempotency`),
+  also global middleware — opt-in (a request without the header behaves exactly as before;
+  a retried request with the same key, from the same session, replays the cached response
+  instead of re-executing the side effect) so it never changes behavior for the hundreds of
+  existing call sites that don't send it. Both fail open on a Redis outage (availability of
+  the rest of the API matters more than perfect enforcement of either control) and are
+  positioned so CORS stays outermost, so a 429 or a replayed response still carries CORS
+  headers instead of surfacing to a browser as an opaque CORS failure. **Pagination +
+  sorting**: a real, additive `limit`/`offset` mechanism (`app.core.pagination`) — omitting
+  both preserves every list endpoint's existing bare-array response shape exactly, so no
+  frontend caller needed to change; passing them applies a real SQL `LIMIT`/`OFFSET` and
+  reports the true row count via an `X-Total-Count` header. Applied to 18 of the API's list
+  endpoints — the ones most likely to grow unbounded in real usage: Compliance (controls,
+  evidence, risks, vendors, audits), Sales (accounts, contacts, leads, opportunities),
+  Support (customers, tickets), Security (assets, findings, alerts), Automation (runs),
+  Notifications, Knowledge (documents), Reporting. Deliberately not applied to the
+  remaining ~42 list endpoints, most of which are small, inherently-bounded catalogs
+  (Frameworks, Plans, Roles, Permissions, AI Provider status, Report types) or child
+  collections scoped by a parent (a Ticket's messages, a Workflow's versions) rather than
+  organization-wide unbounded growth — a disclosed scope boundary, not a silent gap. 8
+  backend tests (5 for rate-limit/idempotency, 3 for pagination); live-verified against the
+  running dev stack (a real 429 with `Retry-After` once the per-minute cap is hit, a real
+  replayed response with `Idempotency-Replayed: true` and no duplicate row created, real
+  `X-Total-Count` headers and page slicing on `/compliance/controls`).
 - **MISSING**: no CI/CD pipeline configuration exists in the repository (no `.github/`
   directory) — separate from live AWS deployment (AWS-excluded), this is the CI
   configuration itself, which is in-scope per this audit's instructions.

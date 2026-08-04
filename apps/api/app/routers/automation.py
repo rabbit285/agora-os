@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,7 @@ from app.automation.workflow_client import (
     get_schedule_deleter,
     get_schedule_syncer,
 )
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 
@@ -210,14 +211,17 @@ async def get_workflow_analytics(
 
 @router.get("/runs", response_model=list[WorkflowRunOut])
 async def list_runs(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[WorkflowRun]:
-    result = await db.execute(
+    stmt = (
         select(WorkflowRun)
         .where(WorkflowRun.organization_id == context.organization_id)
         .order_by(WorkflowRun.started_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post(

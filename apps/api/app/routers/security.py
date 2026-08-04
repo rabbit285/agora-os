@@ -3,11 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.secops.cloud_scanner import run_cloud_security_scan
@@ -61,14 +62,17 @@ async def get_security_overview(
 
 @router.get("/assets", response_model=list[AssetOut])
 async def list_assets(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[SecurityAsset]:
-    result = await db.execute(
+    stmt = (
         select(SecurityAsset)
         .where(SecurityAsset.organization_id == context.organization_id)
         .order_by(SecurityAsset.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/assets", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
@@ -128,14 +132,17 @@ async def get_asset(
 
 @router.get("/findings", response_model=list[FindingOut])
 async def list_findings(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[SecurityFinding]:
-    result = await db.execute(
+    stmt = (
         select(SecurityFinding)
         .where(SecurityFinding.organization_id == context.organization_id)
         .order_by(SecurityFinding.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/findings", response_model=FindingOut, status_code=status.HTTP_201_CREATED)
@@ -195,14 +202,17 @@ async def update_finding(
 
 @router.get("/alerts", response_model=list[AlertOut])
 async def list_alerts(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[SecurityAlert]:
-    result = await db.execute(
+    stmt = (
         select(SecurityAlert)
         .where(SecurityAlert.organization_id == context.organization_id)
         .order_by(SecurityAlert.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/alerts", response_model=AlertOut, status_code=status.HTTP_201_CREATED)

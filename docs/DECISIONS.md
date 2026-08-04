@@ -1992,3 +1992,83 @@ response or emailed as an attachment, that signed-URL mechanism already
 *is* "Secure link" for all 4 real formats — building a 5th renderer for
 it would have been redundant with the delivery mechanism the other 4
 already depend on.
+
+## ADR-0051 — Rate limiting and idempotency are global, fail-open Redis-backed middleware; pagination is additive so no existing list endpoint's response shape changes; only 18 of ~60 list endpoints got pagination, chosen by which ones actually grow unbounded
+
+**Decision**: spec §E7 "API Quality" lists 10 requirements with no
+qualifier attached to any of them. 7 were already real (consistent
+error envelope, request/correlation IDs, OpenAPI docs, input limits via
+Pydantic field constraints, permission failures returning 404 instead
+of leaking existence of an unauthorized resource) or became real as a
+side effect of this session's other clusters. The 3 that weren't —
+rate limiting, idempotency for side effects, pagination/sorting — are
+addressed here, each with a design choice worth recording.
+
+Rate limiting and idempotency are both implemented as global ASGI
+middleware (`app.core.rate_limit.RateLimitMiddleware`,
+`app.core.idempotency.IdempotencyKeyMiddleware`) rather than per-router
+opt-in, because both are structurally the kind of concern that has to
+apply everywhere to mean anything — a rate limiter that only guards
+some endpoints isn't a real rate limiter. Both are Redis-backed (the
+existing `REDIS_URL`, previously configured but unused by any app
+code) and both fail open on a Redis outage: catching the exception and
+falling through to normal request handling, rather than making Redis a
+new single point of failure for the entire API. Idempotency is
+additionally opt-in at the request level — it only ever activates when
+a caller sends a real `Idempotency-Key` header, so none of the
+hundreds of pre-existing call sites (routers, tests) needed to change;
+a request without the header behaves exactly as it did before this
+ADR. The idempotency cache key includes the requester's session cookie
+value, not just the client-supplied key and the method+path, because
+two different organizations' clients could otherwise coincide on the
+same literal `Idempotency-Key` string and replay each other's cached
+response across a tenant boundary — a real cross-tenant leak the naive
+version of this feature would have had.
+
+Both middlewares are added to the FastAPI app *before* `CORSMiddleware`
+in `app.main`, which — per Starlette's `add_middleware` semantics
+(`user_middleware.insert(0, ...)`, so the most-recently-added
+middleware ends up outermost) — makes CORS the outermost layer,
+wrapping both. This matters because a 429 from the rate limiter or a
+replayed response from the idempotency layer short-circuits before
+reaching the route handler; if CORS were positioned inside them
+instead, those short-circuit responses would never pass through CORS
+and a browser client would see an opaque CORS failure instead of the
+real 429/replay, which is the wrong failure mode for a control meant
+to communicate "you're going too fast," not "something is broken."
+
+The full pytest suite issues thousands of requests from one shared
+client identity (httpx's ASGI test transport) — a production-tuned
+rate limit would make the suite itself trip the limiter. Rather than
+disabling enforcement in tests (which would mean the middleware is
+real code with no real test coverage), `RATE_LIMIT_MAX_REQUESTS_PER_MINUTE`
+is set to a very high ceiling in `tests/conftest.py`, and
+`tests/test_api_quality.py` monkeypatches `settings.
+rate_limit_max_requests_per_minute` down to a tiny number for its own
+dedicated tests, proving real enforcement without destabilizing every
+other test that happens to run in the same 60-second window.
+
+Pagination (`app.core.pagination`) is additive: a list endpoint that
+never receives `limit`/`offset` returns exactly the same bare-array
+response it always did, so no existing frontend caller had to change.
+Passing them applies a real SQL `LIMIT`/`OFFSET` and reports the true
+row count via an `X-Total-Count` header rather than by wrapping the
+response body in an envelope — wrapping every list endpoint's response
+shape would have been a breaking change touching dozens of frontend
+call sites for a feature spec §E7 doesn't actually require to be
+delivered that way. Applying it required touching each endpoint
+individually (the query and its `order_by` live in the route handler,
+not somewhere middleware can reach), so full coverage of all ~60 list
+endpoints in one pass wasn't attempted — instead it was applied to the
+18 endpoints most likely to grow unbounded in real usage (per-org
+Compliance controls/evidence/risks/vendors/audits, Sales
+accounts/contacts/leads/opportunities, Support customers/tickets,
+Security assets/findings/alerts, Automation runs, Notifications,
+Knowledge documents, Reporting), while small shared catalogs
+(Frameworks, Plans, Roles, Permissions, AI Provider status, Report
+types) and parent-scoped child collections (a Ticket's messages, a
+Workflow's versions) were left as plain lists — they don't grow the
+way an organization's own accumulating records do, so pagination
+there would be complexity without a real problem to solve. This is a
+disclosed scope boundary (`REMAINING_PRODUCT_GAPS.md`), not a claim of
+exhaustive coverage.

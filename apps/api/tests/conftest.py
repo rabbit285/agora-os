@@ -5,6 +5,11 @@ from collections.abc import AsyncIterator
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_ENV", "test")
+# app.core.rate_limit's real per-IP limit is production-tuned; the full
+# suite issues thousands of requests from one loopback identity, which
+# would otherwise trip it. test_rate_limit.py monkeypatches this setting
+# back down to prove real enforcement.
+os.environ.setdefault("RATE_LIMIT_MAX_REQUESTS_PER_MINUTE", "1000000")
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

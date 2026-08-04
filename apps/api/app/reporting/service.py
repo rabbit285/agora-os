@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.audit.service import record_event
 from app.core.storage import build_storage_key, presign_download, upload_object
@@ -56,11 +58,12 @@ async def generate_report(
     return report
 
 
-async def list_reports(db: AsyncSession, *, organization_id: uuid.UUID) -> list[Report]:
-    result = await db.execute(
-        select(Report).where(Report.organization_id == organization_id).order_by(Report.created_at.desc())
+def reports_query(*, organization_id: uuid.UUID) -> Select[Any]:
+    return (
+        select(Report)
+        .where(Report.organization_id == organization_id)
+        .order_by(Report.created_at.desc())
     )
-    return list(result.scalars().all())
 
 
 async def get_report(

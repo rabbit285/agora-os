@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.core.models import File
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.knowledge.graph import ENTITY_TYPES, UnknownEntityTypeError, get_entity_graph
@@ -59,14 +60,17 @@ async def create_knowledge_base(
 
 @router.get("/documents", response_model=list[DocumentOut])
 async def list_documents(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Document]:
-    result = await db.execute(
+    stmt = (
         select(Document)
         .where(Document.organization_id == context.organization_id)
         .order_by(Document.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/documents", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)

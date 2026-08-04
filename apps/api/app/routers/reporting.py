@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, require_permission
 from app.reporting.models import Report
@@ -15,7 +16,7 @@ from app.reporting.schemas import (
     ReportOut,
     ReportTypeOut,
 )
-from app.reporting.service import generate_report, get_download_url, get_report, list_reports
+from app.reporting.service import generate_report, get_download_url, get_report, reports_query
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reporting"])
 
@@ -31,10 +32,13 @@ async def list_report_types(
 
 @router.get("", response_model=list[ReportOut])
 async def list_organization_reports(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("reports.generate")),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Report]:
-    return await list_reports(db, organization_id=context.organization_id)
+    stmt = reports_query(organization_id=context.organization_id)
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("", response_model=ReportOut, status_code=status.HTTP_201_CREATED)

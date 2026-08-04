@@ -3,12 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
 from app.compliance.governance import check_customer_disclosure_permission
+from app.core.pagination import Pagination, paginate, pagination_params
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.support.analytics import compute_support_analytics
@@ -49,14 +50,17 @@ router = APIRouter(prefix="/api/v1/support", tags=["support"])
 
 @router.get("/customers", response_model=list[CustomerOut])
 async def list_customers(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Customer]:
-    result = await db.execute(
+    stmt = (
         select(Customer)
         .where(Customer.organization_id == context.organization_id)
         .order_by(Customer.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/customers", response_model=CustomerOut, status_code=status.HTTP_201_CREATED)
@@ -102,14 +106,17 @@ async def _get_org_ticket(
 
 @router.get("/tickets", response_model=list[TicketOut])
 async def list_tickets(
-    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+    pagination: Pagination = Depends(pagination_params),
 ) -> list[Ticket]:
-    result = await db.execute(
+    stmt = (
         select(Ticket)
         .where(Ticket.organization_id == context.organization_id)
         .order_by(Ticket.created_at.desc())
     )
-    return list(result.scalars().all())
+    return await paginate(db, stmt, pagination, response)
 
 
 @router.post("/tickets", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
