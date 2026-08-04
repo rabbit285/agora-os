@@ -69,6 +69,18 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     plan: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # active | churned
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # spec §69 "New Customer" chain step "Assign account owner" — carries
+    # the closing Account's own owner across the sales-to-support handoff
+    # rather than inventing a separate customer-success-owner concept.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # spec §69 chain step "Send welcome email" — set when the dev/local
+    # logging adapter (same disclosed pattern as password reset / email
+    # verification, no real SMTP provider configured) dispatches it.
+    welcome_email_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Ticket(UUIDPrimaryKeyMixin, TimestampMixin, Base):

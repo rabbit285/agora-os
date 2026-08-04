@@ -221,13 +221,58 @@ async def test_closed_won_creates_support_customer_and_onboarding_task(
 
     tasks = await client.get("/api/v1/tasks")
     matching_task = next(
-        t for t in tasks.json() if "Helvetia Robotics AG" in t["title"] and t["module"] == "support"
+        t for t in tasks.json() if t["title"] == "Onboarding project: Helvetia Robotics AG"
     )
+    assert matching_task["module"] == "support"
     assert matching_task["priority"] == "high"
     assert matching_task["due_at"] is not None
 
     account_detail = await client.get(f"/api/v1/sales/accounts/{account_id}")
     assert account_detail.json()["status"] == "customer"
+
+
+async def test_closed_won_completes_the_full_new_customer_chain(client: AsyncClient) -> None:
+    """spec §69 "New Customer" chain — the 5 steps beyond create-customer/
+    onboarding-task: send welcome email, provision internal tasks, update
+    billing integration (a real tracked task, not a fabricated
+    integration), assign account owner, schedule check-in."""
+    owner_id, _ = await _signup(client, "newcust-chain@example.com", "New Customer Chain Org")
+
+    account = await client.post(
+        "/api/v1/sales/accounts", json={"name": "Chain Robotics AG", "owner_id": str(owner_id)}
+    )
+    account_id = account.json()["id"]
+    await client.post(
+        "/api/v1/sales/contacts",
+        json={
+            "full_name": "Chain Contact",
+            "email": "chain.contact@example.com",
+            "account_id": account_id,
+        },
+    )
+    opportunity = await client.post(
+        "/api/v1/sales/opportunities",
+        json={"account_id": account_id, "title": "Chain platform deal"},
+    )
+    opportunity_id = opportunity.json()["id"]
+
+    won = await client.patch(
+        f"/api/v1/sales/opportunities/{opportunity_id}", json={"stage": "closed_won"}
+    )
+    assert won.status_code == 200
+    customer_id = won.json()["onboarding_customer_id"]
+
+    customers = await client.get("/api/v1/support/customers")
+    customer = next(c for c in customers.json() if c["id"] == customer_id)
+    assert customer["owner_id"] == str(owner_id)  # assign account owner
+    assert customer["welcome_email_sent_at"] is not None  # send welcome email
+
+    tasks = await client.get("/api/v1/tasks")
+    titles = {t["title"] for t in tasks.json()}
+    assert "Onboarding project: Chain Robotics AG" in titles
+    assert "Provision support workspace: Chain Robotics AG" in titles  # provision internal tasks
+    assert "Set up billing for new customer: Chain Robotics AG" in titles  # update billing
+    assert "30-day check-in: Chain Robotics AG" in titles  # schedule check-in
 
 
 async def test_closed_won_is_idempotent_across_reopen_and_reclose(client: AsyncClient) -> None:

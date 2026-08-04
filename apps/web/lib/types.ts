@@ -1085,6 +1085,8 @@ export type SupportCustomer = {
   plan: string | null;
   sales_account_id: string | null;
   status: "active" | "churned";
+  owner_id: string | null;
+  welcome_email_sent_at: string | null;
   created_at: string;
 };
 

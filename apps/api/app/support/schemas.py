@@ -20,6 +20,8 @@ class CustomerOut(BaseModel):
     plan: str | None
     sales_account_id: uuid.UUID | None
     status: str
+    owner_id: uuid.UUID | None
+    welcome_email_sent_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
