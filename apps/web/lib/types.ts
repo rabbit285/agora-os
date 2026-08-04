@@ -253,6 +253,35 @@ export type Briefing = {
   created_at: string;
 };
 
+export const BUSINESS_RULE_TRIGGER_TYPES = [
+  "new_employee",
+  "control_failed",
+  "new_vendor",
+  "document_uploaded",
+  "new_crm_lead",
+  "crm_stage_change",
+  "security_alert",
+  "new_support_ticket",
+  "ai_system_registered",
+] as const;
+
+export const BUSINESS_RULE_OPERATORS = ["==", "!=", ">", ">=", "<", "<="] as const;
+export const BUSINESS_RULE_ACTION_TYPES = ["notify", "require_approval"] as const;
+
+export type BusinessRule = {
+  id: string;
+  name: string;
+  trigger_type: string;
+  condition_field: string;
+  condition_operator: string;
+  condition_value: string;
+  action_type: string;
+  action_role_key: string;
+  action_risk_class: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
 export const MEMORY_ENTRY_TYPES = [
   "approved_fact",
   "approved_answer",

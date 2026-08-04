@@ -600,6 +600,17 @@ async def create_ai_system(
         owner_id=payload.owner_id,
         actor_user_id=context.user.id,
     )
+
+    from app.automation.triggers import dispatch_event
+
+    await dispatch_event(
+        db,
+        organization_id=context.organization_id,
+        trigger_type="ai_system_registered",
+        payload={"ai_system_id": str(system.id), "risk_classification": system.risk_classification},
+        actor_user_id=context.user.id,
+    )
+
     await db.commit()
     await db.refresh(system)
     return system

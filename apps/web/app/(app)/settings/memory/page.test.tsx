@@ -74,14 +74,16 @@ describe("BusinessMemoryPage", () => {
   });
 
   it("creates a new memory entry", async () => {
-    mockedApiFetch.mockImplementation(async (path: string, options?: { method?: string }) => {
-      if (path === "/api/v1/memory" && (options?.method ?? "GET") === "GET") return [];
-      if (path === "/api/v1/organizations/current/my-permissions") return ["business_memory.manage"];
-      if (path === "/api/v1/memory" && options?.method === "POST") {
-        return { ...entries[0], id: "entry-2", content: options.body };
-      }
-      throw new Error(`Unmocked path: ${path}`);
-    });
+    mockedApiFetch.mockImplementation(
+      async (path: string, options?: { method?: string; body?: unknown }) => {
+        if (path === "/api/v1/memory" && (options?.method ?? "GET") === "GET") return [];
+        if (path === "/api/v1/organizations/current/my-permissions") return ["business_memory.manage"];
+        if (path === "/api/v1/memory" && options?.method === "POST") {
+          return { ...entries[0], id: "entry-2", content: options.body };
+        }
+        throw new Error(`Unmocked path: ${path}`);
+      },
+    );
 
     renderPage();
     const user = userEvent.setup();

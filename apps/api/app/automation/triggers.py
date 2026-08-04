@@ -21,6 +21,12 @@ see docs/KNOWN_LIMITATIONS.md). They remain valid, selectable
 when a real source exists) but this module's dispatch table simply has
 no entry for them — calling `dispatch_event` with one of those values is
 a documented no-op, not a silent lie.
+
+Since 2026-08-04 (BIZ-05, spec §90), the same real event also reaches
+`app.rules_engine.service.evaluate_rules` — a Business Rule configured
+against one of these `trigger_type` values evaluates on the exact same
+dispatch a matching Workflow would, rather than a second parallel
+event-hook system.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.automation.models import Workflow
 from app.automation.service import start_run
+from app.rules_engine.service import evaluate_rules
 
 
 async def dispatch_event(
@@ -44,9 +51,19 @@ async def dispatch_event(
     actor_user_id: uuid.UUID | None,
 ) -> list[uuid.UUID]:
     """Starts a run for every `active` Workflow in this org whose
-    `trigger_type` matches. Returns the started WorkflowRun ids (empty
-    list if no workflow is listening, which is the common case and not
-    an error)."""
+    `trigger_type` matches, and evaluates every active Business Rule
+    (spec §90) configured for the same `trigger_type` — one real event,
+    two independent real consumers, neither aware of the other. Returns
+    the started WorkflowRun ids (empty list if no workflow is listening,
+    which is the common case and not an error)."""
+    await evaluate_rules(
+        db,
+        organization_id=organization_id,
+        trigger_type=trigger_type,
+        payload=payload,
+        actor_user_id=actor_user_id,
+    )
+
     result = await db.execute(
         select(Workflow).where(
             Workflow.organization_id == organization_id,

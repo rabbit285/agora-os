@@ -67,6 +67,7 @@ export const NAVIGATION: NavGroup[] = [
       { label: "Integrations", href: "/settings/integrations", implemented: true },
       { label: "AI Providers", href: "/settings/ai-providers", implemented: true },
       { label: "Business Memory", href: "/settings/memory", implemented: true },
+      { label: "Business Rules", href: "/settings/business-rules", implemented: true },
     ],
   },
 ];

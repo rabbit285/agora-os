@@ -580,7 +580,24 @@ after the change.
   context — the storage/provenance/correction subsystem is complete, but wasn't threaded
   into `app.ai.copilot`'s already-tested prompt-construction path in this pass. See
   `SPEC_TRACEABILITY_MATRIX.md` BIZ-04.
-- **MISSING**: BIZ-05 Business Rules Engine — not implemented yet.
+- **[FIXED 2026-08-04]** ~~BIZ-05 Business Rules Engine — not implemented~~ — a real
+  structured condition (field/operator/value against a real event's payload) plus a real
+  action (require an Approval, or notify every member holding a role) — genuinely separate
+  from AI prompts, per spec's own words. Evaluation reuses `app.automation.triggers.
+  dispatch_event` outright — the exact real event-dispatch point Automation workflows
+  already use — so every existing event source automatically evaluates Business Rules too,
+  with no second parallel hook system; one new real event source (AI system registration)
+  was added to directly support spec's own "High-risk AI requires DPO + AI Governance
+  approval" example. Both of spec's own literal examples were live-verified word-for-word
+  against the running stack: a critical security alert notifying the security manager role,
+  and a high-risk AI system registration creating a real pending Approval. New
+  `/settings/business-rules` page. 7 backend + 3 frontend tests. **Disclosed scope**:
+  "Refunds over €500" and "Critical vendors require annual reassessment" remain valid,
+  configurable trigger types with no real event source yet — no Refund/payment concept
+  exists anywhere in this build (Billing's own "Plans architecture" qualifier), and "annual"
+  is a time-based condition this build's event-driven dispatch doesn't evaluate — the same
+  honest precedent Automation itself already established for 4 of its 16 named trigger
+  types with no real source. See `SPEC_TRACEABILITY_MATRIX.md` BIZ-05.
 - **[FIXED 2026-08-04]** ~~Main Dashboard shows 2 of 4 metric tiles as real data (Open
   Tasks, Pending Approvals); the other 2 are honest hardcoded "Not available yet"
   strings~~ — all 4 are now real. Compliance Health fetches `GET /compliance/controls`

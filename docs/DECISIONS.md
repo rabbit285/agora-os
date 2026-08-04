@@ -2266,3 +2266,61 @@ in `build_grounded_prompt` matters), and modifying its retrieval logic
 under time pressure risked a regression disproportionate to the value
 of this one pass, versus building it deliberately in a future session
 with its own test coverage.
+
+## ADR-0056 — Business Rules evaluate on the exact same event dispatch Automation workflows use, rather than a second parallel trigger system; only one new real event source was added
+
+**Decision**: spec §90's Business Rules Engine examples are all
+"condition on a real event → require approval or notify someone" —
+structurally identical to what spec §38's Automation trigger system
+already does for Workflows. Rather than building a second event-
+observation mechanism, `app.rules_engine.service.evaluate_rules` is
+called directly from inside `app.automation.triggers.dispatch_event`
+(the one real internal-event dispatcher this codebase already has),
+right before it checks for matching Workflows. Every one of the 8
+existing real call sites (`new_employee` in `core/invitations.py`,
+`control_failed`/`new_vendor` in `compliance.py`, `document_uploaded`
+in `knowledge.py`, `new_crm_lead`/`crm_stage_change` in `sales.py`,
+`security_alert` in `security.py`, `new_support_ticket` in
+`support.py`) therefore evaluates configured Business Rules for free,
+with no changes to any of those call sites. This is the same "reuse
+existing primitive" discipline applied at the infrastructure level
+rather than the data level — spec §90's own examples ("Security alerts
+critical severity notify CISO immediately") are literally phrased as
+descriptions of an existing dispatch's payload crossing a threshold,
+which is exactly what `evaluate_rules` checks: `payload[condition_
+field] <operator> condition_value`.
+
+One new real event source was added: AI system registration now also
+calls `dispatch_event(trigger_type="ai_system_registered", payload=
+{"ai_system_id": ..., "risk_classification": ...})`. This was worth
+adding (unlike, say, wiring a brand-new "refund" concept into a system
+that has no refunds) because it directly completes spec §90's own
+second named example — "High-risk AI requires DPO + AI Governance
+approval" — with a real payload field (`risk_classification`) that
+already exists on `AISystem`, at a real, already-permission-gated
+action (registering an AI system). The two actions a rule can take are
+built on already-real primitives, not new ones: `require_approval`
+creates a genuine `core.Approval` row (the same model Security
+Reviews, Workflow `human_approval` steps, and every other approval
+gate in this codebase already uses) with `requested_by` set to the
+triggering event's real `actor_user_id`; `notify` resolves every
+member who actually holds the configured role (the same Membership/
+MembershipRole/Role join `app.onboarding.service._admins_without_mfa`
+already established) and calls the existing `app.core.notifications.
+notify` once per member — never a new notification mechanism.
+
+Two of spec §90's five named examples were evaluated and honestly left
+unimplementable in this build rather than faked: "Refunds over €500
+require Finance approval" has no real event source, since no Refund or
+payment concept exists anywhere in this codebase (Billing's own
+"Plans architecture" qualifier, ADR-0049); "Critical vendors require
+annual reassessment" is a time-based condition ("annual"), and this
+build's Business Rules only evaluate real, already-occurring events —
+a scheduled/cron-style rule would need the same kind of infrastructure
+Automation's own `schedule` trigger type uses (a real Temporal
+Schedule), which Business Rules does not yet have. Both remain valid,
+selectable-in-principle `trigger_type`/condition combinations an admin
+could configure, but with no real event ever firing them — the exact
+same honest "documented no-op, not a silent lie" precedent
+`app.automation.triggers`'s own docstring already established for 4 of
+spec §38's 16 named trigger types.

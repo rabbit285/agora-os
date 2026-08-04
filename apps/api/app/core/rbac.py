@@ -74,6 +74,7 @@ PERMISSIONS: dict[str, str] = {
     "reports.generate": "Generate and download reports",
     "business_intelligence.view": "View AI recommendations and the daily business briefing",
     "business_memory.manage": "Create, correct, and delete structured organization memory entries",
+    "business_rules.manage": "Configure business rules (condition -> required approval/notification)",
 }
 
 COMPLIANCE_PERMISSIONS = [
@@ -163,6 +164,13 @@ BUSINESS_MEMORY_PERMISSIONS = [
     "business_memory.manage",
 ]
 
+# Business Rules Engine (spec §90) configuration is likewise narrower
+# than the cross-cutting set — a rule can require approval or notify a
+# whole role, so only governance/ops-adjacent roles configure them.
+BUSINESS_RULES_PERMISSIONS = [
+    "business_rules.manage",
+]
+
 # Only org_admin gets the full Phase 1 permission set; module-specific
 # roles get only their own module's permissions plus the cross-cutting
 # Knowledge/Copilot permissions above. `read_only` is deliberately seeded
@@ -177,21 +185,31 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
         "core.approvals.decide",
         *AUTOMATION_PERMISSIONS,
         *INTEGRATIONS_PERMISSIONS,
+        *BUSINESS_RULES_PERMISSIONS,
         *_CROSS_CUTTING_PERMISSIONS,
     ],
     "compliance_manager": (
-        COMPLIANCE_PERMISSIONS + BUSINESS_MEMORY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+        COMPLIANCE_PERMISSIONS
+        + BUSINESS_MEMORY_PERMISSIONS
+        + BUSINESS_RULES_PERMISSIONS
+        + _CROSS_CUTTING_PERMISSIONS
     ),
     "dpo": (
         COMPLIANCE_PERMISSIONS
         + AI_GOVERNANCE_PERMISSIONS
         + PRIVACY_PERMISSIONS
         + BUSINESS_MEMORY_PERMISSIONS
+        + BUSINESS_RULES_PERMISSIONS
         + _CROSS_CUTTING_PERMISSIONS
     ),
-    "security_manager": SECURITY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "security_manager": (
+        SECURITY_PERMISSIONS + BUSINESS_RULES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+    ),
     "ai_governance_manager": (
-        AI_GOVERNANCE_PERMISSIONS + BUSINESS_MEMORY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+        AI_GOVERNANCE_PERMISSIONS
+        + BUSINESS_MEMORY_PERMISSIONS
+        + BUSINESS_RULES_PERMISSIONS
+        + _CROSS_CUTTING_PERMISSIONS
     ),
     "sales_manager": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "sales_representative": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,

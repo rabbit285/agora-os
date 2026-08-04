@@ -37,6 +37,7 @@ from app.routers import (
     organizations,
     recommendations,
     reporting,
+    rules_engine,
     sales,
     search,
     security,
@@ -154,3 +155,4 @@ app.include_router(reporting.router)
 app.include_router(recommendations.router)
 app.include_router(briefing.router)
 app.include_router(memory.router)
+app.include_router(rules_engine.router)
