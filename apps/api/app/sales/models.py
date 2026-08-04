@@ -84,6 +84,11 @@ class Lead(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # new | qualified | contacted | disqualified | converted
     status: Mapped[str] = mapped_column(String(20), default="new")
     score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # spec §69 "Support Upsell Signal" chain step "Generate account brief"
+    # — real retrieval-grounded text via the existing AI Copilot (same
+    # pattern as Meeting Assistant's prep notes, app.sales.meetings), not
+    # a canned template.
+    ai_account_brief: Mapped[str | None] = mapped_column(String(4000), nullable=True)
 
 
 class Opportunity(UUIDPrimaryKeyMixin, TimestampMixin, Base):

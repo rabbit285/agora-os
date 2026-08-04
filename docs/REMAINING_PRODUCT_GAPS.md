@@ -93,26 +93,26 @@ implemented." Direct comparison against the spec's literal step lists (§69, lin
 | New AI Tool Adoption | 9 | **9 — [FIXED 2026-08-04]**, see `SPEC_TRACEABILITY_MATRIX.md` SCEN-02 |
 | Security Incident Response | 9 | **9 — [FIXED 2026-08-04]**, see `SPEC_TRACEABILITY_MATRIX.md` SCEN-03 |
 | New Customer Onboarding | 8 | **8 — [FIXED 2026-08-04]**, see `SPEC_TRACEABILITY_MATRIX.md` SCEN-04 |
-| Support Upsell Signal | 4 | 2 (flag ticket → create Lead → notify the linked account owner; no Opportunity-suggestion artifact, no AI-generated account brief) |
+| Support Upsell Signal | 4 | **4 — [FIXED 2026-08-04]**, see `SPEC_TRACEABILITY_MATRIX.md` SCEN-05 |
 
-What **is** built for Security Incident, New Customer, and Support Upsell Signal is real,
-tested, non-fake code (confirmed both by subagent code reading and, for New Customer, by
-this audit's own live `close_opportunity_won` idempotency test) — it is a genuine subset
-of each scenario, not vaporware. The gap was specifically that the product doc's own
-completeness claim ("fully implemented") was inaccurate relative to the spec's literal text
-for 3 of the 4 scenarios it claimed were done.
+**Fix applied (2026-07-30, documentation)**: `KNOWN_LIMITATIONS.md`'s Cross-Module
+Intelligence bullet was rewritten with the exact per-scenario step count and named missing
+steps (option (b) from the original finding — explicit per-step disclosure), rather than a
+blanket "fully implemented" claim.
 
-**Fix applied (2026-07-30)**: `KNOWN_LIMITATIONS.md`'s Cross-Module Intelligence bullet was
-rewritten with the exact per-scenario step count and named missing steps above (option (b)
-from the original finding — explicit per-step disclosure), rather than a blanket "fully
-implemented" claim. Implementing the remaining named steps themselves (welcome email —
-blocked on the same no-SMTP-provider capability boundary as Automation's `send_email` step;
-billing update — blocked on the Billing module, tracked separately as PLAT-19; a formal
-GDPR-breach Compliance assessment step; Sales Copilot follow-up drafting; an Opportunity-
-suggestion artifact; AI-generated account briefs) remains open, deliberately deferred in
-favor of the larger MISSING-status gaps elsewhere in this document (Billing, Reporting,
-Business Intelligence layer, etc.) — these are scenario-depth refinements on top of
-features that already work in their base form, not zero-code gaps.
+**Fix applied (2026-08-04, all remaining steps built)**: all 4 scenarios that were
+genuinely partial are now complete — see each scenario's own `SPEC_TRACEABILITY_MATRIX.md`
+row (SCEN-02 through SCEN-05) for the full per-step evidence. In every case the missing
+steps that looked like hard capability boundaries (welcome email, draft communications,
+account briefs) turned out to be solvable honestly by reusing an existing real primitive
+this build already has — the dev/local email-logging adapter, the AI Copilot's
+retrieval-grounded generation, the Recommendation Engine's "suggested action" pattern —
+rather than needing a new integration. The two steps that remain genuinely deferred are
+narrower than originally scoped: "billing update" (New Customer) is now a real, tracked
+human task rather than a fabricated integration claim, since no payment/invoicing
+connector exists; "Sales Copilot drafts follow-up" (Enterprise Sales Security Review,
+SCEN-01, already at 9/10) is the one sub-step across all 5 scenarios still not built,
+tracked as a small residual item rather than a scenario-blocking gap.
 
 ### A3. [PARTIALLY FIXED — 2026-07-30] `docs/ROUTES_AND_SCREENS.md` lists 8 routes as `[~]`/scaffolded that do not exist in the actual build
 

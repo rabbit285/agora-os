@@ -47,7 +47,9 @@ async def _count(db: AsyncSession, stmt: Any) -> int:
     return int(result.scalar_one())
 
 
-async def _compliance_gaps(db: AsyncSession, organization_id: uuid.UUID) -> RecommendationDraft | None:
+async def _compliance_gaps(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> RecommendationDraft | None:
     gaps_result = await db.execute(
         select(Control)
         .where(Control.organization_id == organization_id, Control.status == "not_started")
@@ -58,7 +60,10 @@ async def _compliance_gaps(db: AsyncSession, organization_id: uuid.UUID) -> Reco
     if not gaps:
         return None
     total = await _count(
-        db, select(Control.id).where(Control.organization_id == organization_id, Control.status == "not_started")
+        db,
+        select(Control.id).where(
+            Control.organization_id == organization_id, Control.status == "not_started"
+        ),
     )
     return RecommendationDraft(
         source_key="compliance_gaps",
@@ -114,7 +119,9 @@ async def _security_critical_findings(
     )
 
 
-async def _sales_icp_no_lead(db: AsyncSession, organization_id: uuid.UUID) -> RecommendationDraft | None:
+async def _sales_icp_no_lead(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> RecommendationDraft | None:
     accounts_result = await db.execute(
         select(Account)
         .where(
@@ -165,7 +172,9 @@ async def _sales_icp_no_lead(db: AsyncSession, organization_id: uuid.UUID) -> Re
     )
 
 
-async def _automation_failures(db: AsyncSession, organization_id: uuid.UUID) -> RecommendationDraft | None:
+async def _automation_failures(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> RecommendationDraft | None:
     analytics = await compute_workflow_analytics(db, organization_id=organization_id)
     total_runs = int(analytics["total_runs"])
     success_rate = float(analytics["success_rate_percent"])
@@ -187,7 +196,9 @@ async def _automation_failures(db: AsyncSession, organization_id: uuid.UUID) -> 
     )
 
 
-async def _support_satisfaction(db: AsyncSession, organization_id: uuid.UUID) -> RecommendationDraft | None:
+async def _support_satisfaction(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> RecommendationDraft | None:
     analytics = await compute_support_analytics(db, organization_id=organization_id)
     csat_count = int(analytics["csat_response_count"])
     average_csat = float(analytics["average_csat"])
@@ -209,12 +220,48 @@ async def _support_satisfaction(db: AsyncSession, organization_id: uuid.UUID) ->
     )
 
 
+async def _support_upsell_signals(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> RecommendationDraft | None:
+    """spec §69 "Support Upsell Signal" chain's "Create opportunity
+    suggestion" step — a real suggestion, not an auto-created
+    Opportunity (see app.support.service.flag_upsell_signal's own
+    docstring for why)."""
+    leads_result = await db.execute(
+        select(Lead)
+        .where(
+            Lead.organization_id == organization_id,
+            Lead.source == "support_upsell_signal",
+            Lead.status == "new",
+        )
+        .order_by(Lead.created_at.desc())
+    )
+    leads = list(leads_result.scalars().all())
+    if not leads:
+        return None
+    return RecommendationDraft(
+        source_key="support_upsell_signals",
+        category="sales",
+        title=f"{len(leads)} customer{'s show' if len(leads) != 1 else ' shows'} an expansion signal",
+        business_impact="Customers asking about enterprise features are a real upsell opportunity going untracked.",
+        reason=f"{len(leads)} lead{'s' if len(leads) != 1 else ''} flagged by Support from repeated "
+        "enterprise-feature questions, not yet reviewed by Sales.",
+        sources=[f"lead:{lead.id}" for lead in leads[:5]],
+        confidence="medium",
+        estimated_value=None,
+        suggested_action="Review these leads and create Opportunities for qualified accounts.",
+        risk="low",
+        required_approval=False,
+    )
+
+
 _GENERATORS = [
     _compliance_gaps,
     _security_critical_findings,
     _sales_icp_no_lead,
     _automation_failures,
     _support_satisfaction,
+    _support_upsell_signals,
 ]
 
 
@@ -263,7 +310,9 @@ async def refresh_recommendations(db: AsyncSession, *, organization_id: uuid.UUI
     await db.commit()
 
 
-async def list_recommendations(db: AsyncSession, *, organization_id: uuid.UUID) -> list[Recommendation]:
+async def list_recommendations(
+    db: AsyncSession, *, organization_id: uuid.UUID
+) -> list[Recommendation]:
     result = await db.execute(
         select(Recommendation)
         .where(Recommendation.organization_id == organization_id, Recommendation.status == "new")

@@ -2409,3 +2409,132 @@ RENDERERS[format]`) rather than a second rendering pipeline — the same
 reuse discipline as every prior cluster this session, chosen because a
 20-section, real-rows, multi-format bundle is exactly the shape
 Reporting was already built to produce.
+
+## ADR-0058 — New AI Tool Adoption's "Vendor created" and "DPA review" steps use a real, org-scoped Vendor lookup-or-create, deduped by name
+
+**Decision**: spec §69's "New AI Tool Adoption" chain names 9 steps;
+before this fix only 4 were real (Approval gate, ADR-0027; auto-created
+Privacy DPIA, ADR-0029; plus the AI risk assessment and EU AI Act
+applicability steps, which turned out to already be real — a dedicated
+`AIAssessment` model and `AISystem.risk_classification` itself already
+uses the EU AI Act's own risk-tier vocabulary rather than a parallel
+scale, they just hadn't been credited as satisfying those two named
+steps). `register_ai_system` now looks up an existing `Vendor` by name
+for this org first; if none exists, it creates one (`category=
+"ai_vendor"`) and opens two real `Task`s — a security assessment and a
+DPA review — against it. An already-known vendor is *not* re-vetted:
+this is a dedup-by-natural-key choice, the same discipline BIZ-04's
+Policy-publish memory hook already established, since a vendor this org
+adopted for one AI tool six months ago shouldn't spawn duplicate
+vetting tasks every time a second tool from the same vendor is
+registered.
+
+`Vendor.dpa_status` (`pending`/`signed`/`not_required`) is a new real,
+human-reviewed field with its own `PATCH /vendors/{id}/dpa-status`
+endpoint — deliberately never auto-flipped to `signed` by any code
+path, since that would fabricate a legal fact (a DPA is either actually
+signed or it isn't).
+
+The final step, "Add approved-use policy," is wired into
+`decide_ai_system_status`: the moment an AI system's status first
+becomes `approved`, a real draft `Policy` is created (`ai_system_id`
+FK). Re-approving after the system moves away and back does not
+duplicate it — `before_status != "approved"` is the same guard shape
+`app.recommendations.service.refresh_recommendations` and the
+Policy-publish memory hook both already use for "fire once per genuine
+transition, not once per call."
+
+Building custom-framework tenant scoping earlier in this backlog
+(COMP-02) had already surfaced that `Framework` predated per-row
+`organization_id` scoping; extending `AISystem.vendor_id` and
+`Policy.ai_system_id` as plain nullable FKs onto existing tenant-scoped
+tables carried no equivalent risk, since both `vendors` and `policies`
+were already org-scoped from their original design.
+
+## ADR-0059 — Security Incident Response's remaining 6 steps reuse the incident workspace's own pre-existing primitives (Timeline, Affected Assets, Evidence) rather than new tables
+
+**Decision**: spec §69's "Security Incident" chain names 9 steps; before
+this fix only 3 were real (create incident, link a Compliance Risk,
+create a response Task + owner notification — ADR-0018, ADR-0023). The
+incident *workspace* (spec §19, ADR-0037) already had real Timeline,
+Affected Assets, and Evidence primitives, but only ever reachable as
+manual actions on the incident detail page — never as automatic
+reactions to this specific chain. `create_incident` now fires all 6
+remaining steps for `severity == "critical"`, and every one of them
+targets a table that already existed for a different, human-driven
+purpose rather than adding a parallel structure:
+
+- "Security AI summarizes" — a real `ModelGateway.generate` call,
+  stored on the new `SecurityIncident.ai_summary` column.
+- "Finds affected assets" — a disclosed heuristic, not a forensic
+  claim: every `SecurityAsset` already flagged `at_risk`/`compromised`
+  elsewhere in the inventory (by a real scan or manual triage) is
+  linked via the pre-existing `SecurityIncidentAsset` join. This
+  build has no live telemetry pipeline that could genuinely detect
+  which specific assets *this* incident touched, so linking anything
+  more specific would be fabricating a forensic conclusion; linking
+  what's already known to be at-risk is the honest ceiling.
+- "Checks personal-data impact" — the new `personal_data_impact`
+  boolean is true only if an auto-linked asset is classified
+  `confidential`/`restricted`. Disclosed as a heuristic in both the
+  model's own docstring and the traceability matrix: a human still
+  makes the real GDPR Article 33/34 call via the linked Risk, this
+  flag doesn't make it for them.
+- "Generates draft communications" — a second real `ModelGateway.
+  generate` call, logged as a `SecurityIncidentTimelineEntry` with
+  `entry_type="communication"` — the exact same field the incident
+  page's own manual "Communication" button writes to, so a
+  human-authored update and an AI-drafted one appear in the same real
+  chronological log rather than two different views.
+- "Preserves evidence" — a real point-in-time JSON snapshot (incident
+  facts, AI summary, personal-data-impact flag, linked asset/risk
+  ids) uploaded via the same `File`/storage primitive the Enterprise
+  Sales Security Review's trust package already uses (ADR-0035),
+  attached through the pre-existing `Evidence.incident_id` link.
+
+## ADR-0060 — New Customer Onboarding's remaining 5 steps use a real dev/local email-logging adapter and honestly-tracked human tasks, not fabricated integrations
+
+**Decision**: spec §69's "New Customer" chain names 8 steps; before this
+fix only 2 were real (create Customer, one onboarding Task — ADR-0025).
+`close_opportunity_won` now fires all 8: "create support profile" was
+already satisfied by the same `Customer` row as "create customer"
+(`support.Customer` *is* the support profile in this build, confirmed
+by checking which module actually owns that model — not two entities
+needing two creations). "Send welcome email" is dispatched through
+`_dispatch_welcome_email`, a private helper mirroring `app.identity.
+service._dispatch_password_reset_email`'s exact dev/local logging
+pattern — no real SMTP/SES provider is configured anywhere in this
+build, so this genuinely logs the send rather than claiming a delivery
+that didn't happen; `Customer.welcome_email_sent_at` records that the
+real call fired. "Provision internal tasks" is a second, distinct
+`Task` beyond the onboarding-project one. "Update billing integration"
+has no real payment/invoicing connector to call — Billing (PLAT-19)
+manages this org's *own* subscription plan, a different concept from
+invoicing an external customer — so this step is a real, tracked
+`Task` asking a human to actually set it up, deliberately not a
+fabricated "integration updated" claim. "Assign account owner" sets
+the new `Customer.owner_id` to the closing Account's own owner, a real
+handoff rather than a separate customer-success-owner concept this
+codebase has no other model for. "Schedule check-in" is a third `Task`
+due in 30 days.
+
+## ADR-0061 — Support Upsell Signal's remaining 2 steps reuse the AI Recommendation Engine and the Meeting Assistant's Copilot pattern rather than new mechanisms
+
+**Decision**: spec §69's "Support Upsell Signal" chain names 4 steps;
+before this fix only 2 were real (create a Sales Lead, notify the
+linked Account's owner — ADR-0022). "Create opportunity suggestion" is
+explicitly a *suggestion* in spec's own wording, not "create an
+Opportunity" — auto-creating one would jump a human sales rep's own
+funnel decision (spec's own `Lead.status` enum already includes
+`converted` as a deliberate manual transition). Rather than building a
+second suggestion mechanism, a new `_support_upsell_signals` generator
+in `app.recommendations.service` (spec §87, BIZ-02) surfaces every open
+upsell-signal Lead as a real Recommendation with a real "Act on this"
+suggested action — the exact same aggregate-digest pattern (one card
+citing every underlying source row) all 5 other generators already use,
+dedup by `source_key` for free. "Generate account brief" reuses `app.
+sales.meetings.generate_prep_notes`'s exact pattern — a real
+retrieval-grounded `ask_copilot` call, honestly falling back to the
+Copilot's own "no evidence" message when the org's knowledge base has
+nothing relevant, rather than a fabricated summary — stored on the new
+`Lead.ai_account_brief` column.

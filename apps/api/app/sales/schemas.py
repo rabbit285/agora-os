@@ -69,6 +69,7 @@ class LeadOut(BaseModel):
     score: float | None
     account_id: uuid.UUID | None
     contact_id: uuid.UUID | None
+    ai_account_brief: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

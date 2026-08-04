@@ -41,7 +41,7 @@ Opportunity transitions to `closed_won`:
 8. **Schedule check-in** — a third `core.Task` due in 30 days.
 
 All reuse Phase 6's and Phase 1's existing primitives rather than
-inventing new ones (ADR-0025, extended ADR-0044). `Opportunity.
+inventing new ones (ADR-0025, extended ADR-0060). `Opportunity.
 onboarding_customer_id` is both the link and the idempotency guard: once
 set, a later closed_won transition (e.g. reopened then re-won) is a
 genuine no-op, not a second customer.

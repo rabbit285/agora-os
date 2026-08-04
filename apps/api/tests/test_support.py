@@ -282,6 +282,68 @@ async def test_flag_upsell_creates_lead_and_notifies_account_owner(client: Async
     assert any("Expansion signal" in n["title"] for n in notifications.json())
 
 
+async def test_flag_upsell_generates_ai_account_brief(client: AsyncClient) -> None:
+    """spec §69 "Support Upsell Signal" chain step "Generate account
+    brief" — real retrieval-grounded text via the AI Copilot."""
+    user_id, _ = await _signup(client, "upsell-brief@example.com", "Upsell Brief Org")
+
+    account = await client.post(
+        "/api/v1/sales/accounts", json={"name": "Brief Co", "owner_id": str(user_id)}
+    )
+    account_id = account.json()["id"]
+    customer = await client.post(
+        "/api/v1/support/customers",
+        json={"name": "Brief Co", "email": "ops@brief.example", "sales_account_id": account_id},
+    )
+    customer_id = customer.json()["id"]
+    ticket = await client.post(
+        "/api/v1/support/tickets",
+        json={"customer_id": customer_id, "subject": "Do you support SSO?"},
+    )
+    ticket_id = ticket.json()["id"]
+
+    flagged = await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+    lead_id = flagged.json()["upsell_lead_id"]
+
+    leads = await client.get("/api/v1/sales/leads")
+    matching = next(lead for lead in leads.json() if lead["id"] == lead_id)
+    assert matching["ai_account_brief"]
+
+
+async def test_flag_upsell_signal_surfaces_as_a_recommendation(client: AsyncClient) -> None:
+    """spec §69 chain step "Create opportunity suggestion" — reuses the
+    AI Recommendation Engine (BIZ-02) rather than auto-creating an
+    Opportunity, which would jump the sales funnel dishonestly."""
+    user_id, _ = await _signup(client, "upsell-rec@example.com", "Upsell Recommendation Org")
+
+    account = await client.post(
+        "/api/v1/sales/accounts", json={"name": "Suggested Co", "owner_id": str(user_id)}
+    )
+    account_id = account.json()["id"]
+    customer = await client.post(
+        "/api/v1/support/customers",
+        json={
+            "name": "Suggested Co",
+            "email": "ops@suggested.example",
+            "sales_account_id": account_id,
+        },
+    )
+    customer_id = customer.json()["id"]
+    ticket = await client.post(
+        "/api/v1/support/tickets",
+        json={"customer_id": customer_id, "subject": "Can we get enterprise SSO?"},
+    )
+    ticket_id = ticket.json()["id"]
+    await client.post(f"/api/v1/support/tickets/{ticket_id}/flag-upsell")
+
+    recommendations = await client.get("/api/v1/recommendations")
+    assert recommendations.status_code == 200
+    matching = [r for r in recommendations.json() if "expansion signal" in r["title"]]
+    assert len(matching) == 1
+    assert matching[0]["category"] == "sales"
+    assert matching[0]["required_approval"] is False
+
+
 async def test_flag_upsell_without_sales_account_falls_back_to_actor(client: AsyncClient) -> None:
     await _signup(client, "upsell2@example.com", "Upsell Org 2")
     customer_id = await _create_customer(client, email="noaccount@example.com")

@@ -135,11 +135,17 @@ implied to work.
   since no real email/LinkedIn provider is connected. The suppression
   check itself is a single boolean, not the fuller jurisdiction/consent/
   marketing-basis engine spec §91 describes (ADR-0019). A `closed_won`
-  Opportunity creates a real Support Customer + onboarding Task
-  (ADR-0025), but not a real welcome email or an accounting-system
-  update — no email provider or accounting connector exists yet (the
-  Billing module added 2026-07-30 covers plan/entitlements, not
-  invoice/accounting sync).
+  Opportunity now runs the full spec §69 "New Customer" chain (ADR-0025,
+  extended ADR-0060, see SCEN-04 below): a real Support Customer, an
+  onboarding project Task, a welcome email dispatched through the same
+  dev/local logging adapter every other transactional email in this
+  build uses (no real SMTP/SES provider is configured anywhere), a
+  support-workspace-provisioning Task, a real tracked Task for billing
+  setup (no invoicing/accounting connector exists — the Billing module
+  added 2026-07-30 covers this org's own plan/entitlements, not customer
+  invoicing — so this is an honest human action rather than a fabricated
+  "integration updated" claim), the Account's own owner carried onto the
+  Customer record, and a 30-day check-in Task.
   If the account has no Contact yet, onboarding is honestly skipped, not
   faked with a placeholder email.
 - **Support**: tickets have a `channel` field (`email`/`chat`/`api`) but
@@ -157,50 +163,51 @@ implied to work.
   original reasoning, extended in ADR-0039. The security-category
   cross-module hook creates a `SecurityAlert` (Security's triage inbox),
   not a full `SecurityIncident` — see ADR-0020 for why. Flagging a ticket
-  as an upsell signal creates a real Sales Lead and notifies the linked
-  account's owner (or the flagging agent if there's no linked Sales
-  Account or no account owner), but does not auto-create an Opportunity —
-  that conversion is left to a human sales rep (ADR-0022).
+  as an upsell signal runs the full spec §69 "Support Upsell Signal"
+  chain (ADR-0022, see SCEN-05 below): a real Sales Lead, a notification
+  to the linked account's owner (or the flagging agent if there's no
+  linked Sales Account or no account owner), a real AI-generated account
+  brief via the Copilot, and a real Recommendation Engine entry
+  suggesting the account be reviewed for an Opportunity — never an
+  auto-created Opportunity itself, which would jump a human sales rep's
+  own decision (spec's own Lead.status enum includes "converted").
 - **Cross-Module Intelligence (Phase 8), corrected 2026-07-30 (finding
-  A2 — this section previously overstated 3 of the 5 scenarios as "fully
-  implemented")**: comparing each scenario's real step count against
-  spec §69's literal step list —
+  A2) then completed 2026-08-04**: comparing each scenario's real step
+  count against spec §69's literal step list — 4 of the 5 scenarios are
+  now fully real end-to-end (see `SPEC_TRACEABILITY_MATRIX.md` SCEN-02
+  through SCEN-05 for the complete per-step evidence and test coverage):
   - **Enterprise Sales Security Review** (10 steps): 9 of 10 real
     (`SecurityReview`, ADR-0035) — genuinely near-complete. Missing: step
-    9, "Sales Copilot drafts follow-up."
-  - **New AI Tool Adoption** (9 steps): 4 of 9 real — vendor
-    request→Approval gate (ADR-0027) and an auto-created Privacy DPIA
-    (ADR-0029, counted under Compliance above). Missing: security
-    assessment, EU AI Act applicability and DPA review as distinct
-    steps, the AI risk assessment step itself (as opposed to the DPIA),
-    and approved-use policy publication.
-  - **Security Incident** (9 steps): 3 of 9 real — create incident, link
-    a Risk (personal-data-impact-adjacent, not a formal GDPR breach
-    assessment), create a response Task (only for `critical` severity,
-    no separate configurable threshold). The incident workspace built
-    separately (spec §19, ADR-0037) adds real Affected-Assets linking
-    and an Evidence tab, but neither is *automatically* triggered by
-    this scenario's chain — both are manual actions available on the
-    incident page, not steps 3 ("finds affected assets")/9 ("preserves
-    evidence") of this specific automated reaction chain. Missing as
-    automatic reactions: AI summary, a formal Compliance GDPR-breach-
-    obligations assessment, notifying the responsible team, and
-    generating draft communications.
-  - **New Customer** (8 steps): 2 of 8 real — create Customer, create an
-    onboarding Task. Missing: welcome email (no SMTP/SES path exists
-    anywhere in this build, same capability boundary as Automation's
-    `send_email` step), billing update (no Billing module exists),
-    support-profile creation, additional internal tasks, and a scheduled
-    check-in.
-  - **Support Upsell Signal** (4 steps): 2 of 4 real — create a Sales
-    Lead, notify the linked account's owner (or the flagging agent if
-    none). Missing: an explicit Opportunity *suggestion* as its own
-    artifact (a human still converts the Lead manually, ADR-0022) and an
-    AI-generated account brief.
+    9, "Sales Copilot drafts follow-up" — the one sub-step across all 5
+    scenarios still not built.
+  - **New AI Tool Adoption** (9 steps): all 9 real (fixed 2026-08-04,
+    ADR-0058) — vendor request auto-creates a real `Vendor` row plus
+    Security-assessment/DPA-review Tasks (deduped by vendor name so an
+    already-known vendor isn't re-vetted), an Approval gate (ADR-0027),
+    an auto-created Privacy DPIA (ADR-0029), the AI risk assessment and
+    EU AI Act applicability steps were already real (a dedicated
+    `AIAssessment` model and `risk_classification` itself uses the EU AI
+    Act's own tier vocabulary), and approving the system now creates a
+    real draft approved-use Policy exactly once.
+  - **Security Incident** (9 steps): all 9 real (fixed 2026-08-04,
+    ADR-0059) — a critical incident now gets a real AI-generated summary,
+    automatic linking of every already at-risk/compromised asset via the
+    pre-existing Affected-Assets workspace join, a disclosed
+    personal-data-impact heuristic, a real AI-drafted stakeholder
+    communication logged to the pre-existing Timeline, and a real
+    point-in-time evidence snapshot attached via the pre-existing
+    Evidence link — alongside the pre-existing linked Risk, response
+    Task, and owner notification.
+  - **New Customer** (8 steps): all 8 real (fixed 2026-08-04, ADR-0060)
+    — see the Sales bullet above for the full chain.
+  - **Support Upsell Signal** (4 steps): all 4 real (fixed 2026-08-04,
+    ADR-0061) — see the Support bullet above for the full chain.
 
-  No AI daily briefing, business process discovery, AI recommendation
-  engine, or organization memory exist either (spec §86-90, tracked
-  separately as BIZ-01 through BIZ-05).
+  Business Process Discovery remains unbuilt as a spec-native "Long-term
+  capability" deferral (BIZ-01, §86's own qualifier). The AI daily
+  briefing, AI recommendation engine, and organization memory (BIZ-02
+  through BIZ-05, spec §87-90) are now all real — see
+  `SPEC_TRACEABILITY_MATRIX.md`'s Business Intelligence Layer section.
 - **Automation**: execution is now Temporal-durable (`WorkflowRunWorkflow`,
   spec §61) — `app.automation.service.start_run` only creates the
   `WorkflowRun` row; a real worker executes it. All 24 of spec §39's named

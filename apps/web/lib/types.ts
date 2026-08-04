@@ -927,6 +927,7 @@ export type SalesLead = {
   score: number | null;
   account_id: string | null;
   contact_id: string | null;
+  ai_account_brief: string | null;
   created_at: string;
 };
 
