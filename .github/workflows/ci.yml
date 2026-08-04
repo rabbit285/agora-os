@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest, mypy, ruff, alembic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Real Postgres/Redis/MinIO via the same docker-compose stack used in
+      # local dev (infra/docker/docker-compose.yml) — no separate CI-only
+      # service definitions to drift from what's actually run day to day.
+      # pytest itself runs against an in-memory SQLite DB (tests/conftest.py)
+      # and never touches Postgres, but the api container's own startup
+      # (ensure_system_roles/ensure_plan_catalog) queries real tables —
+      # on a fresh CI Postgres volume those don't exist yet, so migrations
+      # must be applied via a one-off `run` *before* the long-running `api`
+      # service starts, or its startup query crashes against an empty
+      # schema and it never becomes healthy (verified by dry-running this
+      # exact ordering against a throwaway compose project).
+      - name: Build the api image
+        run: docker compose -f infra/docker/docker-compose.yml build api
+
+      - name: Start Postgres, Redis, MinIO
+        run: docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio
+
+      - name: Apply migrations (one-off container, before the api service starts)
+        run: docker compose -f infra/docker/docker-compose.yml run --rm api alembic upgrade head
+
+      - name: Verify no schema drift (models match migrations)
+        run: docker compose -f infra/docker/docker-compose.yml run --rm api alembic check
+
+      - name: Start the api service
+        run: docker compose -f infra/docker/docker-compose.yml up -d api
+
+      - name: Wait for the API to become healthy
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose -f infra/docker/docker-compose.yml exec -T api curl -sf http://localhost:8000/health > /dev/null; then
+              echo "API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy in time"
+          docker compose -f infra/docker/docker-compose.yml logs api
+          exit 1
+
+      - name: Run pytest
+        run: docker compose -f infra/docker/docker-compose.yml exec -T api python -m pytest -q
+
+      - name: Run mypy
+        run: docker compose -f infra/docker/docker-compose.yml exec -T api python -m mypy app
+
+      - name: Run ruff
+        run: docker compose -f infra/docker/docker-compose.yml exec -T api python -m ruff check app
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.yml down -v
+
+  frontend:
+    name: Frontend (tsc, eslint, vitest, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

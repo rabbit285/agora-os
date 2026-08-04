@@ -588,9 +588,20 @@ after the change.
   running dev stack (a real 429 with `Retry-After` once the per-minute cap is hit, a real
   replayed response with `Idempotency-Replayed: true` and no duplicate row created, real
   `X-Total-Count` headers and page slicing on `/compliance/controls`).
-- **MISSING**: no CI/CD pipeline configuration exists in the repository (no `.github/`
-  directory) — separate from live AWS deployment (AWS-excluded), this is the CI
-  configuration itself, which is in-scope per this audit's instructions.
+- **[FIXED 2026-08-04]** ~~No CI/CD pipeline configuration exists in the repository (no
+  `.github/` directory)~~ — a real `.github/workflows/ci.yml` now runs on every push to
+  `main` and every pull request. **Backend job**: builds the real `api` image, brings up
+  Postgres/Redis/MinIO via the exact same `infra/docker/docker-compose.yml` used in local
+  dev (no separate CI-only service definitions to drift from what's actually run day to
+  day), applies migrations via a one-off container *before* the long-running `api` service
+  starts (its own startup queries real tables that don't exist yet on a fresh CI volume —
+  this exact ordering was dry-run-verified against a throwaway compose project to confirm
+  the naive "just docker compose up" ordering crash-loops instead), then runs `alembic
+  check` (schema-drift detection), the full `pytest` suite, `mypy --strict`, and `ruff`.
+  **Frontend job**: `npm ci`, `tsc --noEmit`, `eslint`, `vitest run`, and a real production
+  `next build` — the same 4 checks this session's own workflow ran by hand after every
+  cluster. This is CI configuration only (AWS deployment itself remains AWS-excluded); no
+  CD/deploy step exists since there's no AWS target to deploy to in this build.
 
 ---
 

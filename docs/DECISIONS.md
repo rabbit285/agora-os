@@ -2072,3 +2072,50 @@ way an organization's own accumulating records do, so pagination
 there would be complexity without a real problem to solve. This is a
 disclosed scope boundary (`REMAINING_PRODUCT_GAPS.md`), not a claim of
 exhaustive coverage.
+
+## ADR-0052 — CI runs the real local-dev docker-compose stack rather than reimplementing service containers, and applies migrations via a one-off container before the long-running api service starts
+
+**Decision**: `.github/workflows/ci.yml` is the first CI configuration
+in this repository. The backend job reuses `infra/docker/docker-
+compose.yml` — the exact stack already exercised by hand throughout
+this session (Postgres, Redis, MinIO, the `api` image) — rather than
+declaring separate GitHub Actions `services:` entries for Postgres/
+Redis/MinIO. Two reasons: first, MinIO's official image needs a
+`server /data` command override that GitHub Actions' declarative
+`services:` block cannot express (it only supports `options`, not a
+command override), so a real MinIO service would need either a custom
+wrapper image or exactly what docker-compose already provides; second,
+reusing the compose file means CI and local dev can never quietly
+diverge — a config change to the real stack automatically reaches CI
+with no second definition to keep in sync.
+
+Every existing `pytest` run in this codebase uses an in-memory SQLite
+database (`tests/conftest.py`), never Postgres — so at first glance a
+CI job could skip standing up Postgres entirely. It can't: the `api`
+container's own startup (`ensure_system_roles`/`ensure_plan_catalog` in
+`app.main`'s `lifespan()`) issues real queries against real tables, and
+the Alembic drift check needs a real database to check against. Naively
+running `docker compose up -d api` against a **fresh** CI Postgres
+volume — no prior migrations — was tried and confirmed to fail: the
+lifespan hook's queries hit tables that don't exist yet, the app never
+completes startup, and the container never reports healthy, so a
+health-check step would spin for its full timeout and fail every run.
+The fix, dry-run-verified against a throwaway `docker compose -p`
+project before being written into the workflow: apply migrations via a
+one-off `docker compose run --rm api alembic upgrade head` *before* the
+long-running `api` service is brought up with `docker compose up -d
+api` — `run` starts a container from the same image without going
+through the service's normal health-checked lifecycle, so it can
+populate the schema without needing the very thing (a working `api`
+service) that schema is a prerequisite for.
+
+The frontend job runs natively via `actions/setup-node` rather than
+through Docker — frontend tests mock `apiFetch` entirely and need no
+backend service, so building the `web` Docker image would only add
+time without adding coverage. It runs the same 4 checks (`tsc
+--noEmit`, `eslint`, `vitest run`, `next build`) this session performed
+by hand after every cluster, catching the same class of failure that
+`tsc`/eslint/vitest alone miss (e.g. the `useSearchParams()`-without-
+`Suspense` build failure found on the SSO login page, ADR-0048) —
+`next build` is a distinct, necessary step, not redundant with the
+faster checks.
