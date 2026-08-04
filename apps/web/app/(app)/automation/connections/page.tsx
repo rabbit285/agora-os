@@ -22,7 +22,7 @@ export default function AutomationConnectionsPage() {
         description="The same Integration connections managed in Settings → Integrations — shown here because a Webhook connection can be linked directly to a workflow (spec §38)."
       />
       {connections?.length === 0 && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--fg-muted)]">
           No connections yet.{" "}
           <Link href="/settings/integrations" className="underline">
             Create one in Settings
@@ -35,8 +35,8 @@ export default function AutomationConnectionsPage() {
           <Card key={connection.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{connection.name}</div>
-                <div className="text-xs text-neutral-400">
+                <div className="font-medium text-[var(--fg-default)]">{connection.name}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">
                   {connection.connector_key}
                   {connection.linked_workflow_id && (
                     <>

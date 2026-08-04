@@ -27,7 +27,7 @@ const NODE_HEIGHT = 70;
 const V_GAP = 110;
 
 const selectClassName =
-  "flex h-9 w-full rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 function stepsToNodes(steps: WorkflowStep[]): Node[] {
   return steps.map((step, index) => ({
@@ -169,7 +169,7 @@ function StepConfigForm({
     default:
       return (
         <div>
-          <p className="mb-1 text-xs text-neutral-400">
+          <p className="mb-1 text-xs text-[var(--fg-subtle)]">
             Raw JSON config (no dedicated form for this step type yet)
           </p>
           <Textarea
@@ -241,7 +241,7 @@ export function StepBuilder({
 
   return (
     <div className="flex flex-col gap-3">
-      <div style={{ height: 400 }} className="rounded-md border border-neutral-200">
+      <div style={{ height: 400 }} className="rounded-md border border-[var(--border-default)]">
         <ReactFlow
           nodes={nodes.map((n) => ({
             ...n,
