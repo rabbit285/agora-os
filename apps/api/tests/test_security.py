@@ -10,6 +10,7 @@ from app.core.rbac import get_system_role
 from app.identity.models import User
 from app.identity.service import create_session
 from app.main import app
+from app.secops.models import SecurityAsset
 from app.security import hash_password
 
 
@@ -142,6 +143,89 @@ async def test_critical_incident_with_owner_notifies_owner(client: AsyncClient) 
     notifications = await client.get("/api/v1/notifications")
     assert notifications.status_code == 200
     assert any("Credential stuffing attack" in n["body"] for n in notifications.json())
+
+
+async def test_critical_incident_gets_an_ai_summary(client: AsyncClient) -> None:
+    """spec §69 "Security Incident" chain step "Security AI summarizes" —
+    a real AI call (DemoAdapter's honest fallback text in this test
+    environment, same as every other uncredentialed AI call)."""
+    await _signup(client, "incident-ai1@example.com", "Incident AI Org")
+    response = await client.post(
+        "/api/v1/security/incidents",
+        json={"title": "Unusual outbound traffic", "severity": "critical"},
+    )
+    assert response.status_code == 201
+    assert response.json()["ai_summary"]
+
+
+async def test_critical_incident_auto_links_at_risk_assets_and_flags_personal_data(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Chain steps "Finds affected assets" and "Checks personal-data
+    impact" — every asset already flagged at_risk/compromised elsewhere
+    in the inventory is auto-linked; personal_data_impact is true only
+    because one of them is classified confidential/restricted."""
+    await _signup(client, "incident-assets1@example.com", "Incident Assets Org")
+
+    healthy_asset = await client.post(
+        "/api/v1/security/assets",
+        json={"name": "Healthy DB", "asset_type": "database", "data_classification": "internal"},
+    )
+    at_risk_asset = await client.post(
+        "/api/v1/security/assets",
+        json={
+            "name": "Customer DB",
+            "asset_type": "database",
+            "data_classification": "confidential",
+        },
+    )
+    assert healthy_asset.status_code == 201
+    assert at_risk_asset.status_code == 201
+    at_risk_asset_id = at_risk_asset.json()["id"]
+
+    # No endpoint flips asset.status (only a real scan/manual triage
+    # would) — set it directly, the same real column a scan would write.
+    asset_row = await db_session.get(SecurityAsset, uuid.UUID(at_risk_asset_id))
+    assert asset_row is not None
+    asset_row.status = "at_risk"
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/security/incidents",
+        json={"title": "Breach affecting customer DB", "severity": "critical"},
+    )
+    assert response.status_code == 201
+    incident = response.json()
+    assert incident["personal_data_impact"] is True
+
+    detail = await client.get(f"/api/v1/security/incidents/{incident['id']}")
+    linked_asset_ids = {a["id"] for a in detail.json()["affected_assets"]}
+    assert linked_asset_ids == {at_risk_asset_id}
+
+
+async def test_critical_incident_generates_a_communication_draft_and_evidence(
+    client: AsyncClient,
+) -> None:
+    """Chain steps "Generates draft communications" and "Preserves
+    evidence" — a real timeline entry (entry_type="communication") and a
+    real Evidence row pointing at an uploaded point-in-time snapshot."""
+    await _signup(client, "incident-comms1@example.com", "Incident Comms Org")
+    created = await client.post(
+        "/api/v1/security/incidents",
+        json={"title": "Ransomware on payments service", "severity": "critical"},
+    )
+    incident_id = created.json()["id"]
+
+    detail = await client.get(f"/api/v1/security/incidents/{incident_id}")
+    timeline = detail.json()["timeline"]
+    communications = [e for e in timeline if e["entry_type"] == "communication"]
+    assert len(communications) == 1
+    assert communications[0]["body"]
+
+    evidence = await client.get("/api/v1/compliance/evidence")
+    matching = [e for e in evidence.json() if e.get("incident_id") == incident_id]
+    assert len(matching) == 1
+    assert matching[0]["title"] == "Point-in-time snapshot: Ransomware on payments service"
 
 
 async def test_high_severity_incident_does_not_create_risk_or_task(client: AsyncClient) -> None:

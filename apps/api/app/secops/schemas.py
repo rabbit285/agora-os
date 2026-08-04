@@ -115,6 +115,8 @@ class IncidentOut(BaseModel):
     related_task_id: uuid.UUID | None
     owner_id: uuid.UUID | None
     closed_at: datetime | None
+    ai_summary: str | None
+    personal_data_impact: bool
     root_cause: str | None
     lessons_learned: str | None
     created_at: datetime

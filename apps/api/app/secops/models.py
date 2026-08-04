@@ -122,6 +122,16 @@ class SecurityIncident(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # spec §69 "Security Incident" chain: "Security AI summarizes" — a
+    # real AI-generated summary (honest demo-mode text when uncredentialed,
+    # same as every other AI call in this build), never fabricated.
+    ai_summary: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # spec §69 chain: "Checks personal-data impact" — a disclosed
+    # heuristic (any auto-linked affected asset classified
+    # confidential/restricted), not a definitive legal determination; a
+    # human still makes the real GDPR Article 33/34 call via the linked
+    # Risk below.
+    personal_data_impact: Mapped[bool] = mapped_column(default=False)
     # Incident workspace fields (spec §19): Root Cause and Lessons Learned
     # are free text, written once the incident reaches postmortem/closed;
     # Timeline, Affected Assets, and Communication are separate tables

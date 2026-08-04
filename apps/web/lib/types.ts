@@ -860,6 +860,8 @@ export type SecurityIncident = {
   related_task_id: string | null;
   owner_id: string | null;
   closed_at: string | null;
+  ai_summary: string | null;
+  personal_data_impact: boolean;
   root_cause: string | null;
   lessons_learned: string | null;
   created_at: string;

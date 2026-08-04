@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -322,6 +323,22 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
         description={incident.description ?? undefined}
         actions={<SeverityBadge severity={incident.severity} />}
       />
+
+      {incident.ai_summary && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                AI Summary
+              </span>
+              {incident.personal_data_impact && (
+                <Badge variant="destructive">Possible personal-data impact</Badge>
+              )}
+            </div>
+            <p className="text-sm text-neutral-700">{incident.ai_summary}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="mb-6 flex items-center gap-3">
         <span className="text-sm text-neutral-500">Status:</span>
