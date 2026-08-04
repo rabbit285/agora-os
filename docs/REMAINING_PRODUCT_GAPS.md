@@ -490,7 +490,32 @@ after the change.
   "architecture" qualifier (only "Google" carries one), meaning a real Azure OpenAI adapter
   is technically in scope but has zero code — now disclosed honestly as `has_adapter: false`
   rather than silently absent from the page. 3 backend + 5 frontend tests; live-verified.
-- **MISSING**: Billing & entitlements, Reporting module.
+- **[FIXED 2026-07-30]** ~~Billing & entitlements~~ — spec §64's plan/entitlement layer is
+  real, scoped to what the spec's own "Plans architecture:" qualifier actually covers (the
+  qualifier marks the whole section architecture-tier for payment collection, but "Use
+  entitlement service. Do not hard-code plan checks across UI" is a separately-stated real
+  requirement, not deferred). New `app.billing` package: 4 seeded plans (Starter/Growth/
+  Business/Enterprise) each with a real entitlements JSON blob covering 19 spec-named keys
+  (numeric limits step up per tier, Enterprise uses `null` for unlimited; booleans such as
+  `sso_enabled`/`api_enabled`/`trust_center_enabled` unlock at Growth+, `scim_enabled`/
+  `custom_frameworks_enabled`/`advanced_reporting_enabled` at Business+, `data_residency_
+  enabled` at Enterprise only — tier cutoffs are a disclosed judgment call, since the spec
+  doesn't specify them). `GET /billing/plans`, `GET/PUT /billing/current` (org_admin only,
+  audit-logged). Real enforcement wired at two concrete, regression-safe points rather than
+  retrofitted everywhere at once: `max_users` blocks new invitations once an org's active
+  member count reaches its plan's limit; `sso_enabled` blocks SSO login for an *existing*
+  user on an *existing* org (new auto-provisioned orgs are deliberately exempt — a brand-new
+  org can't fail its own SSO-created entitlement before it exists). A third candidate,
+  gating `trust_center_enabled` on the Trust Center write endpoint, was implemented then
+  reverted before commit: every pre-existing organization (including every already-shipped
+  Trust Center test's freshly-signed-up org) defaults to Starter, and Starter's catalog has
+  `trust_center_enabled: false`, which would have broken already-green tests for a feature
+  that predates Billing entirely — left unwired pending a real backfill/grandfathering
+  decision rather than silently regressing it. No Stripe/payment collection exists (correctly
+  disclosed, matching the spec's own qualifier) — switching plans on `/settings/billing` is
+  an immediate, free, self-service action, not a checkout flow. 6 backend + 3 frontend tests;
+  live-verified. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-19 and `KNOWN_LIMITATIONS.md`.
+- **MISSING**: Reporting module.
 - **MISSING (spec §57, surfaced while building the AI Providers status page above)**: Azure
   OpenAI has no adapter — the only spec §57 Model Gateway provider without an explicit
   "architecture"/"future" qualifier that still has zero implementation.

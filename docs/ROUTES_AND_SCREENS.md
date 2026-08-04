@@ -125,6 +125,7 @@ table rather than a fourth table.
 | `/settings/security` | [x] email verification status/resend, TOTP MFA enroll/confirm/disable |
 | `/settings/roles` | [x] all 16 system roles listed with their real granted permissions (expandable); deliberately a reference view, not an editor — see docs/KNOWN_LIMITATIONS.md for why — built 2026-07-30 |
 | `/settings/ai-providers` | [x] real-time status per spec §57 provider (has-adapter/configured/active), demo-mode banner when none active — built 2026-07-30 |
+| `/settings/billing` | [x] 4 seeded plans, current plan + user count, per-entitlement comparison grid, self-service plan switch; no payment collection (disclosed, spec §64's own "Plans architecture:" qualifier) — built 2026-07-30, PLAT-19 |
 | `/settings/integrations` | [x] provider catalog for 7 OAuth providers (permission preview of requested scopes before Connect, Not-configured badge), OAuth connections (health/scopes/sync history, refresh/disconnect/sync-now — sync polls a durable Temporal job to completion), webhook connections (create, copy URL/secret, link/unlink a workflow, received events) |
 | all other settings sub-pages (spec §67 SETTINGS group) | [ ] |
 

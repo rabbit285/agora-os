@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.billing.service import count_active_members, require_numeric_capacity
 from app.config import settings
 from app.core.models import Invitation, Membership, MembershipRole, Organization
 from app.core.rbac import SYSTEM_ROLE_KEYS, get_system_role
@@ -48,6 +49,18 @@ async def create_invitation(
     normalized_email = email.lower()
     if role_key not in SYSTEM_ROLE_KEYS:
         raise ValueError(f"Unknown role: {role_key}")
+
+    # spec §64 entitlement enforcement (max_users) — counts active
+    # memberships only; a pending invitation doesn't consume a seat until
+    # accepted, matching how `count_active_members` is defined.
+    current_users = await count_active_members(db, organization_id=organization.id)
+    await require_numeric_capacity(
+        db,
+        organization_id=organization.id,
+        key="max_users",
+        current_usage=current_users,
+        feature_name="Users",
+    )
 
     existing_user = (
         await db.execute(select(User).where(User.email == normalized_email))

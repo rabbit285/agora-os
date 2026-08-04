@@ -21,6 +21,7 @@ from __future__ import annotations
 from app.ai import models as _ai_models  # noqa: F401
 from app.audit import models as _audit_models  # noqa: F401
 from app.automation import models as _automation_models  # noqa: F401
+from app.billing import models as _billing_models  # noqa: F401
 from app.compliance import models as _compliance_models  # noqa: F401
 from app.core import models as _core_models  # noqa: F401
 from app.identity import models as _identity_models  # noqa: F401

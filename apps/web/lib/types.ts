@@ -131,6 +131,40 @@ export type Readiness = {
   opportunities: ReadinessOpportunity[];
 };
 
+export type Plan = {
+  key: string;
+  name: string;
+  entitlements: Record<string, number | boolean | null>;
+};
+
+export type OrganizationPlan = {
+  plan_key: string;
+  entitlements: Record<string, number | boolean | null>;
+  current_users: number;
+};
+
+export const ENTITLEMENT_LABELS: Record<string, string> = {
+  max_users: "Users",
+  max_ai_usage_monthly: "AI usage / month",
+  max_documents: "Documents",
+  max_storage_gb: "Storage (GB)",
+  max_frameworks: "Compliance frameworks",
+  max_ai_systems: "AI systems",
+  max_security_connectors: "Security connectors",
+  max_sales_leads: "Sales leads",
+  max_outreach_volume_monthly: "Outreach volume / month",
+  max_support_conversations_monthly: "Support conversations / month",
+  max_automation_runs_monthly: "Automation runs / month",
+  max_integrations: "Integrations",
+  sso_enabled: "SSO",
+  scim_enabled: "SCIM",
+  api_enabled: "API access",
+  custom_frameworks_enabled: "Custom frameworks",
+  trust_center_enabled: "Trust Center",
+  advanced_reporting_enabled: "Advanced reporting",
+  data_residency_enabled: "Data residency",
+};
+
 export type Role = {
   key: string;
   name: string;

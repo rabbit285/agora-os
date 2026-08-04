@@ -37,6 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.billing.service import ensure_plan_catalog
 from app.config import settings
 from app.core.models import LegalEntity, Membership, MembershipRole, Organization
 from app.core.rbac import ensure_system_roles, get_system_role
@@ -166,6 +167,7 @@ async def _provision_user_and_organization(
     value the user can never type — this account can only ever log in via
     SSO, which is honest given how it was created."""
     await ensure_system_roles(db)
+    await ensure_plan_catalog(db)
 
     user = User(
         email=email,
@@ -235,6 +237,22 @@ async def complete_sso_login(
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
         organization_id = await _first_active_organization_id(db, user.id)
+        # spec §64 entitlement enforcement (sso_enabled) — only for an
+        # existing user logging into an existing org. A brand-new,
+        # auto-provisioned org (the `if` branch above) is deliberately
+        # exempt: it just used SSO to sign up, so checking its
+        # freshly-assigned default plan's sso_enabled would be a
+        # chicken-and-egg rejection of the very login that created it.
+        if organization_id is not None:
+            from app.billing.service import check_boolean_entitlement
+
+            if not await check_boolean_entitlement(
+                db, organization_id=organization_id, key="sso_enabled"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="SSO is not included in this organization's current plan",
+                )
 
     mfa_required = user.mfa_enabled
     session = await create_session(

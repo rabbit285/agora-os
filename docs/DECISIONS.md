@@ -1868,3 +1868,60 @@ refuses (400) outright when a provider isn't actually configured — this
 build never falls back to `MockOAuthAdapter` for SSO the way Integrations
 does for a demo connection, since a mocked *login* would mean creating a
 real `User`/`Session` from a fabricated identity, not a labeled demo.
+
+## ADR-0049 — Plans are a small JSON-entitlements catalog, not a relational per-entitlement table; enforcement is wired at exactly two points, chosen for zero regression risk over maximal coverage
+
+**Decision**: spec §64 says "Plans architecture:" as a section-level
+qualifier, then separately states "Use entitlement service. Do not
+hard-code plan checks across UI" without a qualifier of its own — read at
+the phrase level (the same discipline established for §53 and §59: a
+qualifier attaches to the specific words it precedes, not to everything
+under the same heading), the payment-collection half of §64 is
+architecture-tier and correctly unbuilt, but a real entitlement service is
+in scope. PLAT-19 built `app.billing`: a `Plan` model with one `entitlements`
+JSON column rather than a normalized `Entitlement`/`PlanEntitlement`
+table pair. This is a genuine simplification, not a corner cut: there are
+only 4 plans and 19 entitlement keys, none of which need independent
+lifecycle (versioning, per-org overrides, audit history distinct from the
+plan itself) — a relational table would add migration and query
+complexity for zero present capability. `ensure_plan_catalog()` follows
+the exact idempotent upsert-on-every-call pattern `ensure_system_roles`
+established (ADR-0043-adjacent): called from `app.main`'s `lifespan()`
+*and* directly inside `signup()` and `_provision_user_and_organization()`,
+because the SQLite test database resets per test and never retains state
+a one-time lifespan hook would have set up — discovered the hard way when
+wiring `max_users` into invitation creation broke 6 previously-green
+tests with `LookupError: Plan 'starter' has not been seeded`.
+
+The harder decision was where to actually enforce an entitlement, given
+that almost every organization already in existence (every pre-existing
+test's freshly-signed-up org, and every real org created before this
+commit) defaults to `plan_key="starter"`. Wiring a new boolean check onto
+an *existing, already-shipped* feature risks silently breaking it for
+every such org. This was not hypothetical: `trust_center_enabled` was
+wired onto `trust_center.py`'s write endpoint, then reverted before
+commit, because Starter's catalog sets it `false` and the pre-existing
+`test_compliance.py` Trust Center tests — whose orgs all default to
+Starter — would have started failing for a feature Billing had nothing
+to do with. Rather than either skip enforcement entirely (an unfalsifiable
+"the service exists" claim) or retrofit every module at once (out of
+scope for this cluster and its own regression risk), enforcement landed
+at exactly two points chosen because neither can regress a pre-existing
+green test: `max_users` on `create_invitation` (a brand-new capacity
+check on an existing but not-yet-limited path — the only pre-existing
+tests that could break are ones creating more members than Starter's
+limit, and none do) and `sso_enabled` on SSO login for an *existing* user
+at an *existing* org (SSO itself is entirely new code from this session,
+so there is no pre-existing green test to break). The second point has
+its own carve-out: a brand-new organization auto-provisioned by its own
+*first* SSO login is exempt from the `sso_enabled` check, because that
+org's Starter-default entitlements would otherwise reject the very login
+that is in the middle of creating it — a chicken-and-egg case that only
+applies to the org-creation branch, not the existing-org branch.
+
+Per-tier cutoffs (which numeric limit or boolean flag unlocks at Growth
+vs. Business vs. Enterprise) are a disclosed judgment call: spec §64
+names the entitlement keys but not their tier assignment, so
+`PLAN_CATALOG` reflects a reasonable reading (SSO/API/Trust Center at
+Growth; SCIM/custom frameworks/advanced reporting at Business; data
+residency at Enterprise only) rather than a spec-mandated table.

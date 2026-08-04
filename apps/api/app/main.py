@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.billing.service import ensure_plan_catalog
 from app.config import settings
 from app.core.rbac import ensure_system_roles
 from app.core.storage import ensure_bucket
@@ -21,6 +22,7 @@ from app.routers import (
     ai,
     approvals,
     automation,
+    billing,
     compliance,
     files,
     health,
@@ -51,6 +53,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # roles in a running deployment without a separate manual seed step.
     async with AsyncSessionLocal() as db:
         await ensure_system_roles(db)
+        await ensure_plan_catalog(db)
     yield
 
 
@@ -116,6 +119,7 @@ async def validation_exception_handler(
 app.include_router(health.router)
 app.include_router(auth_router)
 app.include_router(organizations.router)
+app.include_router(billing.router)
 app.include_router(onboarding.router)
 app.include_router(tasks.router)
 app.include_router(approvals.router)

@@ -132,8 +132,10 @@ implied to work.
   check itself is a single boolean, not the fuller jurisdiction/consent/
   marketing-basis engine spec §91 describes (ADR-0019). A `closed_won`
   Opportunity creates a real Support Customer + onboarding Task
-  (ADR-0025), but not a real welcome email or a billing/accounting
-  system update — no email provider or accounting connector exists yet.
+  (ADR-0025), but not a real welcome email or an accounting-system
+  update — no email provider or accounting connector exists yet (the
+  Billing module added 2026-07-30 covers plan/entitlements, not
+  invoice/accounting sync).
   If the account has no Contact yet, onboarding is honestly skipped, not
   faked with a placeholder email.
 - **Support**: tickets have a `channel` field (`email`/`chat`/`api`) but
@@ -423,6 +425,28 @@ implied to work.
   in-app-only, unchanged from before this fix, since retrofitting every
   call site to request every channel wasn't the goal; the dispatch
   infrastructure itself being real and correctly wired was.
+- **Billing & entitlements (spec §64) is real for the "entitlement
+  service" requirement, not for the section's own "Plans architecture:"
+  payment-collection half** (fixed 2026-07-30, PLAT-19): 4 seeded plans
+  (Starter/Growth/Business/Enterprise, `app.billing.PLAN_CATALOG`) each
+  carry a real entitlements blob (19 spec-named keys); `GET /billing/
+  plans`, `GET`/`PUT /billing/current` (org_admin, audited). Which
+  numeric/boolean value unlocks at which tier is a disclosed judgment
+  call — the spec names the entitlement keys but not their per-tier
+  cutoffs. Enforcement is real but deliberately narrow: `max_users` on
+  new invitation creation, and `sso_enabled` on SSO login for an
+  *existing* user at an *existing* org (a brand-new org auto-provisioned
+  by its own first SSO login is exempt, to avoid rejecting the very
+  login that creates it). Gating `trust_center_enabled` on the Trust
+  Center write endpoint was attempted and reverted before commit: every
+  org — including every pre-existing Trust Center test's freshly-signed-
+  up org — defaults to Starter, whose catalog has `trust_center_enabled:
+  false`, which would have silently broken a feature that predates
+  Billing entirely. No other pre-existing feature is retroactively
+  gated. There is no Stripe/payment integration anywhere — switching
+  plans on `/settings/billing` is an immediate, free, self-service
+  change, not a checkout flow; this matches the spec's own "Plans
+  architecture:" qualifier on that half of §64.
 
 ## Trust and progressive access model (spec §B)
 

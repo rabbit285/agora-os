@@ -25,6 +25,13 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # org-scoped rather than per-user (a webhook receiver is an
     # organization's integration, not an individual's preference).
     notification_webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # spec §64 Billing — "Plans architecture" (the header itself carries
+    # spec's own "architecture" qualifier): every org is on a real plan,
+    # entitlements are really enforced (app.billing.service), but there is
+    # no real payment collection — an org_admin picks their own plan
+    # directly (see app.routers.billing), disclosed in
+    # docs/KNOWN_LIMITATIONS.md rather than faking a Stripe checkout.
+    plan_key: Mapped[str] = mapped_column(String(20), default="starter")
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.billing.service import ensure_plan_catalog
 from app.config import settings
 from app.core.crypto import decrypt_token, encrypt_token
 from app.core.models import LegalEntity, Membership, MembershipRole, Organization
@@ -59,6 +60,7 @@ async def signup(
         )
 
     await ensure_system_roles(db)
+    await ensure_plan_catalog(db)
 
     user = User(
         email=email,
