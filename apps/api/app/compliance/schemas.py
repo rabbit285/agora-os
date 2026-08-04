@@ -160,6 +160,7 @@ class PolicyOut(BaseModel):
     file_id: uuid.UUID | None
     status: str
     owner_id: uuid.UUID | None
+    ai_system_id: uuid.UUID | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -187,6 +188,7 @@ class AISystemOut(BaseModel):
     id: uuid.UUID
     name: str
     vendor: str | None
+    vendor_id: uuid.UUID | None
     purpose: str
     risk_classification: str
     status: str
@@ -339,6 +341,10 @@ class VendorStatusUpdate(BaseModel):
     status: str = Field(pattern="^(active|under_review|offboarded)$")
 
 
+class VendorDpaStatusUpdate(BaseModel):
+    dpa_status: str = Field(pattern="^(pending|signed|not_required)$")
+
+
 class VendorOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -348,6 +354,7 @@ class VendorOut(BaseModel):
     contact_email: str | None
     risk_tier: str
     status: str
+    dpa_status: str
     owner_id: uuid.UUID | None
     created_at: datetime
 

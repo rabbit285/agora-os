@@ -284,6 +284,11 @@ class Policy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # spec §69 "New AI Tool Adoption" chain's final step, "Add approved-use
+    # policy" — set when `decide_ai_system_status` approves an AISystem.
+    ai_system_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=True
+    )
 
 
 class AISystem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -298,6 +303,12 @@ class AISystem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     vendor: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # spec §69 "New AI Tool Adoption" step 1, "Vendor created" — a real
+    # Vendor row (looked up by name or created), not just this free-text
+    # display field. `vendor` above is kept as-is for display/back-compat.
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True
+    )
     purpose: Mapped[str] = mapped_column(String(2000), nullable=False)
     # minimal | limited | high | unacceptable (EU AI Act risk tiers)
     risk_classification: Mapped[str] = mapped_column(String(20), default="minimal")
@@ -482,6 +493,10 @@ class Vendor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # spec §69 "New AI Tool Adoption" step "DPA review" — pending | signed |
+    # not_required. Real, reviewable state an admin updates directly;
+    # never auto-flipped to "signed" (that would fabricate a legal fact).
+    dpa_status: Mapped[str] = mapped_column(String(20), default="pending")
 
 
 class VendorAssessment(UUIDPrimaryKeyMixin, Base):

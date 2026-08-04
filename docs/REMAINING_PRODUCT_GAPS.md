@@ -90,7 +90,7 @@ implemented." Direct comparison against the spec's literal step lists (§69, lin
 | Scenario | Spec steps | Steps actually implemented | 
 |---|---|---|
 | Enterprise Sales Security Review | 10 | 9 (minus one sub-step: "Sales Copilot drafts follow-up") — genuinely near-complete |
-| New AI Tool Adoption | 9 | 4 — already correctly flagged as partial in KNOWN_LIMITATIONS.md |
+| New AI Tool Adoption | 9 | **9 — [FIXED 2026-08-04]**, see `SPEC_TRACEABILITY_MATRIX.md` SCEN-02 |
 | Security Incident Response | 9 | 3 (create incident → link risk → create response task; the incident workspace's Affected-Assets/Evidence features exist but as manual actions, not automatic reactions in *this* chain) |
 | New Customer Onboarding | 8 | 2 (create Customer → create onboarding Task; no welcome email, billing update, support-profile creation, or scheduled check-in) |
 | Support Upsell Signal | 4 | 2 (flag ticket → create Lead → notify the linked account owner; no Opportunity-suggestion artifact, no AI-generated account brief) |

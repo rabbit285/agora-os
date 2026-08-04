@@ -407,6 +407,7 @@ export type Policy = {
   file_id: string | null;
   status: "draft" | "published";
   owner_id: string | null;
+  ai_system_id: string | null;
   created_at: string;
 };
 
@@ -490,6 +491,7 @@ export type AISystem = {
   id: string;
   name: string;
   vendor: string | null;
+  vendor_id: string | null;
   purpose: string;
   risk_classification: AIRiskClassification;
   status: AISystemStatus;
@@ -590,6 +592,7 @@ export type Vendor = {
   contact_email: string | null;
   risk_tier: Severity;
   status: VendorStatus;
+  dpa_status: "pending" | "signed" | "not_required";
   owner_id: string | null;
   created_at: string;
 };

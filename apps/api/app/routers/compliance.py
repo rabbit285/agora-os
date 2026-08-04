@@ -97,6 +97,7 @@ from app.compliance.schemas import (
     VendorAssessmentOut,
     VendorCreate,
     VendorDetailOut,
+    VendorDpaStatusUpdate,
     VendorOut,
     VendorStatusUpdate,
 )
@@ -625,7 +626,10 @@ async def update_policy_status(
         from app.memory.service import record_policy_published_memory
 
         await record_policy_published_memory(
-            db, organization_id=context.organization_id, policy_id=policy.id, policy_title=policy.title
+            db,
+            organization_id=context.organization_id,
+            policy_id=policy.id,
+            policy_title=policy.title,
         )
     await db.commit()
     await db.refresh(policy)
@@ -1183,6 +1187,33 @@ async def update_vendor_status(
         object_id=str(vendor.id),
         before_state={"status": before_status},
         after_state={"status": vendor.status},
+    )
+    await db.commit()
+    await db.refresh(vendor)
+    return vendor
+
+
+@router.patch("/vendors/{vendor_id}/dpa-status", response_model=VendorOut)
+async def update_vendor_dpa_status(
+    vendor_id: uuid.UUID,
+    payload: VendorDpaStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> Vendor:
+    """spec §69 "New AI Tool Adoption" step "DPA review" — a real,
+    human-reviewed state, never auto-flipped to "signed"."""
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    before_status = vendor.dpa_status
+    vendor.dpa_status = payload.dpa_status
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.vendor.dpa_status_changed",
+        object_type="vendor",
+        object_id=str(vendor.id),
+        before_state={"dpa_status": before_status},
+        after_state={"dpa_status": vendor.dpa_status},
     )
     await db.commit()
     await db.refresh(vendor)

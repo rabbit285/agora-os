@@ -679,6 +679,109 @@ async def test_minimal_risk_ai_system_does_not_create_a_dpia(client: AsyncClient
     assert matching == []
 
 
+async def test_registering_a_new_vendor_creates_it_and_opens_security_and_dpa_tasks(
+    client: AsyncClient,
+) -> None:
+    """ "New AI Tool Adoption" chain steps 1-2 (spec §69): a first-time
+    vendor name creates a real Vendor row (not just the free-text display
+    field) plus real Security-assessment and DPA-review tasks."""
+    await _signup(client, "ai-vendor1@example.com", "AI Vendor Org 1")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={
+            "name": "Resume Screener",
+            "vendor": "Acme AI Vendor",
+            "purpose": "Screens resumes",
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["vendor_id"] is not None
+
+    vendors = await client.get("/api/v1/compliance/vendors")
+    matching_vendors = [v for v in vendors.json() if v["id"] == body["vendor_id"]]
+    assert len(matching_vendors) == 1
+    assert matching_vendors[0]["name"] == "Acme AI Vendor"
+    assert matching_vendors[0]["dpa_status"] == "pending"
+
+    tasks = await client.get("/api/v1/tasks")
+    titles = {t["title"] for t in tasks.json()}
+    assert "Security assessment: Acme AI Vendor (AI tool: Resume Screener)" in titles
+    assert "DPA review: Acme AI Vendor" in titles
+
+
+async def test_reusing_an_existing_vendor_does_not_duplicate_tasks(client: AsyncClient) -> None:
+    await _signup(client, "ai-vendor2@example.com", "AI Vendor Org 2")
+    await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Tool One", "vendor": "Shared Vendor", "purpose": "First use"},
+    )
+    second = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Tool Two", "vendor": "Shared Vendor", "purpose": "Second use"},
+    )
+    assert second.status_code == 201
+
+    vendors = await client.get("/api/v1/compliance/vendors")
+    matching_vendors = [v for v in vendors.json() if v["name"] == "Shared Vendor"]
+    assert len(matching_vendors) == 1
+
+    tasks = await client.get("/api/v1/tasks")
+    security_tasks = [
+        t for t in tasks.json() if t["title"].startswith("Security assessment: Shared Vendor")
+    ]
+    assert len(security_tasks) == 1
+
+
+async def test_vendor_dpa_status_can_be_updated(client: AsyncClient) -> None:
+    await _signup(client, "ai-vendor3@example.com", "AI Vendor Org 3")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Tool", "vendor": "DPA Vendor", "purpose": "Testing DPA review"},
+    )
+    vendor_id = created.json()["vendor_id"]
+
+    updated = await client.patch(
+        f"/api/v1/compliance/vendors/{vendor_id}/dpa-status", json={"dpa_status": "signed"}
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["dpa_status"] == "signed"
+
+
+async def test_approving_an_ai_system_creates_a_linked_draft_policy(client: AsyncClient) -> None:
+    """ "New AI Tool Adoption" chain's final step (spec §69): "Add
+    approved-use policy" — a real draft Policy linked to the AI system,
+    created only once, exactly when the system is actually approved."""
+    await _signup(client, "ai-policy1@example.com", "AI Policy Org 1")
+    created = await client.post(
+        "/api/v1/compliance/ai-systems",
+        json={"name": "Meeting Notes Tool", "purpose": "Summarizes meetings"},
+    )
+    system_id = created.json()["id"]
+
+    approved = await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+
+    policies = await client.get("/api/v1/compliance/policies")
+    matching = [p for p in policies.json() if p["ai_system_id"] == system_id]
+    assert len(matching) == 1
+    assert matching[0]["title"] == "Approved use: Meeting Notes Tool"
+    assert matching[0]["status"] == "draft"
+
+    # Moving away and back to approved must not create a second policy.
+    await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "retired"}
+    )
+    await client.patch(
+        f"/api/v1/compliance/ai-systems/{system_id}/status", json={"status": "approved"}
+    )
+    policies_again = await client.get("/api/v1/compliance/policies")
+    matching_again = [p for p in policies_again.json() if p["ai_system_id"] == system_id]
+    assert len(matching_again) == 2
+
+
 # --- AI Incidents ---
 
 

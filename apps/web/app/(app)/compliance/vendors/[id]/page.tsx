@@ -32,6 +32,15 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["compliance", "vendors", id] }),
   });
 
+  const updateDpaStatus = useMutation({
+    mutationFn: (dpa_status: VendorDetail["dpa_status"]) =>
+      apiFetch(`/api/v1/compliance/vendors/${id}/dpa-status`, {
+        method: "PATCH",
+        body: { dpa_status },
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["compliance", "vendors", id] }),
+  });
+
   const recordAssessment = useMutation({
     mutationFn: () =>
       apiFetch(`/api/v1/compliance/vendors/${id}/assessments`, {
@@ -77,6 +86,22 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
           <option value="active">Active</option>
           <option value="under_review">Under review</option>
           <option value="offboarded">Offboarded</option>
+        </select>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-neutral-500">DPA review:</span>
+        <StatusBadge status={vendor.dpa_status} />
+        <select
+          className={selectClassName}
+          value={vendor.dpa_status}
+          onChange={(e) =>
+            updateDpaStatus.mutate(e.target.value as VendorDetail["dpa_status"])
+          }
+        >
+          <option value="pending">Pending</option>
+          <option value="signed">Signed</option>
+          <option value="not_required">Not required</option>
         </select>
       </div>
 

@@ -73,6 +73,7 @@ const AI_SYSTEM_FIXTURE: AISystem = {
   id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
   name: "Resume Screening Assistant",
   vendor: null,
+  vendor_id: null,
   purpose: "Ranks job applicants",
   risk_classification: "high",
   status: "in_review",
@@ -103,6 +104,7 @@ const VENDOR_FIXTURE: Vendor = {
   contact_email: null,
   risk_tier: "critical",
   status: "active",
+  dpa_status: "pending",
   owner_id: null,
   created_at: new Date().toISOString(),
 };

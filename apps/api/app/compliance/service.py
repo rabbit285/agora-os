@@ -102,6 +102,7 @@ from app.compliance.models import (
     ControlAssessment,
     DataTransfer,
     Evidence,
+    Policy,
     Questionnaire,
     QuestionnaireAnswer,
     QuestionnaireQuestion,
@@ -193,6 +194,56 @@ async def register_ai_system(
     db.add(system)
     await db.flush()
 
+    # "New AI Tool Adoption" chain steps 1-2 (spec §69): "Vendor created"
+    # and "Security assessment." Looked up by name first (dedup by natural
+    # key, same discipline as the Policy-publish memory hook) — an
+    # already-known vendor was already vetted, so the follow-up tasks only
+    # fire the first time this org adopts it.
+    if vendor:
+        existing_vendor = (
+            await db.execute(
+                select(Vendor).where(
+                    Vendor.organization_id == organization_id, Vendor.name == vendor
+                )
+            )
+        ).scalar_one_or_none()
+        if existing_vendor is None:
+            vendor_record = Vendor(
+                organization_id=organization_id,
+                name=vendor,
+                category="ai_vendor",
+                status="under_review",
+                owner_id=owner_id,
+            )
+            db.add(vendor_record)
+            await db.flush()
+            system.vendor_id = vendor_record.id
+            db.add(
+                Task(
+                    organization_id=organization_id,
+                    title=f"Security assessment: {vendor} (AI tool: {name})",
+                    module="compliance",
+                    priority="high",
+                    entity_type="vendor",
+                    entity_id=str(vendor_record.id),
+                    created_by=actor_user_id,
+                )
+            )
+            db.add(
+                Task(
+                    organization_id=organization_id,
+                    title=f"DPA review: {vendor}",
+                    module="compliance",
+                    priority="normal",
+                    entity_type="vendor",
+                    entity_id=str(vendor_record.id),
+                    created_by=actor_user_id,
+                )
+            )
+            await db.flush()
+        else:
+            system.vendor_id = existing_vendor.id
+
     if risk_classification in _HIGH_RISK_TIERS:
         approval = Approval(
             organization_id=organization_id,
@@ -270,6 +321,31 @@ async def decide_ai_system_status(
         before_state={"status": before_status},
         after_state={"status": new_status},
     )
+
+    # "New AI Tool Adoption" chain's final step (spec §69): "Add
+    # approved-use policy." A real draft Policy, not a fabricated
+    # "published" one — an admin still reviews and publishes it through
+    # the existing Policy publish flow, same as any other policy.
+    if new_status == "approved" and before_status != "approved":
+        policy = Policy(
+            organization_id=system.organization_id,
+            title=f"Approved use: {system.name}",
+            status="draft",
+            owner_id=system.owner_id,
+            ai_system_id=system.id,
+        )
+        db.add(policy)
+        await db.flush()
+        await record_event(
+            db,
+            organization_id=system.organization_id,
+            actor_user_id=actor_user_id,
+            action="compliance.policy.created_from_ai_system",
+            object_type="policy",
+            object_id=str(policy.id),
+            after_state={"ai_system_id": str(system.id)},
+        )
+
     return system
 
 
