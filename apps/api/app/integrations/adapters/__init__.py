@@ -20,8 +20,10 @@ from app.integrations.adapters.base import OAuthConnectorAdapter
 from app.integrations.adapters.github import GitHubAdapter
 from app.integrations.adapters.google import GoogleAdapter
 from app.integrations.adapters.hubspot import HubSpotAdapter
+from app.integrations.adapters.intercom import IntercomAdapter
 from app.integrations.adapters.microsoft import MicrosoftAdapter
 from app.integrations.adapters.mock import MockOAuthAdapter
+from app.integrations.adapters.pipedrive import PipedriveAdapter
 from app.integrations.adapters.salesforce import SalesforceAdapter
 from app.integrations.adapters.slack import SlackAdapter
 from app.integrations.adapters.zendesk import ZendeskAdapter
@@ -96,6 +98,18 @@ def _provider_specs() -> dict[str, _ProviderSpec]:
             settings.zendesk_client_secret,
             settings.zendesk_redirect_uri,
             settings.zendesk_subdomain,
+        ),
+        "pipedrive": _ProviderSpec(
+            PipedriveAdapter,
+            settings.pipedrive_client_id,
+            settings.pipedrive_client_secret,
+            settings.pipedrive_redirect_uri,
+        ),
+        "intercom": _ProviderSpec(
+            IntercomAdapter,
+            settings.intercom_client_id,
+            settings.intercom_client_secret,
+            settings.intercom_redirect_uri,
         ),
     }
 

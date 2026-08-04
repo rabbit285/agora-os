@@ -136,6 +136,12 @@ class Settings(BaseSettings):
     # so this build supports exactly one configured Zendesk account rather
     # than a per-connection subdomain prompt a production build would add.
     zendesk_subdomain: str | None = Field(default=None, alias="ZENDESK_SUBDOMAIN")
+    pipedrive_client_id: str | None = Field(default=None, alias="PIPEDRIVE_CLIENT_ID")
+    pipedrive_client_secret: str | None = Field(default=None, alias="PIPEDRIVE_CLIENT_SECRET")
+    pipedrive_redirect_uri: str | None = Field(default=None, alias="PIPEDRIVE_REDIRECT_URI")
+    intercom_client_id: str | None = Field(default=None, alias="INTERCOM_CLIENT_ID")
+    intercom_client_secret: str | None = Field(default=None, alias="INTERCOM_CLIENT_SECRET")
+    intercom_redirect_uri: str | None = Field(default=None, alias="INTERCOM_REDIRECT_URI")
     # Encrypts stored OAuth tokens at rest (app/core/crypto.py). Falls back
     # to a key derived from SECRET_KEY when unset — fine for dev/test,
     # a real deployment should set its own (see docs/KNOWN_LIMITATIONS.md).
@@ -164,6 +170,8 @@ def _diagnose(settings: Settings) -> None:
         "SLACK_CLIENT_ID": settings.slack_client_id,
         "SALESFORCE_CLIENT_ID": settings.salesforce_client_id,
         "ZENDESK_CLIENT_ID": settings.zendesk_client_id,
+        "PIPEDRIVE_CLIENT_ID": settings.pipedrive_client_id,
+        "INTERCOM_CLIENT_ID": settings.intercom_client_id,
         "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
         "CLEARBIT_API_KEY": settings.clearbit_api_key,
     }

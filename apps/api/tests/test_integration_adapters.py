@@ -24,16 +24,28 @@ from app.integrations.adapters import (
 from app.integrations.adapters.github import GitHubAdapter
 from app.integrations.adapters.google import GoogleAdapter
 from app.integrations.adapters.hubspot import HubSpotAdapter
+from app.integrations.adapters.intercom import IntercomAdapter
 from app.integrations.adapters.microsoft import MicrosoftAdapter
 from app.integrations.adapters.mock import MockOAuthAdapter
+from app.integrations.adapters.pipedrive import PipedriveAdapter
 from app.integrations.adapters.salesforce import SalesforceAdapter
 from app.integrations.adapters.slack import SlackAdapter
 from app.integrations.adapters.zendesk import ZendeskAdapter
 
-ALL_PROVIDERS = {"hubspot", "google", "microsoft", "github", "slack", "salesforce", "zendesk"}
+ALL_PROVIDERS = {
+    "hubspot",
+    "google",
+    "microsoft",
+    "github",
+    "slack",
+    "salesforce",
+    "zendesk",
+    "pipedrive",
+    "intercom",
+}
 
 
-def test_oauth_provider_keys_match_all_seven_expected_providers() -> None:
+def test_oauth_provider_keys_match_all_nine_expected_providers() -> None:
     assert OAUTH_PROVIDER_KEYS == ALL_PROVIDERS
 
 
@@ -155,6 +167,31 @@ def test_zendesk_is_not_configured_without_a_subdomain_even_with_client_credenti
     monkeypatch.setattr(settings, "zendesk_client_secret", "zd-secret")
     monkeypatch.setattr(settings, "zendesk_subdomain", None)
     assert is_provider_configured("zendesk") is False
+
+
+def test_pipedrive_authorization_url_includes_client_and_state() -> None:
+    adapter = PipedriveAdapter(client_id="pd-client", client_secret="pd-secret")
+    url = urlparse(adapter.authorization_url(state="s8", redirect_uri="https://app.example/cb"))
+    params = parse_qs(url.query)
+    assert params["client_id"] == ["pd-client"]
+    assert params["state"] == ["s8"]
+    assert params["redirect_uri"] == ["https://app.example/cb"]
+    assert "deals:read" in params["scope"][0]
+
+
+def test_intercom_authorization_url_includes_client_and_state() -> None:
+    adapter = IntercomAdapter(client_id="ic-client", client_secret="ic-secret")
+    url = urlparse(adapter.authorization_url(state="s9", redirect_uri="https://app.example/cb"))
+    params = parse_qs(url.query)
+    assert params["client_id"] == ["ic-client"]
+    assert params["state"] == ["s9"]
+    assert params["redirect_uri"] == ["https://app.example/cb"]
+
+
+async def test_intercom_refresh_raises_because_non_rotating_tokens_never_expire() -> None:
+    adapter = IntercomAdapter(client_id="ic-client", client_secret="ic-secret")
+    with pytest.raises(RuntimeError, match="cannot be refreshed"):
+        await adapter.refresh_access_token(refresh_token="irrelevant")
 
 
 async def test_mock_adapter_labels_results_with_its_provider_key() -> None:
