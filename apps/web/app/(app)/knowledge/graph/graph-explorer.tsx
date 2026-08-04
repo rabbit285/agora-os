@@ -66,7 +66,7 @@ export function GraphExplorer({
       <Card className="mb-6">
         <CardContent className="flex flex-wrap items-end gap-2 pt-6">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-neutral-500">Entity type</label>
+            <label className="text-xs text-[var(--fg-muted)]">Entity type</label>
             <Select
               value={entityType}
               onChange={(e) => setEntityType(e.target.value)}
@@ -81,7 +81,7 @@ export function GraphExplorer({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-neutral-500">Entity ID</label>
+            <label className="text-xs text-[var(--fg-muted)]">Entity ID</label>
             <Input
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
@@ -99,14 +99,14 @@ export function GraphExplorer({
       </Card>
 
       {!activeType || !activeId ? (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--fg-muted)]">
           Pick an entity type and paste an ID (e.g. from a record&apos;s detail page URL) to see
           its connections.
         </p>
       ) : isLoading ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-[var(--fg-muted)]">Loading…</p>
       ) : error ? (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-[var(--critical-600)]">
           {error instanceof ApiError ? error.message : "Could not load this entity."}
         </p>
       ) : graph ? (
@@ -114,34 +114,34 @@ export function GraphExplorer({
           <Card>
             <CardContent className="pt-6">
               <Badge variant="secondary">{graph.node.entity_type.replace(/_/g, " ")}</Badge>
-              <div className="mt-2 text-lg font-medium text-neutral-900">{graph.node.label}</div>
-              <div className="mt-1 font-mono text-xs text-neutral-400">{graph.node.id}</div>
+              <div className="mt-2 text-lg font-medium text-[var(--fg-default)]">{graph.node.label}</div>
+              <div className="mt-1 font-mono text-xs text-[var(--fg-subtle)]">{graph.node.id}</div>
             </CardContent>
           </Card>
 
           {groupedEdges.size === 0 ? (
-            <p className="text-sm text-neutral-500">No connected records found.</p>
+            <p className="text-sm text-[var(--fg-muted)]">No connected records found.</p>
           ) : (
             Array.from(groupedEdges.entries()).map(([relation, edges]) => (
               <div key={relation}>
-                <div className="mb-2 text-sm font-medium text-neutral-900">
+                <div className="mb-2 text-sm font-medium text-[var(--fg-default)]">
                   {relation.replace(/_/g, " ")}
                 </div>
                 <div className="flex flex-col gap-2">
                   {edges.map((edge) => (
                     <Card
                       key={edge.node.id}
-                      className="cursor-pointer hover:bg-neutral-50"
+                      className="cursor-pointer hover:bg-[var(--bg-surface-hover)]"
                       onClick={() => navigateTo(edge.node.entity_type, edge.node.id)}
                     >
                       <CardContent className="flex items-center justify-between pt-6">
                         <div>
-                          <div className="text-sm text-neutral-900">{edge.node.label}</div>
-                          <div className="text-xs text-neutral-400">
+                          <div className="text-sm text-[var(--fg-default)]">{edge.node.label}</div>
+                          <div className="text-xs text-[var(--fg-subtle)]">
                             {edge.node.entity_type.replace(/_/g, " ")}
                           </div>
                         </div>
-                        <span className="text-xs text-neutral-400">View →</span>
+                        <span className="text-xs text-[var(--fg-subtle)]">View →</span>
                       </CardContent>
                     </Card>
                   ))}
