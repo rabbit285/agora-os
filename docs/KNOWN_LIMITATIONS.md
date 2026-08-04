@@ -447,6 +447,22 @@ implied to work.
   plans on `/settings/billing` is an immediate, free, self-service
   change, not a checkout flow; this matches the spec's own "Plans
   architecture:" qualifier on that half of §64.
+- **Reporting (spec §65) is real for all 14 named report types and all
+  5 export options** (fixed 2026-08-04, PLAT-20), with two disclosed
+  scope choices. First, "Secure link" is realized as the same signed-
+  URL download mechanism (`app.core.storage.presign_download`) every
+  format already uses to be fetched at all, not a distinct 5th file to
+  generate — every report is delivered exclusively that way, never
+  inlined or emailed, so the mechanism itself satisfies the requirement
+  for all 4 real formats. Second, **Automation ROI** reports real run
+  volume, success rate, and status breakdown (the same data
+  `app.automation.analytics.compute_workflow_analytics` already
+  powers) rather than a dollar figure — this build collects no
+  per-workflow cost-per-manual-execution basis to compute a real ROI
+  dollar amount against, so the report says so explicitly rather than
+  inventing one. Every other report type is a live aggregate over this
+  org's own rows (verified: generating and downloading real PDF/DOCX/
+  XLSX/CSV files, not just checking for a 201 response).
 
 ## Trust and progressive access model (spec §B)
 

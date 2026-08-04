@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.compliance.models import Evidence, Risk
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
 from app.secops.cloud_scanner import run_cloud_security_scan
@@ -43,7 +41,8 @@ from app.secops.schemas import (
     TimelineEntryCreate,
     TimelineEntryOut,
 )
-from app.secops.service import compute_security_score, create_incident
+from app.secops.service import create_incident
+from app.secops.service import get_security_overview as compute_security_overview
 
 router = APIRouter(prefix="/api/v1/security", tags=["security"])
 
@@ -54,85 +53,10 @@ async def get_security_overview(
 ) -> SecurityOverviewOut:
     """Security Overview dashboard (spec §13). Every number is a live
     aggregate query over this org's own rows — there is no cached or
-    precomputed rollup to go stale."""
-    org_id = context.organization_id
-
-    async def _count(stmt: Any) -> int:
-        result = await db.execute(select(func.count()).select_from(stmt.subquery()))
-        return int(result.scalar_one())
-
-    critical_alerts = await _count(
-        select(SecurityAlert.id).where(
-            SecurityAlert.organization_id == org_id,
-            SecurityAlert.severity == "critical",
-            SecurityAlert.status.notin_(["resolved", "false_positive"]),
-        )
-    )
-    high_risks = await _count(
-        select(Risk.id).where(
-            Risk.organization_id == org_id,
-            Risk.impact == "high",
-            Risk.status == "open",
-        )
-    )
-    assets_monitored = await _count(
-        select(SecurityAsset.id).where(SecurityAsset.organization_id == org_id)
-    )
-    vulnerabilities_open = await _count(
-        select(SecurityFinding.id).where(
-            SecurityFinding.organization_id == org_id,
-            SecurityFinding.category == "vulnerability",
-            SecurityFinding.status == "open",
-        )
-    )
-    identity_issues_open = await _count(
-        select(SecurityFinding.id).where(
-            SecurityFinding.organization_id == org_id,
-            SecurityFinding.category == "identity",
-            SecurityFinding.status == "open",
-        )
-    )
-    cloud_misconfigurations_open = await _count(
-        select(SecurityFinding.id).where(
-            SecurityFinding.organization_id == org_id,
-            SecurityFinding.category == "cloud_misconfiguration",
-            SecurityFinding.status == "open",
-        )
-    )
-    open_incidents = await _count(
-        select(SecurityIncident.id).where(
-            SecurityIncident.organization_id == org_id,
-            SecurityIncident.status != "closed",
-        )
-    )
-    total_incidents = await _count(
-        select(SecurityIncident.id).where(SecurityIncident.organization_id == org_id)
-    )
-    incidents_with_evidence = await _count(
-        select(SecurityIncident.id)
-        .join(Evidence, Evidence.incident_id == SecurityIncident.id)
-        .where(SecurityIncident.organization_id == org_id)
-        .distinct()
-    )
-    evidence_coverage_percent = (
-        round(100 * incidents_with_evidence / total_incidents, 1) if total_incidents else 0.0
-    )
-
-    # Simple, transparent deduction model (spec §13) — shared with the
-    # Onboarding readiness score (spec §68), see app.secops.service.
-    security_score = await compute_security_score(db, organization_id=org_id)
-
-    return SecurityOverviewOut(
-        security_score=security_score,
-        critical_alerts=critical_alerts,
-        high_risks=high_risks,
-        assets_monitored=assets_monitored,
-        vulnerabilities_open=vulnerabilities_open,
-        identity_issues_open=identity_issues_open,
-        cloud_misconfigurations_open=cloud_misconfigurations_open,
-        open_incidents=open_incidents,
-        evidence_coverage_percent=evidence_coverage_percent,
-    )
+    precomputed rollup to go stale. Logic lives in
+    `app.secops.service.get_security_overview` so the Reporting module's
+    Security Posture Report (spec §65) reuses the exact same queries."""
+    return await compute_security_overview(db, organization_id=context.organization_id)
 
 
 @router.get("/assets", response_model=list[AssetOut])

@@ -197,6 +197,26 @@ export type NotificationPreference = {
 
 export const NOTIFICATION_CHANNELS = ["email", "slack", "teams", "webhook"] as const;
 
+export type ReportType = {
+  key: string;
+  label: string;
+};
+
+export type Report = {
+  id: string;
+  report_type: string;
+  format: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
+// spec §65's export list is PDF/DOCX/XLSX/CSV/Secure link; "Secure link"
+// is the download-delivery mechanism every format already uses (a
+// signed URL from GET /reports/{id}/download), not a 5th format to pick
+// here — see apps/api/app/reporting/models.py.
+export const REPORT_FORMATS = ["pdf", "docx", "xlsx", "csv"] as const;
+
 export type KnowledgeBase = {
   id: string;
   name: string;

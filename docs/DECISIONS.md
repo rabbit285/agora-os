@@ -1925,3 +1925,70 @@ names the entitlement keys but not their tier assignment, so
 `PLAN_CATALOG` reflects a reasonable reading (SSO/API/Trust Center at
 Growth; SCIM/custom frameworks/advanced reporting at Business; data
 residency at Enterprise only) rather than a spec-mandated table.
+
+## ADR-0050 — Reporting is one generic `ReportContent` intermediate representation rendered by 4 real, format-specific libraries; every report type reuses an existing module's own aggregate rather than inventing new numbers; "Secure link" is the existing signed-URL mechanism, not a 5th format
+
+**Decision**: spec §65 names 14 report types and 5 export options (PDF/
+DOCX/XLSX/CSV/Secure link) with no qualifier attached to any of them —
+unlike §64's Billing section, nothing here is marked "architecture," so
+PLAT-20 built all of it for real rather than disclosing a scope
+boundary. Two design decisions made that tractable.
+
+First, `app.reporting.content.ReportContent` (a title plus an ordered
+list of `ReportSection{heading, rows}`) is a deliberately generic,
+renderer-agnostic intermediate representation. Each of the 14 report
+"builder" functions only ever produces this shape; each of the 4
+renderers (`render_pdf`/`render_docx`/`render_xlsx`/`render_csv` in
+`app.reporting.rendering`) only ever consumes it. This means the 14×4
+combinations that would exist if every report type had bespoke
+per-format layout code collapse to 14 builders + 4 renderers — adding a
+15th report type never touches rendering code, and adding a 5th real
+format (there is no 5th, see below) would never touch a builder.
+Real libraries do the actual rendering — `reportlab` (a new dependency;
+`pypdf`, already present, is read-only and can't produce a PDF),
+`python-docx` and `openpyxl` (already present but previously used only
+for Knowledge ingestion's read side — extracting text from uploaded
+documents, `app.knowledge.parsing`; this is their first real
+write-side use), and stdlib `csv`. Every renderer
+was live-verified by downloading its actual output and checking real
+format signatures (PDF magic bytes, DOCX/XLSX as valid zip/OOXML), not
+just a 201 response — a `.pdf` extension on a text file would have
+passed a naive test but not spec §82's "no fake features" bar.
+
+Second, per the same reuse discipline established for Onboarding's
+readiness score (ADR-0047) and repeated throughout this session: 8 of
+the 14 report types call an existing module's own dashboard/analytics
+function outright rather than compute a second, independently-drifting
+number — Executive Business AI Report and Board Report both call
+Onboarding's `compute_readiness`; Security Posture Report calls a newly
+extracted `app.secops.service.get_security_overview` (the logic used to
+live inline in `GET /security/overview`'s router handler; it's now a
+real service function so that endpoint and this report share one
+implementation, the same extraction pattern ADR-0047 applied to
+`compute_security_score`); Sales Performance and Pipeline Report both
+call `compute_sales_intelligence`; Support Performance calls
+`compute_support_analytics`; Automation ROI calls
+`compute_workflow_analytics`. The remaining 6 (Compliance, GDPR, EU AI
+Act, AI Inventory, Risk, Vendor, Audit Evidence Pack) had no pre-existing
+aggregate to call — Compliance's tables have only CRUD service functions
+and one per-framework dashboard endpoint — so those query
+`app.compliance.models` directly, following the same `compute_x(db, *,
+organization_id) -> ...` shape the reused functions already use.
+Automation ROI reports real run volume and success rate rather than a
+dollar figure: this build has no per-workflow cost-per-manual-execution
+figure to compute a genuine ROI dollar amount against, so the report
+says that explicitly (a disclosed simplification, not a silent gap) —
+inventing a dollar number would have been the actual violation of spec
+§82 here, not omitting one.
+
+Finally, spec §65's "Secure link" export option is not implemented as a
+5th file to generate. Every report — regardless of format — is already
+retrievable only through `GET /reports/{id}/download`, which mints a
+fresh, short-lived signed URL via the existing `app.core.storage.
+presign_download` primitive (the same one `app.routers.files` already
+uses; `app.core.storage`'s own docstring states files are never served
+through the API process itself). Since no report is ever inlined in a
+response or emailed as an attachment, that signed-URL mechanism already
+*is* "Secure link" for all 4 real formats — building a 5th renderer for
+it would have been redundant with the delivery mechanism the other 4
+already depend on.

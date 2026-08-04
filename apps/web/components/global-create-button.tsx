@@ -19,9 +19,10 @@ type CreateOption = {
 // module page that already owns that entity's real creation form, rather
 // than duplicating 13 miniature forms here — several of these (Campaign,
 // Support Ticket, DSAR) need reference pickers (a Sequence, a Customer)
-// that only make sense in their module's own context anyway. "Report" is
-// omitted until the Reporting module (spec §65) exists; "Document" goes to
-// Knowledge's real upload flow rather than a bare file input here.
+// that only make sense in their module's own context anyway. "Document"
+// goes to Knowledge's real upload flow rather than a bare file input here;
+// "Report" goes to the Reporting module's own generate flow (spec §65,
+// PLAT-20) for the same reason.
 const CREATE_OPTIONS: CreateOption[] = [
   { label: "Task", permission: "core.tasks.manage", href: "/tasks" },
   { label: "Lead", permission: "sales.leads.manage", href: "/sales" },
@@ -36,6 +37,7 @@ const CREATE_OPTIONS: CreateOption[] = [
   { label: "DSAR", permission: "compliance.privacy.manage", href: "/compliance" },
   { label: "Workflow", permission: "automation.workflows.manage", href: "/automation" },
   { label: "Document", permission: "knowledge.documents.manage", href: "/knowledge" },
+  { label: "Report", permission: "reports.generate", href: "/reports" },
 ];
 
 export function GlobalCreateButton() {

@@ -31,6 +31,7 @@ from app.routers import (
     notifications,
     onboarding,
     organizations,
+    reporting,
     sales,
     search,
     security,
@@ -135,3 +136,4 @@ app.include_router(automation.router)
 app.include_router(integrations.router)
 app.include_router(trust_center.router)
 app.include_router(search.router)
+app.include_router(reporting.router)

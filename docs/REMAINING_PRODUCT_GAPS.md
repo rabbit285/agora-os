@@ -515,7 +515,30 @@ after the change.
   disclosed, matching the spec's own qualifier) — switching plans on `/settings/billing` is
   an immediate, free, self-service action, not a checkout flow. 6 backend + 3 frontend tests;
   live-verified. See `SPEC_TRACEABILITY_MATRIX.md` PLAT-19 and `KNOWN_LIMITATIONS.md`.
-- **MISSING**: Reporting module.
+- **[FIXED 2026-08-04]** ~~Reporting module~~ — spec §65's 14 named report types and 5
+  export options are real. Every report is computed from this org's own live data: 8 types
+  reuse an existing module's own dashboard/analytics function outright (Executive/Board ->
+  Onboarding's readiness score, Security Posture -> the Security Overview aggregate — now
+  extracted into `secops.service.get_security_overview` so that page and this report share
+  one implementation, Sales Performance/Pipeline -> Sales Intelligence, Support Performance
+  -> Support Analytics, Automation ROI -> Automation Analytics); the 6 with no prior
+  aggregate (Compliance, GDPR, EU AI Act, AI Inventory, Risk, Vendor, Audit Evidence Pack)
+  query the relevant Compliance tables directly. Rendered into genuinely openable files via
+  real libraries (`reportlab`, `python-docx`, `openpyxl`, stdlib `csv`) — verified by
+  downloading real PDF/DOCX/XLSX files and checking their actual format signatures, not just
+  a 201 response. Spec's 5th export option, "Secure link," is realized as the same signed-
+  URL download mechanism (`presign_download`, the existing `app.core.storage` primitive)
+  every report uses to be fetched at all — disclosed as one honest delivery mechanism for
+  all 4 formats rather than a distinct 5th format, since no report is ever inlined or
+  emailed. New `/reports` page: generate-report form, past-reports list with status, secure
+  download link. Wired into Global Create's "Report" option, previously deferred pending
+  this module (see PLAT-22 above). 11 backend + 3 frontend tests — including one that
+  creates a real Risk, generates a Risk Report, and asserts the risk's actual title appears
+  in the downloaded CSV bytes; live-verified: all 14 report types × 4 formats generated
+  successfully against both an empty org and the seeded demo org (56/56, zero failures).
+  Automation ROI honestly reports real run volume/success rate rather than fabricating a
+  dollar figure, since this build collects no per-workflow cost basis. See
+  `SPEC_TRACEABILITY_MATRIX.md` PLAT-20.
 - **MISSING (spec §57, surfaced while building the AI Providers status page above)**: Azure
   OpenAI has no adapter — the only spec §57 Model Gateway provider without an explicit
   "architecture"/"future" qualifier that still has zero implementation.

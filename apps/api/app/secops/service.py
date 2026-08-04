@@ -28,10 +28,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.compliance.models import Risk
+from app.compliance.models import Evidence, Risk
 from app.core.models import Task
 from app.core.notifications import notify
-from app.secops.models import SecurityAlert, SecurityFinding, SecurityIncident
+from app.secops.models import SecurityAlert, SecurityAsset, SecurityFinding, SecurityIncident
+from app.secops.schemas import SecurityOverviewOut
 
 
 async def create_incident(
@@ -157,3 +158,86 @@ async def compute_security_score(db: AsyncSession, *, organization_id: uuid.UUID
         + open_incidents * 6
     )
     return max(0, 100 - deductions)
+
+
+async def get_security_overview(
+    db: AsyncSession, *, organization_id: uuid.UUID
+) -> SecurityOverviewOut:
+    """The exact aggregate `GET /security/overview` returns (spec §13) —
+    extracted here so the Reporting module's Security Posture Report
+    (spec §65) reuses the same live queries rather than a second,
+    independently-drifting copy of this dashboard."""
+
+    async def _count(stmt: Any) -> int:
+        result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+        return int(result.scalar_one())
+
+    critical_alerts = await _count(
+        select(SecurityAlert.id).where(
+            SecurityAlert.organization_id == organization_id,
+            SecurityAlert.severity == "critical",
+            SecurityAlert.status.notin_(["resolved", "false_positive"]),
+        )
+    )
+    high_risks = await _count(
+        select(Risk.id).where(
+            Risk.organization_id == organization_id,
+            Risk.impact == "high",
+            Risk.status == "open",
+        )
+    )
+    assets_monitored = await _count(
+        select(SecurityAsset.id).where(SecurityAsset.organization_id == organization_id)
+    )
+    vulnerabilities_open = await _count(
+        select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == organization_id,
+            SecurityFinding.category == "vulnerability",
+            SecurityFinding.status == "open",
+        )
+    )
+    identity_issues_open = await _count(
+        select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == organization_id,
+            SecurityFinding.category == "identity",
+            SecurityFinding.status == "open",
+        )
+    )
+    cloud_misconfigurations_open = await _count(
+        select(SecurityFinding.id).where(
+            SecurityFinding.organization_id == organization_id,
+            SecurityFinding.category == "cloud_misconfiguration",
+            SecurityFinding.status == "open",
+        )
+    )
+    open_incidents = await _count(
+        select(SecurityIncident.id).where(
+            SecurityIncident.organization_id == organization_id,
+            SecurityIncident.status != "closed",
+        )
+    )
+    total_incidents = await _count(
+        select(SecurityIncident.id).where(SecurityIncident.organization_id == organization_id)
+    )
+    incidents_with_evidence = await _count(
+        select(SecurityIncident.id)
+        .join(Evidence, Evidence.incident_id == SecurityIncident.id)
+        .where(SecurityIncident.organization_id == organization_id)
+        .distinct()
+    )
+    evidence_coverage_percent = (
+        round(100 * incidents_with_evidence / total_incidents, 1) if total_incidents else 0.0
+    )
+    security_score = await compute_security_score(db, organization_id=organization_id)
+
+    return SecurityOverviewOut(
+        security_score=security_score,
+        critical_alerts=critical_alerts,
+        high_risks=high_risks,
+        assets_monitored=assets_monitored,
+        vulnerabilities_open=vulnerabilities_open,
+        identity_issues_open=identity_issues_open,
+        cloud_misconfigurations_open=cloud_misconfigurations_open,
+        open_incidents=open_incidents,
+        evidence_coverage_percent=evidence_coverage_percent,
+    )
