@@ -44,8 +44,8 @@ export default function AlertDetailPage({ params }: { params: Promise<{ id: stri
     },
   });
 
-  if (isLoading) return <p className="text-sm text-neutral-500">Loading alert…</p>;
-  if (!alert) return <p className="text-sm text-neutral-500">Alert not found.</p>;
+  if (isLoading) return <p className="text-sm text-[var(--fg-muted)]">Loading alert…</p>;
+  if (!alert) return <p className="text-sm text-[var(--fg-muted)]">Alert not found.</p>;
 
   const currentIndex = WORKFLOW.indexOf(alert.status as (typeof WORKFLOW)[number]);
   const nextStatus = WORKFLOW[currentIndex + 1];
@@ -59,7 +59,7 @@ export default function AlertDetailPage({ params }: { params: Promise<{ id: stri
       />
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={alert.status} />
         {nextStatus && (
           <Button
@@ -86,12 +86,12 @@ export default function AlertDetailPage({ params }: { params: Promise<{ id: stri
       {alert.finding && (
         <Card>
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Related Finding
             </h2>
             <Link
               href="/security"
-              className="text-sm text-neutral-700 hover:underline"
+              className="text-sm text-[var(--fg-muted)] hover:underline"
             >
               {alert.finding.title}
             </Link>

@@ -55,7 +55,7 @@ function TimelineSection({ id }: { id: string }) {
 
   return (
     <div className="mb-6">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Timeline &amp; Communication
       </h2>
       <Card className="mb-3">
@@ -92,21 +92,21 @@ function TimelineSection({ id }: { id: string }) {
         </CardContent>
       </Card>
       {incident?.timeline.length === 0 && (
-        <p className="text-sm text-neutral-500">No timeline entries yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No timeline entries yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {incident?.timeline.map((entry) => (
           <Card key={entry.id}>
             <CardContent className="pt-6">
               <div className="mb-1 flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                   {entry.entry_type}
                 </span>
-                <span className="text-xs text-neutral-400">
+                <span className="text-xs text-[var(--fg-subtle)]">
                   {new Date(entry.created_at).toLocaleString()}
                 </span>
               </div>
-              <p className="text-sm text-neutral-900">{entry.body}</p>
+              <p className="text-sm text-[var(--fg-default)]">{entry.body}</p>
             </CardContent>
           </Card>
         ))}
@@ -146,18 +146,18 @@ function AffectedAssetsSection({ id }: { id: string }) {
 
   return (
     <div className="mb-6">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Affected Assets
       </h2>
       {incident?.affected_assets.length === 0 && (
-        <p className="mb-3 text-sm text-neutral-500">No assets linked to this incident yet.</p>
+        <p className="mb-3 text-sm text-[var(--fg-muted)]">No assets linked to this incident yet.</p>
       )}
       <div className="mb-3 flex flex-col gap-2">
         {incident?.affected_assets.map((asset) => (
           <Link key={asset.id} href={`/security/assets/${asset.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{asset.name}</div>
+                <div className="font-medium text-[var(--fg-default)]">{asset.name}</div>
                 <SeverityBadge severity={asset.criticality} />
               </CardContent>
             </Card>
@@ -168,7 +168,7 @@ function AffectedAssetsSection({ id }: { id: string }) {
         <Card>
           <CardContent className="flex items-center gap-2 pt-6">
             <select
-              className="h-9 flex-1 rounded-md border border-neutral-300 bg-white px-3 text-sm"
+              className="h-9 flex-1 rounded-md border border-[var(--border-strong)] bg-white px-3 text-sm"
               value={assetId}
               onChange={(e) => setAssetId(e.target.value)}
             >
@@ -221,7 +221,7 @@ function PostmortemSection({ id }: { id: string }) {
 
   return (
     <div className="mb-6">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Root Cause &amp; Lessons Learned
       </h2>
       <Card>
@@ -229,11 +229,11 @@ function PostmortemSection({ id }: { id: string }) {
           {editing ? (
             <>
               <div>
-                <label className="mb-1 block text-xs text-neutral-500">Root cause</label>
+                <label className="mb-1 block text-xs text-[var(--fg-muted)]">Root cause</label>
                 <Textarea value={rootCause} onChange={(e) => setRootCause(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-neutral-500">Lessons learned</label>
+                <label className="mb-1 block text-xs text-[var(--fg-muted)]">Lessons learned</label>
                 <Textarea value={lessons} onChange={(e) => setLessons(e.target.value)} />
               </div>
               <div className="flex gap-2">
@@ -248,14 +248,14 @@ function PostmortemSection({ id }: { id: string }) {
           ) : (
             <>
               <div>
-                <div className="text-xs text-neutral-500">Root cause</div>
-                <p className="text-sm text-neutral-900">
+                <div className="text-xs text-[var(--fg-muted)]">Root cause</div>
+                <p className="text-sm text-[var(--fg-default)]">
                   {incident.root_cause || "Not documented yet."}
                 </p>
               </div>
               <div>
-                <div className="text-xs text-neutral-500">Lessons learned</div>
-                <p className="text-sm text-neutral-900">
+                <div className="text-xs text-[var(--fg-muted)]">Lessons learned</div>
+                <p className="text-sm text-[var(--fg-default)]">
                   {incident.lessons_learned || "Not documented yet."}
                 </p>
               </div>
@@ -328,20 +328,20 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="mb-1 flex items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                 AI Summary
               </span>
               {incident.personal_data_impact && (
                 <Badge variant="destructive">Possible personal-data impact</Badge>
               )}
             </div>
-            <p className="text-sm text-neutral-700">{incident.ai_summary}</p>
+            <p className="text-sm text-[var(--fg-muted)]">{incident.ai_summary}</p>
           </CardContent>
         </Card>
       )}
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={incident.status} />
         {nextStatus && (
           <Button
@@ -362,22 +362,22 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       {incident.related_risk_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Linked Compliance Risk
             </h2>
-            <p className="text-xs text-neutral-400 mb-2">
+            <p className="text-xs text-[var(--fg-subtle)] mb-2">
               Critical security incidents automatically create a linked risk so GDPR breach
               notification obligations are tracked (spec section 19).
             </p>
             {linkedRisk ? (
               <Link
                 href="/compliance"
-                className="text-sm text-neutral-700 hover:underline"
+                className="text-sm text-[var(--fg-muted)] hover:underline"
               >
                 {linkedRisk.title}
               </Link>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
@@ -386,19 +386,19 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       {incident.related_task_id && (
         <Card>
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Response Task
             </h2>
-            <p className="text-xs text-neutral-400 mb-2">
+            <p className="text-xs text-[var(--fg-subtle)] mb-2">
               Critical incidents automatically create a response task, and notify the incident
               owner directly if one is assigned (spec section 69 — Security Incident chain).
             </p>
             {linkedTask ? (
-              <Link href="/tasks" className="text-sm text-neutral-700 hover:underline">
+              <Link href="/tasks" className="text-sm text-[var(--fg-muted)] hover:underline">
                 {linkedTask.title}
               </Link>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
