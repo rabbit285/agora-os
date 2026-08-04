@@ -5,19 +5,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-[var(--transition-fast)] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg-surface)]",
   {
     variants: {
       variant: {
-        default: "bg-neutral-900 text-white hover:bg-neutral-800",
-        outline: "border border-neutral-300 bg-white hover:bg-neutral-50",
-        ghost: "hover:bg-neutral-100",
-        destructive: "bg-red-600 text-white hover:bg-red-700",
+        default:
+          "bg-[var(--brand-primary)] text-[var(--fg-on-primary)] hover:bg-[var(--brand-primary-hover)]",
+        outline:
+          "border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--fg-default)] hover:bg-[var(--bg-surface-hover)]",
+        ghost: "text-[var(--fg-default)] hover:bg-[var(--bg-surface-hover)]",
+        destructive: "bg-[var(--critical-600)] text-white hover:bg-[var(--critical-700)]",
+        ai: "bg-[var(--ai-600)] text-white hover:bg-[var(--ai-700)]",
       },
       size: {
         default: "h-9 px-4 py-2",
         sm: "h-8 px-3 text-xs",
         lg: "h-10 px-6",
+        icon: "h-9 w-9 p-0",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
