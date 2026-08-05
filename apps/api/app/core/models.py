@@ -48,6 +48,12 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # this single org-level toggle is a documented, honest simplification
     # rather than a fabricated jurisdiction/consent engine.
     requires_lawful_basis_metadata: Mapped[bool] = mapped_column(default=False)
+    # Sales Lead Finder list export (org policy — see
+    # app.routers.sales_lead_finder's export endpoint): an org_admin can
+    # turn this off to block CSV export of saved-list contact/company data
+    # entirely, independent of the exporting user's own RBAC permission.
+    # On by default, matching every other export capability in this build.
+    allow_list_export: Mapped[bool] = mapped_column(default=True)
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):

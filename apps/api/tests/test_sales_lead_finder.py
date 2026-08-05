@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import File, Membership, MembershipRole
+from app.core.models import File, Membership, MembershipRole, Task
 from app.core.rbac import get_system_role
 from app.core.storage import upload_object
 from app.identity.models import User
@@ -565,6 +565,49 @@ async def test_suppression_crud_and_permission(
     assert denied.status_code == 403
 
 
+async def test_suppression_by_contact_id_alone_blocks_eligibility_and_send(
+    client: AsyncClient,
+) -> None:
+    """Regression: a suppression entry created with only a contact_id (no
+    email/domain) must actually block that contact — find_matching_
+    suppression used to only ever match by email/domain, so a contact_id-
+    only entry was silently never found (caught by
+    e2e/sales-lead-finder.spec.ts's "campaign compliance block" journey)."""
+    await _signup(client, "supp-contact1@example.com", "Supp Contact Org 1")
+    contact_id = await _create_contact(client, "Contact ID Suppressed", "contact-id-suppressed@example.com")
+
+    add = await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"contact_id": contact_id, "reason": "Suppressed by contact_id only"},
+    )
+    assert add.status_code == 201, add.text
+
+    eligibility = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"contact_id": contact_id}
+    )
+    assert eligibility.status_code == 200
+    body = eligibility.json()
+    assert body["status"] == "blocked"
+    assert "Suppressed by contact_id only" in body["reasons"][0]
+
+    sequence = await client.post(
+        "/api/v1/sales/sequences", json={"name": "Contact-ID Suppression Sequence"}
+    )
+    sequence_id = sequence.json()["id"]
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/steps",
+        json={"wait_days": 0, "channel": "email", "body_template": "Hi {{first_name}}"},
+    )
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/enroll", json={"contact_ids": [contact_id]}
+    )
+    await client.post("/api/v1/sales/sequences/process-due-steps")
+
+    inbox = (await client.get("/api/v1/sales/inbox")).json()
+    assert inbox[0]["status"] == "blocked"
+    assert "Suppressed by contact_id only" in inbox[0]["blocked_reason"]
+
+
 # ---- CSV import and manual entry ----
 
 
@@ -889,3 +932,77 @@ async def test_contact_provenance_isolated_per_organization(
     await _signup(client, "provenance3b@example.com", "Provenance Org 3b")
     other_org = await client.get(f"/api/v1/sales/lead-finder/provenance/contact/{contact_id}")
     assert other_org.status_code == 404
+
+
+# ---- Manual LinkedIn outreach ----
+
+
+async def test_linkedin_task_creates_task_and_stores_profile_url(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "linkedin1@example.com", "LinkedIn Org 1")
+    contact_id = await _create_contact(client, "LinkedIn Target", "linkedin-target@example.com")
+
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={
+            "linkedin_url": "https://www.linkedin.com/in/linkedin-target",
+            "message": "Hi — following up after our conversation at the conference.",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["linkedin_url"] == "https://www.linkedin.com/in/linkedin-target"
+
+    contact = await db_session.get(Contact, uuid.UUID(contact_id))
+    assert contact is not None
+    assert contact.linkedin_url == "https://www.linkedin.com/in/linkedin-target"
+
+    task = await db_session.get(Task, uuid.UUID(body["task_id"]))
+    assert task is not None
+    assert task.module == "sales"
+    assert task.entity_type == "sales_contact"
+    assert task.entity_id == contact_id
+    assert "conference" in (task.description or "")
+
+
+async def test_linkedin_task_rejects_a_non_linkedin_url(client: AsyncClient) -> None:
+    await _signup(client, "linkedin2@example.com", "LinkedIn Org 2")
+    contact_id = await _create_contact(client, "Bad URL Target", "bad-url-target@example.com")
+
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"linkedin_url": "https://evil.example.com/scrape", "message": "hi"},
+    )
+    assert response.status_code == 422
+
+
+async def test_linkedin_task_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "linkedin3@example.com", "LinkedIn Org 3")
+    contact_id = await _create_contact(client, "Perm Target", "perm-target@example.com")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="linkedin-employee@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"message": "hi"},
+    )
+    assert response.status_code == 403
+
+
+async def test_linkedin_task_404_for_contact_in_another_organization(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "linkedin4a@example.com", "LinkedIn Org 4a")
+    contact_id = await _create_contact(client, "Cross Tenant Target", "cross-tenant-target@example.com")
+
+    await _signup(client, "linkedin4b@example.com", "LinkedIn Org 4b")
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"message": "hi"},
+    )
+    assert response.status_code == 404

@@ -23,6 +23,7 @@ from app.sales import (
     enrichment_job_service,
     import_job_service,
     lead_finder_service,
+    linkedin_task_service,
     list_service,
     save_service,
     saved_search_service,
@@ -43,6 +44,8 @@ from app.sales.lead_finder_schemas import (
     ImportPreviewIn,
     ImportPreviewOut,
     ImportStartIn,
+    LinkedInOutreachTaskIn,
+    LinkedInOutreachTaskOut,
     ManualCompanyIn,
     ManualPersonIn,
     NormalizedCompanyOut,
@@ -976,3 +979,42 @@ async def get_contact_provenance(
             detail="No Lead Finder provenance for this contact (it wasn't created via search/import/manual entry).",
         )
     return record
+
+
+# ---- Manual LinkedIn outreach (no scraping, no automation — see
+# app.sales.linkedin_task_service) ----
+
+
+@router.post(
+    "/contacts/{contact_id}/linkedin-task",
+    response_model=LinkedInOutreachTaskOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_linkedin_outreach_task(
+    contact_id: uuid.UUID,
+    payload: LinkedInOutreachTaskIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.accounts.manage")),
+) -> LinkedInOutreachTaskOut:
+    contact = await db.get(Contact, contact_id)
+    if contact is None or contact.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    if payload.linkedin_url and not linkedin_task_service.is_plausible_linkedin_url(payload.linkedin_url):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="linkedin_url must be a linkedin.com profile URL",
+        )
+    ip_address, user_agent = _client_meta(request)
+    task = await linkedin_task_service.create_linkedin_outreach_task(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        contact=contact,
+        linkedin_url=payload.linkedin_url,
+        message=payload.message,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    return LinkedInOutreachTaskOut(task_id=task.id, linkedin_url=contact.linkedin_url)

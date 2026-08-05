@@ -108,7 +108,9 @@ async def evaluate_outreach_eligibility(
         if not decision.allowed:
             return OutreachEligibility(status="blocked", reasons=[decision.reason or "Not permitted."])
 
-    suppression = await find_matching_suppression(db, organization_id=organization_id, email=email)
+    suppression = await find_matching_suppression(
+        db, organization_id=organization_id, email=email, contact_id=contact.id if contact else None
+    )
     if suppression is not None:
         return OutreachEligibility(
             status="blocked", reasons=[f"Suppressed: {suppression.reason}"]

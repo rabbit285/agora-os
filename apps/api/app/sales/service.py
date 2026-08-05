@@ -92,7 +92,7 @@ async def send_outreach_message(
         from app.sales.suppression_service import find_matching_suppression
 
         suppression = await find_matching_suppression(
-            db, organization_id=organization_id, email=contact.email
+            db, organization_id=organization_id, email=contact.email, contact_id=contact.id
         )
         if suppression is not None:
             decision = GovernanceDecision(

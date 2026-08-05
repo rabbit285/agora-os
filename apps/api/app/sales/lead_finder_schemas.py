@@ -405,6 +405,16 @@ class ManualPersonIn(BaseModel):
     account_id: uuid.UUID | None = None
 
 
+class LinkedInOutreachTaskIn(BaseModel):
+    linkedin_url: str | None = Field(default=None, max_length=500)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class LinkedInOutreachTaskOut(BaseModel):
+    task_id: uuid.UUID
+    linkedin_url: str | None
+
+
 class ProvenanceOut(BaseModel):
     provider: str
     record_type: str
