@@ -6,6 +6,18 @@ Branch: `ui/sales-lead-finder-enterprise`. Companion docs:
 checked, and committed separately — the same discipline used for
 `docs/UI_MODERNIZATION_PLAN.md`.
 
+## Status: shipped, including a follow-up gap-closing pass (see ADR-0063)
+
+Phases 0–8 below are complete: all 19 Playwright journeys pass in CI, the formal
+accessibility audit (automated axe-core WCAG 2.1 A/AA scans + keyboard-only navigation
+tests) passes with zero violations, and the full backend/frontend/Playwright/
+accessibility/Docker/RBAC/tenant-isolation/production-build check suite is green. A
+follow-up pass closed five specific gaps against the original brief that remained after
+the initial phased build: the manual (non-scraping) LinkedIn outreach task flow, the
+provider credit-usage dashboard, saved-list CSV export (RBAC + organization policy +
+audit logging), and the CI wiring for the Playwright/accessibility suites themselves —
+see `docs/DECISIONS.md` ADR-0063 for the design rationale of each.
+
 ## Scope and honesty about pacing
 
 This is a large backend-plus-frontend build: ~8 new database tables, a new provider
