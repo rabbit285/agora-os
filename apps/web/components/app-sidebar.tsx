@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ChevronDown, ChevronsLeft, ChevronsRight, X } from "lucide-react";
 
+import { Logo } from "@/components/logo";
 import { useSidebar } from "@/components/sidebar-context";
 import { NAVIGATION, type NavItem } from "@/lib/navigation";
 import { useCurrentPermissions } from "@/lib/session";
@@ -45,11 +46,7 @@ export function AppSidebar() {
         )}
       >
         <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--border-default)] px-3">
-          {!collapsed && (
-            <Link href="/" className="text-sm font-semibold text-[var(--fg-default)]">
-              Agora Origin
-            </Link>
-          )}
+          <Logo size="sm" markOnly={collapsed} href="/" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}

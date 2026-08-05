@@ -77,6 +77,24 @@
   --header-height: 3.25rem;
   --content-max-width: 88rem;
 
+  /* Radius — documented in docs/DESIGN_SYSTEM.md but never actually defined
+     here until now; several components already reference these with an
+     inline fallback (e.g. var(--radius-lg,0.75rem)), so defining them for
+     real changes nothing visually, it just closes the gap for every other
+     consumer that has no fallback. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Display type scale — public marketing site only (components under
+     app/(marketing)/ and components/marketing/). The authenticated app's
+     own scale intentionally tops out at --text-2xl (24px, dense
+     operational UI); a marketing hero needs real display sizes layered on
+     top of, not instead of, that scale. */
+  --text-display-1: 3.5rem;
+  --text-display-2: 2.75rem;
+  --text-3xl: 1.875rem;
+
   /* Shadow */
   --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
