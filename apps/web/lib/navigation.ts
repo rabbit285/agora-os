@@ -82,6 +82,12 @@ export const NAVIGATION: NavGroup[] = [
         implemented: true,
         icon: Briefcase,
         children: [
+          {
+            label: "Lead Finder",
+            href: "/sales/lead-finder",
+            implemented: true,
+            permission: ["sales.lead_finder.view"],
+          },
           { label: "ICP Builder", href: "/sales/icp", implemented: true },
           { label: "Sales Inbox", href: "/sales/inbox", implemented: true },
           { label: "Meetings", href: "/sales/meetings", implemented: true },

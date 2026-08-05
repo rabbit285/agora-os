@@ -843,3 +843,49 @@ async def test_manual_add_requires_permission(client: AsyncClient, db_session: A
         "/api/v1/sales/lead-finder/manual/company", json={"name": "Should Be Blocked"}
     )
     assert response.status_code == 403
+
+
+# ---- Provenance ----
+
+
+async def test_account_provenance_reflects_how_it_was_found(client: AsyncClient) -> None:
+    await _signup(client, "provenance1@example.com", "Provenance Org 1")
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/company", json={"name": "Provenance Test Co"}
+    )
+    account_id = manual.json()["account_id"]
+
+    response = await client.get(f"/api/v1/sales/lead-finder/provenance/account/{account_id}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["provider"] == "manual"
+    assert body["verification_status"] == "user_entered"
+
+
+async def test_account_provenance_404_when_not_from_lead_finder(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "provenance2@example.com", "Provenance Org 2")
+    created = await client.post("/api/v1/sales/accounts", json={"name": "Old-school account"})
+    account_id = created.json()["id"]
+
+    response = await client.get(f"/api/v1/sales/lead-finder/provenance/account/{account_id}")
+    assert response.status_code == 404
+
+
+async def test_contact_provenance_isolated_per_organization(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "provenance3@example.com", "Provenance Org 3")
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/person", json={"full_name": "Provenance Person"}
+    )
+    contact_id = manual.json()["contact_id"]
+
+    own_org = await client.get(f"/api/v1/sales/lead-finder/provenance/contact/{contact_id}")
+    assert own_org.status_code == 200
+    assert own_org.json()["provider"] == "manual"
+
+    await _signup(client, "provenance3b@example.com", "Provenance Org 3b")
+    other_org = await client.get(f"/api/v1/sales/lead-finder/provenance/contact/{contact_id}")
+    assert other_org.status_code == 404

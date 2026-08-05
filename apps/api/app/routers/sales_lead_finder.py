@@ -52,6 +52,7 @@ from app.sales.lead_finder_schemas import (
     PersonFiltersIn,
     PersonSearchIn,
     PersonSearchOut,
+    ProvenanceOut,
     ProviderCapabilitiesOut,
     ProviderStatusOut,
     SalesListCreate,
@@ -924,3 +925,54 @@ async def manual_add_person(
     )
     await db.commit()
     return SavePersonOut(contact_id=contact.id, created=created)
+
+
+# ---- Provenance ----
+
+
+@router.get("/provenance/account/{account_id}", response_model=ProvenanceOut)
+async def get_account_provenance(
+    account_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
+) -> SalesProviderRecord:
+    """How a saved Account was originally found — provider, source URL,
+    when it was retrieved/last verified, and whether it's provider-
+    verified, user-entered, or still unverified (spec: provenance must be
+    visible, never fabricated)."""
+    record = (
+        await db.execute(
+            select(SalesProviderRecord).where(
+                SalesProviderRecord.organization_id == context.organization_id,
+                SalesProviderRecord.linked_account_id == account_id,
+            )
+        )
+    ).scalars().first()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No Lead Finder provenance for this account (it wasn't created via search/import/manual entry).",
+        )
+    return record
+
+
+@router.get("/provenance/contact/{contact_id}", response_model=ProvenanceOut)
+async def get_contact_provenance(
+    contact_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
+) -> SalesProviderRecord:
+    record = (
+        await db.execute(
+            select(SalesProviderRecord).where(
+                SalesProviderRecord.organization_id == context.organization_id,
+                SalesProviderRecord.linked_contact_id == contact_id,
+            )
+        )
+    ).scalars().first()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No Lead Finder provenance for this contact (it wasn't created via search/import/manual entry).",
+        )
+    return record
