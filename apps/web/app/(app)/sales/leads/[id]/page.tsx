@@ -63,20 +63,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       {lead.ai_account_brief && (
         <Card className="mb-4">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               AI Account Brief
             </h2>
-            <p className="text-sm text-neutral-700">{lead.ai_account_brief}</p>
+            <p className="text-sm text-[var(--fg-muted)]">{lead.ai_account_brief}</p>
           </CardContent>
         </Card>
       )}
       {lead.account && (
         <Card className="mb-4">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Account
             </h2>
-            <Link href={`/sales/accounts/${lead.account.id}`} className="text-sm text-neutral-700 hover:underline">
+            <Link href={`/sales/accounts/${lead.account.id}`} className="text-sm text-[var(--fg-muted)] hover:underline">
               {lead.account.name}
             </Link>
           </CardContent>
@@ -85,10 +85,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       {lead.contact && (
         <Card>
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Contact
             </h2>
-            <Link href={`/sales/contacts/${lead.contact.id}`} className="text-sm text-neutral-700 hover:underline">
+            <Link href={`/sales/contacts/${lead.contact.id}`} className="text-sm text-[var(--fg-muted)] hover:underline">
               {lead.contact.full_name}
             </Link>
           </CardContent>

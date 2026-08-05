@@ -1,14 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
 import type {
   Workflow,
@@ -17,9 +21,6 @@ import type {
   WorkflowTriggerType,
 } from "@/lib/types";
 import { UNWIRED_TRIGGER_TYPES, WORKFLOW_TRIGGER_TYPES } from "@/lib/types";
-
-const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
 
 function AnalyticsSection() {
   const { data: analytics } = useQuery<WorkflowAnalytics>({
@@ -31,36 +32,24 @@ function AnalyticsSection() {
 
   return (
     <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-2xl font-semibold text-neutral-900">
-            {analytics.active_workflows}
-          </div>
-          <div className="text-xs text-neutral-500">Active Workflows</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-2xl font-semibold text-neutral-900">{analytics.total_runs}</div>
-          <div className="text-xs text-neutral-500">Total Runs</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-2xl font-semibold text-neutral-900">
-            {analytics.success_rate_percent}%
-          </div>
-          <div className="text-xs text-neutral-500">Success Rate</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-2xl font-semibold text-neutral-900">
-            {analytics.awaiting_approval_count}
-          </div>
-          <div className="text-xs text-neutral-500">Awaiting Approval</div>
-        </CardContent>
-      </Card>
+      <MetricCard label="Active Workflows" value={String(analytics.active_workflows)} />
+      <MetricCard label="Total Runs" value={String(analytics.total_runs)} />
+      <MetricCard
+        label="Success Rate"
+        value={`${analytics.success_rate_percent}%`}
+        status={
+          analytics.success_rate_percent >= 80
+            ? "success"
+            : analytics.success_rate_percent >= 50
+              ? "warning"
+              : "critical"
+        }
+      />
+      <MetricCard
+        label="Awaiting Approval"
+        value={String(analytics.awaiting_approval_count)}
+        status={analytics.awaiting_approval_count > 0 ? "warning" : "success"}
+      />
     </div>
   );
 }
@@ -70,13 +59,14 @@ function emptyStep(): WorkflowStep {
 }
 
 function WorkflowsSection() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [triggerType, setTriggerType] = useState<WorkflowTriggerType>("manual");
   const [scheduleCron, setScheduleCron] = useState("");
   const [steps] = useState<WorkflowStep[]>([emptyStep()]);
 
-  const { data: workflows } = useQuery<Workflow[]>({
+  const { data: workflows, isLoading, error, refetch } = useQuery<Workflow[]>({
     queryKey: ["automation", "workflows"],
     queryFn: () => apiFetch<Workflow[]>("/api/v1/automation/workflows"),
   });
@@ -100,23 +90,45 @@ function WorkflowsSection() {
     },
   });
 
+  const columns: DataTableColumn<Workflow>[] = [
+    {
+      key: "name",
+      header: "Workflow",
+      render: (workflow) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{workflow.name}</span>
+          <span className="text-xs text-[var(--fg-subtle)]">
+            {workflow.steps.length} step{workflow.steps.length === 1 ? "" : "s"} · v
+            {workflow.version} · {workflow.trigger_type.replace(/_/g, " ")}
+          </span>
+        </div>
+      ),
+      sortValue: (workflow) => workflow.name.toLowerCase(),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (workflow) => <StatusBadge status={workflow.status} />,
+    },
+  ];
+
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Workflows
       </h2>
       <Card className="mb-4">
-        <CardContent className="flex flex-col gap-3 pt-6">
+        <CardContent className="flex flex-col gap-3 pt-5">
           <Input
             placeholder="Workflow name"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <div className="flex flex-wrap gap-2">
-            <select
-              className={selectClassName}
+            <Select
               value={triggerType}
               onChange={(e) => setTriggerType(e.target.value as WorkflowTriggerType)}
+              className="w-56"
             >
               {WORKFLOW_TRIGGER_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -124,7 +136,7 @@ function WorkflowsSection() {
                   {UNWIRED_TRIGGER_TYPES.includes(type) ? " (not yet wired)" : ""}
                 </option>
               ))}
-            </select>
+            </Select>
             {triggerType === "schedule" && (
               <Input
                 placeholder="Cron expression (e.g. 0 9 * * 1)"
@@ -134,10 +146,10 @@ function WorkflowsSection() {
               />
             )}
           </div>
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             New workflows start as a single &ldquo;Create task&rdquo; draft step — use the
             visual Step Builder on the workflow&rsquo;s own page to add and configure more
-            steps before publishing (spec §41: steps lock once active).
+            steps before publishing (steps lock once active).
           </p>
           <Button
             disabled={!name.trim() || createWorkflow.isPending}
@@ -148,25 +160,16 @@ function WorkflowsSection() {
           </Button>
         </CardContent>
       </Card>
-      {workflows?.length === 0 && <p className="text-sm text-neutral-500">No workflows yet.</p>}
-      <div className="flex flex-col gap-2">
-        {workflows?.map((workflow) => (
-          <Link key={workflow.id} href={`/automation/workflows/${workflow.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div>
-                  <div className="font-medium text-neutral-900">{workflow.name}</div>
-                  <div className="text-xs text-neutral-400">
-                    {workflow.steps.length} step{workflow.steps.length === 1 ? "" : "s"} · v
-                    {workflow.version} · {workflow.trigger_type.replace(/_/g, " ")}
-                  </div>
-                </div>
-                <StatusBadge status={workflow.status} />
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={workflows}
+        getRowId={(workflow) => workflow.id}
+        onRowClick={(workflow) => router.push(`/automation/workflows/${workflow.id}`)}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No workflows yet"
+      />
     </div>
   );
 }
@@ -181,7 +184,7 @@ export default function AutomationPage() {
     <div>
       <PageHeader
         title="Business Automation"
-        description="Workflow builder, runs, and the Human Approval hook — spec sections 36-43."
+        description="Workflow builder, runs, and the Human Approval hook."
         actions={
           <div className="flex flex-wrap gap-2">
             {SUB_PAGES.map((page) => (

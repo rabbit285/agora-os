@@ -29,34 +29,34 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-semibold text-neutral-900">
+            <div className="text-2xl font-semibold text-[var(--fg-default)]">
               {campaign.stats.enrolled}
             </div>
-            <div className="text-xs text-neutral-500">Enrolled</div>
+            <div className="text-xs text-[var(--fg-muted)]">Enrolled</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-semibold text-neutral-900">
+            <div className="text-2xl font-semibold text-[var(--fg-default)]">
               {campaign.stats.messages_sent}
             </div>
-            <div className="text-xs text-neutral-500">Messages Sent</div>
+            <div className="text-xs text-[var(--fg-muted)]">Messages Sent</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-semibold text-neutral-900">
+            <div className="text-2xl font-semibold text-[var(--fg-default)]">
               {campaign.stats.messages_blocked}
             </div>
-            <div className="text-xs text-neutral-500">Messages Blocked</div>
+            <div className="text-xs text-[var(--fg-muted)]">Messages Blocked</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-semibold text-neutral-900">
+            <div className="text-2xl font-semibold text-[var(--fg-default)]">
               {campaign.stats.completed}
             </div>
-            <div className="text-xs text-neutral-500">Completed</div>
+            <div className="text-xs text-[var(--fg-muted)]">Completed</div>
           </CardContent>
         </Card>
       </div>

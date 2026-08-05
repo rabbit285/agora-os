@@ -71,7 +71,7 @@ export default function SecuritySettingsPage() {
         description="Email verification and two-factor authentication for your account."
       />
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
 
       {user && (
         <div className="flex flex-col gap-6">
@@ -117,11 +117,11 @@ export default function SecuritySettingsPage() {
 
               {!user.mfa_enabled && provisioningUri && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-sm text-neutral-600">
+                  <p className="text-sm text-[var(--fg-muted)]">
                     Add this key to your authenticator app (Google Authenticator, 1Password,
                     etc.), then enter the 6-digit code it generates.
                   </p>
-                  <code className="break-all rounded bg-neutral-100 p-2 text-xs">
+                  <code className="break-all rounded bg-[var(--gray-100)] p-2 text-xs">
                     {extractSecret(provisioningUri)}
                   </code>
                   <div className="flex gap-2">
@@ -160,7 +160,7 @@ export default function SecuritySettingsPage() {
                 </div>
               )}
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-[var(--critical-600)]">{error}</p>}
             </CardContent>
           </Card>
         </div>

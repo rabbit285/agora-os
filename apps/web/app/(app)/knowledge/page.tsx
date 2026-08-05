@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { KnowledgeDocument } from "@/lib/types";
 
@@ -43,11 +43,12 @@ async function uploadFile(file: File): Promise<void> {
 }
 
 export default function KnowledgePage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { data: documents } = useQuery<KnowledgeDocument[]>({
+  const { data: documents, isLoading, error, refetch } = useQuery<KnowledgeDocument[]>({
     queryKey: ["knowledge", "documents"],
     queryFn: () => apiFetch<KnowledgeDocument[]>("/api/v1/knowledge/documents"),
     refetchInterval: (query) => {
@@ -67,11 +68,30 @@ export default function KnowledgePage() {
     },
   });
 
+  const columns: DataTableColumn<KnowledgeDocument>[] = [
+    {
+      key: "title",
+      header: "Document",
+      render: (doc) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{doc.title}</span>
+          {doc.error && <span className="text-xs text-[var(--critical-600)]">{doc.error}</span>}
+        </div>
+      ),
+      sortValue: (doc) => doc.title.toLowerCase(),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (doc) => <StatusBadge status={doc.status} />,
+    },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Knowledge"
-        description="Uploaded documents are parsed, chunked, and embedded for future AI retrieval (spec section 46)."
+        description="Uploaded documents are parsed, chunked, and embedded for future AI retrieval."
         actions={
           <>
             <input
@@ -90,25 +110,17 @@ export default function KnowledgePage() {
           </>
         }
       />
-      {uploadError && <p className="mb-4 text-sm text-red-600">{uploadError}</p>}
-      {documents && documents.length === 0 && (
-        <p className="text-sm text-neutral-500">No documents yet.</p>
-      )}
-      <div className="flex flex-col gap-2">
-        {documents?.map((doc) => (
-          <Link key={doc.id} href={`/knowledge/${doc.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div>
-                  <div className="font-medium text-neutral-900">{doc.title}</div>
-                  {doc.error && <div className="text-xs text-red-600">{doc.error}</div>}
-                </div>
-                <StatusBadge status={doc.status} />
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {uploadError && <p className="mb-4 text-sm text-[var(--critical-600)]">{uploadError}</p>}
+      <DataTable
+        columns={columns}
+        data={documents}
+        getRowId={(doc) => doc.id}
+        onRowClick={(doc) => router.push(`/knowledge/${doc.id}`)}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No documents yet"
+      />
     </div>
   );
 }

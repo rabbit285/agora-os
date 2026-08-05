@@ -56,11 +56,11 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
       />
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Mapped Requirements
         </h2>
         {control.requirements.length === 0 && (
-          <p className="text-sm text-neutral-500">Not mapped to any framework requirement.</p>
+          <p className="text-sm text-[var(--fg-muted)]">Not mapped to any framework requirement.</p>
         )}
         <div className="flex flex-wrap gap-2">
           {control.requirements.map((req) => (
@@ -72,7 +72,7 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Record Assessment
         </h2>
         <Card>
@@ -95,7 +95,7 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
                 </Button>
               ))}
             </div>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-[var(--fg-subtle)]">
               A &quot;fail&quot; assessment automatically creates a remediation task.
             </p>
           </CardContent>
@@ -103,11 +103,11 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Assessment History
         </h2>
         {control.assessments.length === 0 && (
-          <p className="text-sm text-neutral-500">No assessments recorded yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No assessments recorded yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {control.assessments.map((assessment) => (
@@ -115,9 +115,9 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
                   {assessment.notes && (
-                    <div className="text-sm text-neutral-700">{assessment.notes}</div>
+                    <div className="text-sm text-[var(--fg-muted)]">{assessment.notes}</div>
                   )}
-                  <div className="text-xs text-neutral-400">
+                  <div className="text-xs text-[var(--fg-subtle)]">
                     {new Date(assessment.created_at).toLocaleString()}
                   </div>
                 </div>
@@ -129,16 +129,16 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Evidence
         </h2>
         {controlEvidence.length === 0 && (
-          <p className="text-sm text-neutral-500">No evidence attached.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No evidence attached.</p>
         )}
         <div className="flex flex-col gap-2">
           {controlEvidence.map((item) => (
             <Card key={item.id}>
-              <CardContent className="pt-6 text-sm text-neutral-700">{item.title}</CardContent>
+              <CardContent className="pt-6 text-sm text-[var(--fg-muted)]">{item.title}</CardContent>
             </Card>
           ))}
         </div>

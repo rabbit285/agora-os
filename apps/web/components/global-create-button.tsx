@@ -69,11 +69,11 @@ export function GlobalCreateButton() {
         Create ▾
       </Button>
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-48 rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+        <div className="absolute left-0 z-20 mt-1 w-48 rounded-md border border-[var(--border-default)] bg-white py-1 shadow-lg">
           {availableOptions.map((option) => (
             <button
               key={option.label}
-              className="block w-full px-3 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+              className="block w-full px-3 py-1.5 text-left text-sm text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)]"
               onClick={() => {
                 setOpen(false);
                 router.push(option.href);

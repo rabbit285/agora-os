@@ -48,13 +48,13 @@ function QAScoreSection({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="mb-6">
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         QA Review
       </h2>
       <Card className="mb-3">
         <CardContent className="flex flex-col gap-2 pt-6">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-700">Score (1-5):</label>
+            <label className="text-sm text-[var(--fg-muted)]">Score (1-5):</label>
             <Input
               type="number"
               min={1}
@@ -82,8 +82,8 @@ function QAScoreSection({ ticketId }: { ticketId: string }) {
       {qaScores?.map((qa) => (
         <Card key={qa.id} className="mb-2">
           <CardContent className="pt-6">
-            <div className="text-sm text-neutral-900">Score: {qa.score}/5</div>
-            {qa.notes && <p className="text-xs text-neutral-500">{qa.notes}</p>}
+            <div className="text-sm text-[var(--fg-default)]">Score: {qa.score}/5</div>
+            {qa.notes && <p className="text-xs text-[var(--fg-muted)]">{qa.notes}</p>}
           </CardContent>
         </Card>
       ))}
@@ -168,7 +168,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
 
       <div className="mb-6 flex items-center gap-3">
         <StatusBadge status={ticket.category} />
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={ticket.status} />
         {nextStatus && (
           <Button
@@ -195,20 +195,20 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       {ticket.related_alert_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Linked Security Alert
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               This ticket was categorized &ldquo;security&rdquo;, which automatically notified
               Security by creating an alert in their triage queue (spec section 35).
             </p>
             {linkedAlert ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-700">
+              <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
                 {linkedAlert.title}
                 <StatusBadge status={linkedAlert.status} />
               </div>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
@@ -217,15 +217,15 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       {ticket.upsell_lead_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Linked Sales Lead
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               This ticket was flagged as an upsell signal, which automatically created a lead for
               Sales and notified the account owner (spec section 69 — Support Upsell Signal).
             </p>
             {linkedLead ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-700">
+              <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
                 {linkedLead.account_id ? (
                   <Link href={`/sales/accounts/${linkedLead.account_id}`} className="hover:underline">
                     View linked account
@@ -236,7 +236,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
                 <StatusBadge status={linkedLead.status} />
               </div>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
@@ -245,18 +245,18 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
       <QAScoreSection ticketId={id} />
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Conversation
         </h2>
         <div className="mb-4 flex flex-col gap-2">
           {ticket.messages.length === 0 && (
-            <p className="text-sm text-neutral-500">No messages yet.</p>
+            <p className="text-sm text-[var(--fg-muted)]">No messages yet.</p>
           )}
           {ticket.messages.map((message) => (
             <Card key={message.id}>
               <CardContent className="pt-6">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-wide text-neutral-400">
+                  <span className="text-xs uppercase tracking-wide text-[var(--fg-subtle)]">
                     {message.sender_type}
                   </span>
                   {message.status === "draft" && (
@@ -273,7 +273,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-neutral-700">{message.body}</div>
+                <div className="text-sm text-[var(--fg-muted)]">{message.body}</div>
               </CardContent>
             </Card>
           ))}
@@ -304,7 +304,7 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
         >
           {draftReply.isPending ? "Drafting…" : "Draft AI Reply"}
         </Button>
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-xs text-[var(--fg-subtle)]">
           AI-drafted replies are retrieval-grounded (spec §32) and land as a pending draft
           requiring agent approval, unless the org&rsquo;s AI Agent is configured to auto-send
           grounded replies.

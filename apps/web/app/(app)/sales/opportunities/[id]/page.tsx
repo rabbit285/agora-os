@@ -77,12 +77,12 @@ export default function OpportunityDetailPage({ params }: { params: Promise<{ id
       </div>
       <Card className="mb-4">
         <CardContent className="pt-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
             Account
           </h2>
           <Link
             href={`/sales/accounts/${opportunity.account.id}`}
-            className="text-sm text-neutral-700 hover:underline"
+            className="text-sm text-[var(--fg-muted)] hover:underline"
           >
             {opportunity.account.name}
           </Link>
@@ -91,7 +91,7 @@ export default function OpportunityDetailPage({ params }: { params: Promise<{ id
       {opportunity.onboarding_customer_id && (
         <Card>
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Onboarded as Support Customer
             </h2>
             <Badge variant="outline">Customer created</Badge>

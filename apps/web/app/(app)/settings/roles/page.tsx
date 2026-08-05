@@ -26,9 +26,9 @@ export default function RolesSettingsPage() {
           view, not an editor — assign a role to a member from Settings > Users."
       />
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">Could not load roles.</p>}
-      {roles && roles.length === 0 && <p className="text-sm text-neutral-500">No roles found.</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
+      {error && <p className="text-sm text-[var(--critical-600)]">Could not load roles.</p>}
+      {roles && roles.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No roles found.</p>}
 
       <div className="flex flex-col gap-2">
         {roles?.map((role) => {
@@ -41,24 +41,24 @@ export default function RolesSettingsPage() {
                   onClick={() => setExpanded(isExpanded ? null : role.key)}
                 >
                   <div>
-                    <div className="font-medium text-neutral-900">{role.name}</div>
-                    <div className="text-xs text-neutral-400">{role.key}</div>
+                    <div className="font-medium text-[var(--fg-default)]">{role.name}</div>
+                    <div className="text-xs text-[var(--fg-subtle)]">{role.key}</div>
                   </div>
                   <Badge variant="secondary">
                     {role.permissions.length} permission{role.permissions.length === 1 ? "" : "s"}
                   </Badge>
                 </button>
                 {isExpanded && (
-                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-neutral-100 pt-3">
+                  <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--border-default)] pt-3">
                     {role.permissions.length === 0 && (
-                      <span className="text-xs text-neutral-400">
+                      <span className="text-xs text-[var(--fg-subtle)]">
                         No permissions granted (deliberate — e.g. Read Only).
                       </span>
                     )}
                     {role.permissions.map((permission) => (
                       <span
                         key={permission}
-                        className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700"
+                        className="rounded bg-[var(--gray-100)] px-2 py-0.5 font-mono text-xs text-[var(--fg-muted)]"
                       >
                         {permission}
                       </span>

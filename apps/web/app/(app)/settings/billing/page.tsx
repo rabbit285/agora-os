@@ -46,15 +46,15 @@ export default function BillingSettingsPage() {
           here is immediate and free, a direct self-service action rather than a checkout flow."
       />
 
-      {(plansLoading || currentLoading) && <p className="text-sm text-neutral-500">Loading…</p>}
+      {(plansLoading || currentLoading) && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
 
       {current && (
         <Card className="mb-6 max-w-md">
           <CardContent className="pt-6">
-            <p className="text-sm text-neutral-600">
-              Current plan: <span className="font-medium text-neutral-900">{current.plan_key}</span>
+            <p className="text-sm text-[var(--fg-muted)]">
+              Current plan: <span className="font-medium text-[var(--fg-default)]">{current.plan_key}</span>
             </p>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-[var(--fg-subtle)]">
               {current.current_users} user{current.current_users === 1 ? "" : "s"} active
             </p>
           </CardContent>
@@ -62,7 +62,7 @@ export default function BillingSettingsPage() {
       )}
 
       {setPlan.isError && (
-        <p className="mb-4 text-sm text-red-600">
+        <p className="mb-4 text-sm text-[var(--critical-600)]">
           {setPlan.error instanceof ApiError ? setPlan.error.message : "Could not change plan."}
         </p>
       )}
@@ -71,17 +71,17 @@ export default function BillingSettingsPage() {
         {plans?.map((plan) => {
           const isCurrent = current?.plan_key === plan.key;
           return (
-            <Card key={plan.key} className={isCurrent ? "border-neutral-900" : undefined}>
+            <Card key={plan.key} className={isCurrent ? "border-[var(--brand-primary)]" : undefined}>
               <CardContent className="flex flex-col gap-3 pt-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-neutral-900">{plan.name}</h3>
+                  <h3 className="font-medium text-[var(--fg-default)]">{plan.name}</h3>
                   {isCurrent && <Badge>Current</Badge>}
                 </div>
-                <ul className="flex flex-col gap-1 text-xs text-neutral-600">
+                <ul className="flex flex-col gap-1 text-xs text-[var(--fg-muted)]">
                   {Object.entries(plan.entitlements).map(([key, value]) => (
                     <li key={key} className="flex justify-between gap-2">
                       <span>{ENTITLEMENT_LABELS[key] ?? key}</span>
-                      <span className="font-mono text-neutral-900">{formatEntitlement(value)}</span>
+                      <span className="font-mono text-[var(--fg-default)]">{formatEntitlement(value)}</span>
                     </li>
                   ))}
                 </ul>

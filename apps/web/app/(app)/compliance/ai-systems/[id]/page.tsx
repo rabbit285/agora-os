@@ -13,7 +13,7 @@ import { apiFetch } from "@/lib/api";
 import type { Approval, AISystemDetail, AISystemStatus } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 export default function AISystemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -66,9 +66,9 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {system.vendor && (
-          <span className="text-sm text-neutral-500">Vendor: {system.vendor}</span>
+          <span className="text-sm text-[var(--fg-muted)]">Vendor: {system.vendor}</span>
         )}
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={system.status} />
         <select
           className={selectClassName}
@@ -81,7 +81,7 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
           <option value="retired">Retired</option>
         </select>
         {updateStatus.isError && (
-          <span className="text-xs text-red-600">
+          <span className="text-xs text-[var(--critical-600)]">
             {(updateStatus.error as Error).message}
           </span>
         )}
@@ -90,39 +90,39 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
       {system.approval_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Required Approval
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               This system&apos;s risk classification automatically required sign-off before it can
               be marked approved (spec section 69 — New AI Tool Adoption).
             </p>
             {linkedApproval ? (
-              <div className="flex items-center gap-2 text-sm text-neutral-700">
+              <div className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
                 <Link href="/approvals" className="hover:underline">
                   {linkedApproval.action_type}
                 </Link>
                 <StatusBadge status={linkedApproval.status} />
               </div>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Assessments
         </h2>
         <div className="mb-4 flex flex-col gap-2">
           {system.assessments.length === 0 && (
-            <p className="text-sm text-neutral-500">No assessments yet.</p>
+            <p className="text-sm text-[var(--fg-muted)]">No assessments yet.</p>
           )}
           {system.assessments.map((assessment) => (
             <Card key={assessment.id}>
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="text-sm text-neutral-700">{assessment.notes ?? "—"}</div>
+                <div className="text-sm text-[var(--fg-muted)]">{assessment.notes ?? "—"}</div>
                 <StatusBadge status={assessment.status} />
               </CardContent>
             </Card>

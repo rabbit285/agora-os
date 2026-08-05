@@ -32,7 +32,7 @@ function AddMemoryForm() {
   return (
     <Card className="mb-6 max-w-2xl">
       <CardContent className="flex flex-col gap-3 pt-6">
-        <h2 className="text-sm font-semibold text-neutral-900">Add a memory entry</h2>
+        <h2 className="text-sm font-semibold text-[var(--fg-default)]">Add a memory entry</h2>
         <Select value={entryType} onChange={(e) => setEntryType(e.target.value)}>
           {MEMORY_ENTRY_TYPES.map((type) => (
             <option key={type} value={type}>
@@ -46,7 +46,7 @@ function AddMemoryForm() {
           placeholder="e.g. Refunds over €500 require Finance approval."
         />
         {create.isError && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-[var(--critical-600)]">
             {create.error instanceof ApiError ? create.error.message : "Could not save entry."}
           </p>
         )}
@@ -95,7 +95,7 @@ function MemoryEntryRow({ entry, canManage }: { entry: MemoryEntry; canManage: b
         {editing ? (
           <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
         ) : (
-          <p className="text-sm text-neutral-800">{entry.content}</p>
+          <p className="text-sm text-[var(--fg-default)]">{entry.content}</p>
         )}
         {canManage && (
           <div className="flex gap-2">
@@ -152,9 +152,9 @@ export default function BusinessMemoryPage() {
 
       {canManage && <AddMemoryForm />}
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
       {entries && entries.length === 0 && (
-        <p className="text-sm text-neutral-500">No memory entries yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No memory entries yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {entries?.map((entry) => (

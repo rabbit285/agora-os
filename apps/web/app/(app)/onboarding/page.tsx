@@ -66,7 +66,7 @@ function CompanyStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-[var(--fg-muted)]">
           Tell us about your company — spec §68 steps 1-2 (Company / Business profile).
         </p>
         <div className="flex flex-col gap-1.5">
@@ -76,7 +76,7 @@ function CompanyStep({ onDone }: { onDone: () => void }) {
         <div className="flex flex-col gap-1.5">
           <Label>Employee count</Label>
           <select
-            className="flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm"
+            className="flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
             value={employeeCountRange}
             onChange={(e) => setEmployeeCountRange(e.target.value)}
           >
@@ -118,12 +118,12 @@ function GoalsStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-[var(--fg-muted)]">
           What do you want to improve? (spec §68 step 3 — choose any that apply)
         </p>
         <div className="flex flex-col gap-2">
           {ONBOARDING_GOALS.map((goal) => (
-            <label key={goal.key} className="flex items-center gap-2 text-sm text-neutral-700">
+            <label key={goal.key} className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
               <input
                 type="checkbox"
                 checked={selected.includes(goal.key)}
@@ -168,12 +168,12 @@ function ComplianceProfileStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-[var(--fg-muted)]">
           Which compliance frameworks matter to you? (spec §68 step 4)
         </p>
         <div className="flex flex-col gap-2">
           {frameworks?.map((framework) => (
-            <label key={framework.key} className="flex items-center gap-2 text-sm text-neutral-700">
+            <label key={framework.key} className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
               <input
                 type="checkbox"
                 checked={selected.includes(framework.key)}
@@ -183,7 +183,7 @@ function ComplianceProfileStep({ onDone }: { onDone: () => void }) {
             </label>
           ))}
           {frameworks?.length === 0 && (
-            <p className="text-sm text-neutral-400">No frameworks in the catalog yet.</p>
+            <p className="text-sm text-[var(--fg-subtle)]">No frameworks in the catalog yet.</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -211,11 +211,11 @@ function SecurityProfileStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-[var(--fg-muted)]">
           What&apos;s your primary cloud provider? (spec §68 step 5)
         </p>
         <select
-          className="flex h-9 w-48 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm"
+          className="flex h-9 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
         >
@@ -247,7 +247,7 @@ function SalesProfileStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">What&apos;s your sales focus? (spec §68 step 6)</p>
+        <p className="text-sm text-[var(--fg-muted)]">What&apos;s your sales focus? (spec §68 step 6)</p>
         <Input
           placeholder="e.g. Enterprise SaaS accounts in Europe"
           value={focus}
@@ -288,12 +288,12 @@ function SupportProfileStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-[var(--fg-muted)]">
           Which support channels do you use? (spec §68 step 7)
         </p>
         <div className="flex flex-col gap-2">
           {SUPPORT_CHANNEL_OPTIONS.map((channel) => (
-            <label key={channel} className="flex items-center gap-2 text-sm capitalize text-neutral-700">
+            <label key={channel} className="flex items-center gap-2 text-sm capitalize text-[var(--fg-muted)]">
               <input
                 type="checkbox"
                 checked={selected.includes(channel)}
@@ -333,8 +333,8 @@ function PassThroughStep({
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <div>
-          <h3 className="font-medium text-neutral-900">{title}</h3>
-          <p className="text-sm text-neutral-600">{description}</p>
+          <h3 className="font-medium text-[var(--fg-default)]">{title}</h3>
+          <p className="text-sm text-[var(--fg-muted)]">{description}</p>
         </div>
         <Link href={linkHref} target="_blank" className="self-start">
           <Button variant="outline">{linkLabel}</Button>
@@ -372,22 +372,22 @@ function ReadinessStep() {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <h3 className="font-medium text-neutral-900">Your Business AI Readiness</h3>
-        {isLoading && <p className="text-sm text-neutral-500">Computing…</p>}
+        <h3 className="font-medium text-[var(--fg-default)]">Your Business AI Readiness</h3>
+        {isLoading && <p className="text-sm text-[var(--fg-muted)]">Computing…</p>}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {dimensions.map((dimension) => (
-            <div key={dimension.label} className="rounded border border-neutral-200 p-3 text-center">
-              <div className="text-2xl font-semibold text-neutral-900">{dimension.percent}%</div>
-              <div className="text-xs text-neutral-500">{dimension.label}</div>
+            <div key={dimension.label} className="rounded border border-[var(--border-default)] p-3 text-center">
+              <div className="text-2xl font-semibold text-[var(--fg-default)]">{dimension.percent}%</div>
+              <div className="text-xs text-[var(--fg-muted)]">{dimension.label}</div>
             </div>
           ))}
         </div>
         {readiness && readiness.opportunities.length > 0 && (
           <div>
-            <h4 className="mb-2 text-sm font-medium text-neutral-900">Top opportunities</h4>
+            <h4 className="mb-2 text-sm font-medium text-[var(--fg-default)]">Top opportunities</h4>
             <ul className="flex flex-col gap-1.5">
               {readiness.opportunities.map((opportunity) => (
-                <li key={opportunity.title} className="text-sm text-neutral-700">
+                <li key={opportunity.title} className="text-sm text-[var(--fg-muted)]">
                   <span className="font-medium">{opportunity.title}</span> — {opportunity.detail}
                 </li>
               ))}
@@ -431,7 +431,7 @@ export default function OnboardingPage() {
     return (
       <div>
         <PageHeader title="Onboarding" description="spec §68 — a guided setup for your organization." />
-        <p className="text-sm text-neutral-500">{isLoading ? "Loading…" : ""}</p>
+        <p className="text-sm text-[var(--fg-muted)]">{isLoading ? "Loading…" : ""}</p>
       </div>
     );
   }

@@ -70,12 +70,12 @@ export default function AIIncidentDetailPage({ params }: { params: Promise<{ id:
         {aiSystem && (
           <Link
             href={`/compliance/ai-systems/${aiSystem.id}`}
-            className="text-sm text-neutral-500 hover:underline"
+            className="text-sm text-[var(--fg-muted)] hover:underline"
           >
             {aiSystem.name} →
           </Link>
         )}
-        <span className="text-sm text-neutral-500">Status:</span>
+        <span className="text-sm text-[var(--fg-muted)]">Status:</span>
         <StatusBadge status={incident.status} />
         {nextStatus && (
           <Button
@@ -92,19 +92,19 @@ export default function AIIncidentDetailPage({ params }: { params: Promise<{ id:
       {incident.related_risk_id && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Linked Compliance Risk
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               Critical AI incidents automatically create a linked risk so EU AI Act Article 73
               serious-incident obligations are tracked.
             </p>
             {linkedRisk ? (
-              <Link href="/compliance" className="text-sm text-neutral-700 hover:underline">
+              <Link href="/compliance" className="text-sm text-[var(--fg-muted)] hover:underline">
                 {linkedRisk.title}
               </Link>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>
@@ -113,19 +113,19 @@ export default function AIIncidentDetailPage({ params }: { params: Promise<{ id:
       {incident.related_task_id && (
         <Card>
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Response Task
             </h2>
-            <p className="mb-2 text-xs text-neutral-400">
+            <p className="mb-2 text-xs text-[var(--fg-subtle)]">
               Critical incidents automatically create a response task, and notify the incident
               owner directly if one is assigned.
             </p>
             {linkedTask ? (
-              <Link href="/tasks" className="text-sm text-neutral-700 hover:underline">
+              <Link href="/tasks" className="text-sm text-[var(--fg-muted)] hover:underline">
                 {linkedTask.title}
               </Link>
             ) : (
-              <span className="text-sm text-neutral-400">Loading…</span>
+              <span className="text-sm text-[var(--fg-subtle)]">Loading…</span>
             )}
           </CardContent>
         </Card>

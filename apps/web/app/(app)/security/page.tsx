@@ -1,9 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { CardSkeleton } from "@/components/loading-skeleton";
+import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -21,6 +25,13 @@ import type {
   SecurityOverview,
 } from "@/lib/types";
 
+function metricStatus(value: number, kind: "lower-is-better" | "higher-is-better") {
+  if (kind === "higher-is-better") {
+    return value >= 80 ? "success" : value >= 50 ? "warning" : "critical";
+  }
+  return value === 0 ? "success" : value > 5 ? "critical" : "warning";
+}
+
 function OverviewSection() {
   const { data: overview, isLoading } = useQuery<SecurityOverview>({
     queryKey: ["security", "overview"],
@@ -35,27 +46,10 @@ function OverviewSection() {
     },
   });
 
-  if (isLoading) {
-    return <p className="mb-8 text-sm text-neutral-500">Loading security overview…</p>;
-  }
-  if (!overview) return null;
-
-  const metrics: Array<{ label: string; value: number | string }> = [
-    { label: "Security Score", value: overview.security_score },
-    { label: "Critical Alerts", value: overview.critical_alerts },
-    { label: "High Risks", value: overview.high_risks },
-    { label: "Assets Monitored", value: overview.assets_monitored },
-    { label: "Vulnerabilities", value: overview.vulnerabilities_open },
-    { label: "Identity Issues", value: overview.identity_issues_open },
-    { label: "Cloud Misconfigurations", value: overview.cloud_misconfigurations_open },
-    { label: "Open Incidents", value: overview.open_incidents },
-    { label: "Evidence Coverage", value: `${overview.evidence_coverage_percent}%` },
-  ];
-
   return (
     <div className="mb-8">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Security Overview
         </h2>
         <Button
@@ -68,131 +62,219 @@ function OverviewSection() {
         </Button>
       </div>
       {runScan.data && (
-        <p className="mb-3 text-xs text-neutral-500">
+        <p className="mb-3 text-xs text-[var(--fg-muted)]">
           {runScan.data.configured
             ? `Scan complete: ${runScan.data.checks_run.length} checks run, ${runScan.data.findings_created} finding(s) created.`
             : "AWS credentials are not configured for this organization — cloud scanning is unavailable until AWS_SECURITY_SCAN_ACCESS_KEY_ID/SECRET are set."}
         </p>
       )}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {metrics.map((metric) => (
-          <Card key={metric.label}>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-semibold text-neutral-900">{metric.value}</div>
-              <div className="text-xs text-neutral-500">{metric.label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {isLoading && <CardSkeleton />}
+      {overview && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <MetricCard
+            label="Security Score"
+            value={`${overview.security_score}/100`}
+            status={metricStatus(overview.security_score, "higher-is-better")}
+          />
+          <MetricCard
+            label="Critical Alerts"
+            value={String(overview.critical_alerts)}
+            status={metricStatus(overview.critical_alerts, "lower-is-better")}
+          />
+          <MetricCard
+            label="High Risks"
+            value={String(overview.high_risks)}
+            status={metricStatus(overview.high_risks, "lower-is-better")}
+          />
+          <MetricCard label="Assets Monitored" value={String(overview.assets_monitored)} />
+          <MetricCard
+            label="Vulnerabilities"
+            value={String(overview.vulnerabilities_open)}
+            status={metricStatus(overview.vulnerabilities_open, "lower-is-better")}
+          />
+          <MetricCard
+            label="Identity Issues"
+            value={String(overview.identity_issues_open)}
+            status={metricStatus(overview.identity_issues_open, "lower-is-better")}
+          />
+          <MetricCard
+            label="Cloud Misconfigurations"
+            value={String(overview.cloud_misconfigurations_open)}
+            status={metricStatus(overview.cloud_misconfigurations_open, "lower-is-better")}
+          />
+          <MetricCard
+            label="Open Incidents"
+            value={String(overview.open_incidents)}
+            status={metricStatus(overview.open_incidents, "lower-is-better")}
+          />
+          <MetricCard
+            label="Evidence Coverage"
+            value={`${overview.evidence_coverage_percent}%`}
+            status={metricStatus(overview.evidence_coverage_percent, "higher-is-better")}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 function AssetsSection() {
-  const { data: assets } = useQuery<SecurityAsset[]>({
+  const router = useRouter();
+  const { data: assets, isLoading, error, refetch } = useQuery<SecurityAsset[]>({
     queryKey: ["security", "assets"],
     queryFn: () => apiFetch<SecurityAsset[]>("/api/v1/security/assets"),
   });
 
+  const columns: DataTableColumn<SecurityAsset>[] = [
+    {
+      key: "name",
+      header: "Asset",
+      render: (asset) => <span className="font-medium">{asset.name}</span>,
+      sortValue: (asset) => asset.name.toLowerCase(),
+    },
+    {
+      key: "type",
+      header: "Type",
+      render: (asset) => (
+        <span className="text-[var(--fg-muted)]">
+          {asset.asset_type}
+          {asset.provider ? ` · ${asset.provider}` : ""}
+          {asset.internet_exposed ? " · internet-exposed" : ""}
+        </span>
+      ),
+    },
+    {
+      key: "criticality",
+      header: "Criticality",
+      render: (asset) => <SeverityBadge severity={asset.criticality} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (asset) => <StatusBadge status={asset.status} />,
+    },
+  ];
+
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Asset Inventory
       </h2>
-      {assets?.length === 0 && <p className="text-sm text-neutral-500">No assets tracked yet.</p>}
-      <div className="flex flex-col gap-2">
-        {assets?.map((asset) => (
-          <Link key={asset.id} href={`/security/assets/${asset.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div>
-                  <div className="font-medium text-neutral-900">{asset.name}</div>
-                  <div className="text-xs text-neutral-400">
-                    {asset.asset_type} {asset.provider ? `· ${asset.provider}` : ""}
-                    {asset.internet_exposed ? " · internet-exposed" : ""}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <SeverityBadge severity={asset.criticality} />
-                  <StatusBadge status={asset.status} />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={assets}
+        getRowId={(asset) => asset.id}
+        onRowClick={(asset) => router.push(`/security/assets/${asset.id}`)}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No assets tracked yet"
+      />
     </div>
   );
 }
 
 function FindingsSection() {
-  const { data: findings } = useQuery<SecurityFinding[]>({
+  const { data: findings, isLoading, error, refetch } = useQuery<SecurityFinding[]>({
     queryKey: ["security", "findings"],
     queryFn: () => apiFetch<SecurityFinding[]>("/api/v1/security/findings"),
   });
 
+  const columns: DataTableColumn<SecurityFinding>[] = [
+    {
+      key: "title",
+      header: "Finding",
+      render: (finding) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{finding.title}</span>
+          <Badge variant="outline" className="w-fit capitalize">
+            {finding.category.replace(/_/g, " ")}
+          </Badge>
+        </div>
+      ),
+      sortValue: (finding) => finding.title.toLowerCase(),
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      render: (finding) => <SeverityBadge severity={finding.severity} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (finding) => <StatusBadge status={finding.status} />,
+    },
+  ];
+
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Findings
       </h2>
-      {findings?.length === 0 && <p className="text-sm text-neutral-500">No findings recorded.</p>}
-      <div className="flex flex-col gap-2">
-        {findings?.map((finding) => (
-          <Card key={finding.id}>
-            <CardContent className="flex items-center justify-between pt-6">
-              <div>
-                <div className="font-medium text-neutral-900">{finding.title}</div>
-                <Badge variant="outline">{finding.category.replace(/_/g, " ")}</Badge>
-              </div>
-              <div className="flex gap-2">
-                <SeverityBadge severity={finding.severity} />
-                <StatusBadge status={finding.status} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={findings}
+        getRowId={(finding) => finding.id}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No findings recorded"
+      />
     </div>
   );
 }
 
 function AlertsSection() {
-  const { data: alerts } = useQuery<SecurityAlert[]>({
+  const router = useRouter();
+  const { data: alerts, isLoading, error, refetch } = useQuery<SecurityAlert[]>({
     queryKey: ["security", "alerts"],
     queryFn: () => apiFetch<SecurityAlert[]>("/api/v1/security/alerts"),
   });
 
+  const columns: DataTableColumn<SecurityAlert>[] = [
+    {
+      key: "title",
+      header: "Alert",
+      render: (alert) => <span className="font-medium">{alert.title}</span>,
+      sortValue: (alert) => alert.title.toLowerCase(),
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      render: (alert) => <SeverityBadge severity={alert.severity} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (alert) => <StatusBadge status={alert.status} />,
+    },
+  ];
+
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Alerts
       </h2>
-      {alerts?.length === 0 && <p className="text-sm text-neutral-500">No alerts.</p>}
-      <div className="flex flex-col gap-2">
-        {alerts?.map((alert) => (
-          <Link key={alert.id} href={`/security/alerts/${alert.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{alert.title}</div>
-                <div className="flex gap-2">
-                  <SeverityBadge severity={alert.severity} />
-                  <StatusBadge status={alert.status} />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={alerts}
+        getRowId={(alert) => alert.id}
+        onRowClick={(alert) => router.push(`/security/alerts/${alert.id}`)}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No alerts"
+      />
     </div>
   );
 }
 
 function IncidentsSection() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
 
-  const { data: incidents } = useQuery<SecurityIncident[]>({
+  const { data: incidents, isLoading, error, refetch } = useQuery<SecurityIncident[]>({
     queryKey: ["security", "incidents"],
     queryFn: () => apiFetch<SecurityIncident[]>("/api/v1/security/incidents"),
   });
@@ -210,13 +292,41 @@ function IncidentsSection() {
     },
   });
 
+  const columns: DataTableColumn<SecurityIncident>[] = [
+    {
+      key: "title",
+      header: "Incident",
+      render: (incident) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{incident.title}</span>
+          {incident.related_risk_id && (
+            <span className="text-xs text-[var(--fg-subtle)]">
+              Linked to Compliance risk register
+            </span>
+          )}
+        </div>
+      ),
+      sortValue: (incident) => incident.title.toLowerCase(),
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      render: (incident) => <SeverityBadge severity={incident.severity} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (incident) => <StatusBadge status={incident.status} />,
+    },
+  ];
+
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Incidents
       </h2>
       <Card className="mb-4">
-        <CardContent className="flex gap-2 pt-6">
+        <CardContent className="flex gap-2 pt-5">
           <Input
             placeholder="New incident title (severity: high)"
             value={title}
@@ -233,29 +343,16 @@ function IncidentsSection() {
           </Button>
         </CardContent>
       </Card>
-      {incidents?.length === 0 && <p className="text-sm text-neutral-500">No incidents.</p>}
-      <div className="flex flex-col gap-2">
-        {incidents?.map((incident) => (
-          <Link key={incident.id} href={`/security/incidents/${incident.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div>
-                  <div className="font-medium text-neutral-900">{incident.title}</div>
-                  {incident.related_risk_id && (
-                    <div className="text-xs text-neutral-400">
-                      Linked to Compliance risk register
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <SeverityBadge severity={incident.severity} />
-                  <StatusBadge status={incident.status} />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={incidents}
+        getRowId={(incident) => incident.id}
+        onRowClick={(incident) => router.push(`/security/incidents/${incident.id}`)}
+        isLoading={isLoading}
+        error={error}
+        onRetry={() => refetch()}
+        emptyTitle="No incidents"
+      />
     </div>
   );
 }
@@ -265,7 +362,7 @@ export default function SecurityPage() {
     <div>
       <PageHeader
         title="Security"
-        description="Asset inventory, findings, alerts, and incident response — spec sections 13-19."
+        description="Asset inventory, findings, alerts, and incident response."
         actions={
           <Link href="/security/policies">
             <Button variant="outline" size="sm">

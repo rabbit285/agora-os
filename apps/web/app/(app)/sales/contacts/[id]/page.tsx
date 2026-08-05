@@ -48,12 +48,12 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
       {contact.account && (
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
               Account
             </h2>
             <Link
               href={`/sales/accounts/${contact.account.id}`}
-              className="text-sm text-neutral-700 hover:underline"
+              className="text-sm text-[var(--fg-muted)] hover:underline"
             >
               {contact.account.name}
             </Link>
@@ -61,11 +61,11 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
         </Card>
       )}
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Outreach History
         </h2>
         {contact.outreach.length === 0 && (
-          <p className="text-sm text-neutral-500">No outreach sent to this contact yet.</p>
+          <p className="text-sm text-[var(--fg-muted)]">No outreach sent to this contact yet.</p>
         )}
         <div className="flex flex-col gap-2">
           {contact.outreach.map((message) => (
@@ -75,7 +75,7 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
                   <Badge variant="outline">{message.channel}</Badge>
                   <StatusBadge status={message.status} />
                 </div>
-                <p className="text-sm text-neutral-700">{message.body}</p>
+                <p className="text-sm text-[var(--fg-muted)]">{message.body}</p>
               </CardContent>
             </Card>
           ))}

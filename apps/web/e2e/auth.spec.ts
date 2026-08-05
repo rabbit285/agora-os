@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { login, signup } from "./helpers";
+import { login, logout, signup } from "./helpers";
 
 test.describe("Signup and login", () => {
   test("a new user can sign up and lands on the onboarding wizard", async ({ page }) => {
@@ -14,16 +14,17 @@ test.describe("Signup and login", () => {
 
     // Real session round trip: log out, then log back in with the same
     // real credentials created moments ago.
-    await page.getByRole("button", { name: "Log out" }).click();
+    await logout(page);
     await expect(page).toHaveURL(/\/login/);
 
     await login(page, org);
+    await page.getByRole("button", { name: "User menu" }).click();
     await expect(page.getByText(org.organizationName)).toBeVisible();
   });
 
   test("a wrong password is rejected with a real error, not a silent failure", async ({ page }) => {
     const org = await signup(page, "auth-wrongpw");
-    await page.getByRole("button", { name: "Log out" }).click();
+    await logout(page);
 
     await page.goto("/login");
     await page.getByLabel("Email").fill(org.email);

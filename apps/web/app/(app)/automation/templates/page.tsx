@@ -32,20 +32,20 @@ export default function WorkflowTemplatesPage() {
         description="A starting point, not a locked-in choice — using a template clones it into a new draft workflow you can edit freely (spec §41)."
       />
       {templates?.length === 0 && (
-        <p className="text-sm text-neutral-500">No templates available yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No templates available yet.</p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {templates?.map((template) => (
           <Card key={template.id}>
             <CardContent className="flex flex-col gap-2 pt-6">
               <div className="flex items-center justify-between">
-                <div className="font-medium text-neutral-900">{template.name}</div>
+                <div className="font-medium text-[var(--fg-default)]">{template.name}</div>
                 <Badge variant="outline">{template.category}</Badge>
               </div>
               {template.description && (
-                <p className="text-sm text-neutral-600">{template.description}</p>
+                <p className="text-sm text-[var(--fg-muted)]">{template.description}</p>
               )}
-              <div className="text-xs text-neutral-400">
+              <div className="text-xs text-[var(--fg-subtle)]">
                 {template.steps.length} step(s) · trigger: {template.trigger_type}
               </div>
               <Button

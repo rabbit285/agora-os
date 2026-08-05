@@ -56,15 +56,15 @@ export default function SecurityReviewDetailPage({
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {review.is_deal_blocker && (
-          <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+          <span className="rounded-full bg-[var(--critical-50)] px-2.5 py-0.5 text-xs font-medium text-[var(--critical-700)]">
             Deal blocker
           </span>
         )}
-        <span className="text-sm text-neutral-500">
+        <span className="text-sm text-[var(--fg-muted)]">
           {review.gap_count} open gap{review.gap_count === 1 ? "" : "s"}
         </span>
         {review.approval_id && (
-          <span className="text-sm text-neutral-500">
+          <span className="text-sm text-[var(--fg-muted)]">
             Approval: {review.approval_status ?? "pending"}
           </span>
         )}
@@ -85,28 +85,28 @@ export default function SecurityReviewDetailPage({
         </Button>
       </div>
       {sync.isSuccess && (
-        <p className="mb-4 text-sm text-neutral-500">
+        <p className="mb-4 text-sm text-[var(--fg-muted)]">
           {sync.data.tasks_created} remediation task{sync.data.tasks_created === 1 ? "" : "s"}{" "}
           created. {sync.data.review.gap_count} gap{sync.data.review.gap_count === 1 ? "" : "s"}{" "}
           remain.
         </p>
       )}
       {clear.isError && (
-        <p className="mb-4 text-sm text-red-600">
+        <p className="mb-4 text-sm text-[var(--critical-600)]">
           {clear.error instanceof ApiError ? clear.error.message : "Could not clear review."}
         </p>
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Questionnaire
         </h2>
         <Link href={`/compliance/questionnaires/${review.questionnaire.id}`}>
-          <Card className="transition-colors hover:border-neutral-400">
+          <Card className="transition-colors hover:border-[var(--border-strong)]">
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{review.questionnaire.title}</div>
-                <div className="text-xs text-neutral-400">
+                <div className="font-medium text-[var(--fg-default)]">{review.questionnaire.title}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">
                   {review.questionnaire.questions.length} question
                   {review.questionnaire.questions.length === 1 ? "" : "s"}
                 </div>

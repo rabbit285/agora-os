@@ -70,7 +70,7 @@ export default function UsersSettingsPage() {
 
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-3 pt-6">
-          <div className="text-sm font-medium text-neutral-900">Invite a member</div>
+          <div className="text-sm font-medium text-[var(--fg-default)]">Invite a member</div>
           <div className="flex flex-wrap gap-2">
             <Input
               type="email"
@@ -93,27 +93,27 @@ export default function UsersSettingsPage() {
               {createInvitation.isPending ? "Sending…" : "Send invite"}
             </Button>
           </div>
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <p className="text-xs text-neutral-400">
+          {formError && <p className="text-sm text-[var(--critical-600)]">{formError}</p>}
+          <p className="text-xs text-[var(--fg-subtle)]">
             No email provider is configured in this environment — the invitation link is logged
             server-side instead of emailed (see docs/KNOWN_LIMITATIONS.md).
           </p>
         </CardContent>
       </Card>
 
-      {invitationsLoading && <p className="text-sm text-neutral-500">Loading invitations…</p>}
+      {invitationsLoading && <p className="text-sm text-[var(--fg-muted)]">Loading invitations…</p>}
       {invitationsError && (
-        <p className="mb-4 text-sm text-red-600">Could not load pending invitations.</p>
+        <p className="mb-4 text-sm text-[var(--critical-600)]">Could not load pending invitations.</p>
       )}
       {pendingInvitations && pendingInvitations.length > 0 && (
         <div className="mb-6 flex flex-col gap-2">
-          <div className="text-sm font-medium text-neutral-900">Pending invitations</div>
+          <div className="text-sm font-medium text-[var(--fg-default)]">Pending invitations</div>
           {pendingInvitations.map((invitation) => (
             <Card key={invitation.id}>
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="text-sm text-neutral-900">{invitation.email}</div>
-                  <div className="text-xs text-neutral-400">
+                  <div className="text-sm text-[var(--fg-default)]">{invitation.email}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">
                     {invitation.role_key.replace(/_/g, " ")}
                   </div>
                 </div>
@@ -131,15 +131,15 @@ export default function UsersSettingsPage() {
         </div>
       )}
 
-      {membersLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+      {membersLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
       {members && members.length === 0 && (
-        <p className="text-sm text-neutral-500">No members yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No members yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {members?.map((member) => (
           <Card key={member.id}>
             <CardContent className="flex items-center justify-between pt-6">
-              <div className="font-mono text-xs text-neutral-500">{member.user_id}</div>
+              <div className="font-mono text-xs text-[var(--fg-muted)]">{member.user_id}</div>
               <div className="flex gap-2">
                 {member.roles.map((role) => (
                   <Badge key={role} variant="secondary">

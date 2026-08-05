@@ -26,13 +26,13 @@ export default function AIProvidersSettingsPage() {
           a key."
       />
 
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">Could not load provider status.</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
+      {error && <p className="text-sm text-[var(--critical-600)]">Could not load provider status.</p>}
 
       {providers && !activeProvider && (
         <Card className="mb-4">
           <CardContent className="pt-6">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-[var(--warning-700)]">
               No real provider is currently active — the AI Gateway is running in demo mode
               (`DemoAdapter`). Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and `AI_PROVIDER` to
               activate a real one.
@@ -46,8 +46,8 @@ export default function AIProvidersSettingsPage() {
           <Card key={provider.provider_key}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{provider.name}</div>
-                <div className="text-xs text-neutral-400">
+                <div className="font-medium text-[var(--fg-default)]">{provider.name}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">
                   {provider.has_adapter
                     ? `Set ${provider.provider_key.toUpperCase()}_API_KEY to configure`
                     : "No adapter built yet for this provider"}

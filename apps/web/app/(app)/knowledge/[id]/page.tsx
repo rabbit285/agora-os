@@ -33,23 +33,23 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
         actions={<StatusBadge status={document.status} />}
       />
       {document.error && (
-        <Card className="mb-4 border-red-200">
-          <CardContent className="pt-6 text-sm text-red-600">{document.error}</CardContent>
+        <Card className="mb-4 border-[var(--critical-50)]">
+          <CardContent className="pt-6 text-sm text-[var(--critical-600)]">{document.error}</CardContent>
         </Card>
       )}
       {chunks && (
         <>
-          <h2 className="mb-2 text-sm font-semibold text-neutral-500">
+          <h2 className="mb-2 text-sm font-semibold text-[var(--fg-muted)]">
             {chunks.length} chunk{chunks.length === 1 ? "" : "s"}
           </h2>
           <div className="flex flex-col gap-2">
             {chunks.map((chunk) => (
               <Card key={chunk.id}>
                 <CardContent className="pt-6">
-                  <div className="mb-1 text-xs text-neutral-400">
+                  <div className="mb-1 text-xs text-[var(--fg-subtle)]">
                     Chunk {chunk.chunk_index} · ~{chunk.token_count} tokens
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-neutral-700">{chunk.content}</p>
+                  <p className="whitespace-pre-wrap text-sm text-[var(--fg-muted)]">{chunk.content}</p>
                 </CardContent>
               </Card>
             ))}

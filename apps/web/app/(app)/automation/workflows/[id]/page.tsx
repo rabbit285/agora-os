@@ -51,7 +51,7 @@ function RunRow({ run }: { run: WorkflowRun }) {
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
           <button
-            className="text-sm text-neutral-700 hover:underline"
+            className="text-sm text-[var(--fg-muted)] hover:underline"
             onClick={() => setExpanded((v) => !v)}
           >
             Run started {new Date(run.started_at).toLocaleString()}
@@ -59,7 +59,7 @@ function RunRow({ run }: { run: WorkflowRun }) {
           <div className="flex items-center gap-2">
             {run.status === "awaiting_approval" && (
               <>
-                <Link href="/approvals" className="text-xs text-neutral-500 hover:underline">
+                <Link href="/approvals" className="text-xs text-[var(--fg-muted)] hover:underline">
                   Decide in Approvals
                 </Link>
                 <Button
@@ -76,16 +76,16 @@ function RunRow({ run }: { run: WorkflowRun }) {
           </div>
         </div>
         {expanded && detail && (
-          <div className="mt-3 flex flex-col gap-1 border-t border-neutral-100 pt-3">
+          <div className="mt-3 flex flex-col gap-1 border-t border-[var(--border-default)] pt-3">
             {detail.step_runs.length === 0 && (
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-[var(--fg-subtle)]">
                 Queued for durable execution — no steps have run yet.
               </p>
             )}
             {detail.step_runs.map((stepRun) => (
               <div
                 key={stepRun.id}
-                className="flex items-center justify-between text-xs text-neutral-600"
+                className="flex items-center justify-between text-xs text-[var(--fg-muted)]"
               >
                 <span>
                   {stepRun.step_index + 1}. {stepRun.step_type.replace(/_/g, " ")}
@@ -111,18 +111,18 @@ function VersionHistorySection({ workflowId }: { workflowId: string }) {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Version History
       </h2>
-      <p className="mb-2 text-xs text-neutral-400">
+      <p className="mb-2 text-xs text-[var(--fg-subtle)]">
         Immutable snapshots (spec §41) — one is recorded every time this workflow is published.
       </p>
       <div className="flex flex-col gap-2">
         {versions.map((version) => (
           <Card key={version.id}>
             <CardContent className="flex items-center justify-between pt-6">
-              <span className="text-sm text-neutral-700">v{version.version_number}</span>
-              <span className="text-xs text-neutral-400">
+              <span className="text-sm text-[var(--fg-muted)]">v{version.version_number}</span>
+              <span className="text-xs text-[var(--fg-subtle)]">
                 {version.steps.length} step(s) · published{" "}
                 {new Date(version.published_at).toLocaleString()}
               </span>
@@ -224,7 +224,7 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Steps (v{workflow.version}) — trigger: {workflow.trigger_type.replace(/_/g, " ")}
           {workflow.schedule_cron ? ` (${workflow.schedule_cron})` : ""}
         </h2>
@@ -237,16 +237,16 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
           />
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="mb-1 text-xs text-neutral-400">
+            <p className="mb-1 text-xs text-[var(--fg-subtle)]">
               Steps are locked while this workflow isn&rsquo;t in draft status (spec §41).
             </p>
             {workflow.steps.map((step, index) => (
               <Card key={index}>
                 <CardContent className="flex items-center justify-between pt-6">
-                  <span className="text-sm text-neutral-700">
+                  <span className="text-sm text-[var(--fg-muted)]">
                     {index + 1}. {step.step_type.replace(/_/g, " ")}
                   </span>
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-[var(--fg-subtle)]">
                     {"title" in step.config
                       ? String(step.config.title)
                       : String(step.config.action_type ?? "")}
@@ -261,10 +261,10 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
       <VersionHistorySection workflowId={id} />
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
           Run History
         </h2>
-        {workflowRuns.length === 0 && <p className="text-sm text-neutral-500">No runs yet.</p>}
+        {workflowRuns.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No runs yet.</p>}
         <div className="flex flex-col gap-2">
           {workflowRuns.map((run) => (
             <RunRow key={run.id} run={run} />

@@ -44,7 +44,7 @@ import type {
 } from "@/lib/types";
 
 const selectClassName =
-  "flex h-9 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400";
+  "flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm text-[var(--fg-default)] shadow-[var(--shadow-token-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
 
 function ControlsSection() {
   const queryClient = useQueryClient();
@@ -66,7 +66,7 @@ function ControlsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Controls
       </h2>
       <Card className="mb-4">
@@ -84,13 +84,13 @@ function ControlsSection() {
           </Button>
         </CardContent>
       </Card>
-      {controls?.length === 0 && <p className="text-sm text-neutral-500">No controls yet.</p>}
+      {controls?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No controls yet.</p>}
       <div className="flex flex-col gap-2">
         {controls?.map((control) => (
           <Link key={control.id} href={`/compliance/controls/${control.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{control.title}</div>
+                <div className="font-medium text-[var(--fg-default)]">{control.title}</div>
                 <StatusBadge status={control.status} />
               </CardContent>
             </Card>
@@ -109,16 +109,16 @@ function RisksSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Risk Register
       </h2>
-      {risks?.length === 0 && <p className="text-sm text-neutral-500">No risks recorded.</p>}
+      {risks?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No risks recorded.</p>}
       <div className="flex flex-col gap-2">
         {risks?.map((risk) => (
           <Card key={risk.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{risk.title}</div>
+                <div className="font-medium text-[var(--fg-default)]">{risk.title}</div>
                 <div className="mt-1 flex gap-2">
                   <Badge variant="outline">likelihood: {risk.likelihood}</Badge>
                   <Badge variant="outline">impact: {risk.impact}</Badge>
@@ -158,7 +158,7 @@ function VendorsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Vendors
       </h2>
       <Card className="mb-4">
@@ -180,15 +180,15 @@ function VendorsSection() {
           </Button>
         </CardContent>
       </Card>
-      {vendors?.length === 0 && <p className="text-sm text-neutral-500">No vendors recorded yet.</p>}
+      {vendors?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No vendors recorded yet.</p>}
       <div className="flex flex-col gap-2">
         {vendors?.map((vendor) => (
           <Link key={vendor.id} href={`/compliance/vendors/${vendor.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{vendor.name}</div>
-                  <div className="text-xs text-neutral-400">{vendor.category}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{vendor.name}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">{vendor.category}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <SeverityBadge severity={vendor.risk_tier} />
@@ -228,7 +228,7 @@ function QuestionnairesSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Questionnaires
       </h2>
       <Card className="mb-4">
@@ -256,7 +256,7 @@ function QuestionnairesSection() {
         </CardContent>
       </Card>
       {questionnaires?.length === 0 && (
-        <p className="text-sm text-neutral-500">No questionnaires yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No questionnaires yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {questionnaires?.map((questionnaire) => (
@@ -264,11 +264,11 @@ function QuestionnairesSection() {
             key={questionnaire.id}
             href={`/compliance/questionnaires/${questionnaire.id}`}
           >
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{questionnaire.title}</div>
-                  <div className="text-xs text-neutral-400">
+                  <div className="font-medium text-[var(--fg-default)]">{questionnaire.title}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">
                     {questionnaire.source.replace(/_/g, " ")}
                   </div>
                 </div>
@@ -307,7 +307,7 @@ function AuditsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Audits
       </h2>
       <Card className="mb-4">
@@ -329,15 +329,15 @@ function AuditsSection() {
           </Button>
         </CardContent>
       </Card>
-      {audits?.length === 0 && <p className="text-sm text-neutral-500">No audits recorded yet.</p>}
+      {audits?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No audits recorded yet.</p>}
       <div className="flex flex-col gap-2">
         {audits?.map((audit) => (
           <Link key={audit.id} href={`/compliance/audits/${audit.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{audit.title}</div>
-                  <div className="text-xs text-neutral-400">{audit.auditor_name ?? "No auditor set"}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{audit.title}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">{audit.auditor_name ?? "No auditor set"}</div>
                 </div>
                 <StatusBadge status={audit.status} />
               </CardContent>
@@ -411,7 +411,7 @@ function TrustCenterSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Trust Center
       </h2>
       <Card className="mb-4">
@@ -451,7 +451,7 @@ function TrustCenterSection() {
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-          <label className="flex items-center gap-2 text-sm text-neutral-600">
+          <label className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
             <input
               type="checkbox"
               checked={isPublic}
@@ -469,15 +469,15 @@ function TrustCenterSection() {
         </CardContent>
       </Card>
       {items?.length === 0 && (
-        <p className="mb-4 text-sm text-neutral-500">No Trust Center items configured yet.</p>
+        <p className="mb-4 text-sm text-[var(--fg-muted)]">No Trust Center items configured yet.</p>
       )}
       <div className="mb-6 flex flex-col gap-2">
         {items?.map((item) => (
           <Card key={item.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{item.title}</div>
-                <div className="text-xs text-neutral-400">{item.category.replace(/_/g, " ")}</div>
+                <div className="font-medium text-[var(--fg-default)]">{item.title}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">{item.category.replace(/_/g, " ")}</div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={item.is_public ? "success" : "outline"}>
@@ -490,24 +490,24 @@ function TrustCenterSection() {
         ))}
       </div>
 
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Evidence Requests
       </h3>
       {evidenceRequests?.length === 0 && (
-        <p className="text-sm text-neutral-500">No evidence requests yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No evidence requests yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {evidenceRequests?.map((request) => (
           <Card key={request.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">
+                <div className="font-medium text-[var(--fg-default)]">
                   {request.requester_name}
                   {request.company_name ? ` (${request.company_name})` : ""}
                 </div>
-                <div className="text-xs text-neutral-400">{request.requester_email}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">{request.requester_email}</div>
                 {request.message && (
-                  <div className="text-sm text-neutral-700">{request.message}</div>
+                  <div className="text-sm text-[var(--fg-muted)]">{request.message}</div>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -570,7 +570,7 @@ function SecurityReviewsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Enterprise Sales Security Reviews
       </h2>
       <Card className="mb-4">
@@ -610,20 +610,20 @@ function SecurityReviewsSection() {
         </CardContent>
       </Card>
       {reviews?.length === 0 && (
-        <p className="text-sm text-neutral-500">No security reviews started yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No security reviews started yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {reviews?.map((review) => (
           <Link key={review.id} href={`/compliance/security-reviews/${review.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">
+                  <div className="font-medium text-[var(--fg-default)]">
                     {opportunities?.find((o) => o.id === review.opportunity_id)?.title ??
                       review.opportunity_id}
                   </div>
                   {review.is_deal_blocker && (
-                    <div className="text-xs text-red-600">Deal blocker</div>
+                    <div className="text-xs text-[var(--critical-600)]">Deal blocker</div>
                   )}
                 </div>
                 <StatusBadge status={review.status} />
@@ -663,7 +663,7 @@ function AISystemsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         AI System Inventory
       </h2>
       <Card className="mb-4">
@@ -698,24 +698,24 @@ function AISystemsSection() {
           </Button>
         </CardContent>
         <CardContent className="pt-0 pb-4">
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             High or unacceptable-risk systems automatically require an Approval before they can be
             marked approved (spec section 69 — New AI Tool Adoption).
           </p>
         </CardContent>
       </Card>
       {aiSystems?.length === 0 && (
-        <p className="text-sm text-neutral-500">No AI systems registered yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No AI systems registered yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {aiSystems?.map((system) => (
           <Link key={system.id} href={`/compliance/ai-systems/${system.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{system.name}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{system.name}</div>
                   {system.vendor && (
-                    <div className="text-xs text-neutral-400">{system.vendor}</div>
+                    <div className="text-xs text-[var(--fg-subtle)]">{system.vendor}</div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -764,7 +764,7 @@ function AIIncidentsSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         AI Incidents
       </h2>
       <Card className="mb-4">
@@ -805,23 +805,23 @@ function AIIncidentsSection() {
           </Button>
         </CardContent>
         <CardContent className="pt-0 pb-4">
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             A critical incident automatically creates a linked Risk and response Task, and
             notifies the incident owner (EU AI Act Article 73 serious-incident obligations).
           </p>
         </CardContent>
       </Card>
       {incidents?.length === 0 && (
-        <p className="text-sm text-neutral-500">No AI incidents logged yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No AI incidents logged yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {incidents?.map((incident) => (
           <Link key={incident.id} href={`/compliance/ai-incidents/${incident.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{incident.title}</div>
-                  <div className="text-xs text-neutral-400">
+                  <div className="font-medium text-[var(--fg-default)]">{incident.title}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">
                     {aiSystemNames.get(incident.ai_system_id) ?? "Unknown system"}
                   </div>
                 </div>
@@ -886,7 +886,7 @@ function ProcessingActivitiesSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Record of Processing Activities (RoPA)
       </h2>
       <Card className="mb-4">
@@ -932,15 +932,15 @@ function ProcessingActivitiesSection() {
         </CardContent>
       </Card>
       {activities?.length === 0 && (
-        <p className="text-sm text-neutral-500">No processing activities recorded yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No processing activities recorded yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {activities?.map((activity) => (
           <Card key={activity.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{activity.name}</div>
-                <div className="text-xs text-neutral-400">
+                <div className="font-medium text-[var(--fg-default)]">{activity.name}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">
                   {activity.legal_basis.replace(/_/g, " ")} · {activity.data_subjects}
                 </div>
               </div>
@@ -978,7 +978,7 @@ function DPIASection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Data Protection Impact Assessments (DPIA)
       </h2>
       <Card className="mb-4">
@@ -1003,22 +1003,22 @@ function DPIASection() {
           </Button>
         </CardContent>
         <CardContent className="pt-0 pb-4">
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             A high-risk DPIA automatically requires an Approval before it can be marked approved
             (GDPR Article 35).
           </p>
         </CardContent>
       </Card>
-      {dpias?.length === 0 && <p className="text-sm text-neutral-500">No DPIAs recorded yet.</p>}
+      {dpias?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No DPIAs recorded yet.</p>}
       <div className="flex flex-col gap-2">
         {dpias?.map((dpia) => (
           <Link key={dpia.id} href={`/compliance/dpias/${dpia.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{dpia.title}</div>
+                  <div className="font-medium text-[var(--fg-default)]">{dpia.title}</div>
                   {dpia.ai_system_id && (
-                    <div className="text-xs text-neutral-400">Linked to an AI system</div>
+                    <div className="text-xs text-[var(--fg-subtle)]">Linked to an AI system</div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1064,7 +1064,7 @@ function DSARSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Data Subject Access Requests (DSAR)
       </h2>
       <Card className="mb-4">
@@ -1099,20 +1099,20 @@ function DSARSection() {
           </Button>
         </CardContent>
         <CardContent className="pt-0 pb-4">
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             Due 30 days from receipt (GDPR Article 12(3)).
           </p>
         </CardContent>
       </Card>
-      {dsars?.length === 0 && <p className="text-sm text-neutral-500">No DSARs logged yet.</p>}
+      {dsars?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No DSARs logged yet.</p>}
       <div className="flex flex-col gap-2">
         {dsars?.map((dsar) => (
           <Link key={dsar.id} href={`/compliance/dsars/${dsar.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-neutral-900">{dsar.requester_name}</div>
-                  <div className="text-xs text-neutral-400">
+                  <div className="font-medium text-[var(--fg-default)]">{dsar.requester_name}</div>
+                  <div className="text-xs text-[var(--fg-subtle)]">
                     {dsar.request_type} · due {new Date(dsar.due_at).toLocaleDateString()}
                   </div>
                 </div>
@@ -1168,7 +1168,7 @@ function DataTransfersSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Data Transfers
       </h2>
       <Card className="mb-4">
@@ -1208,26 +1208,26 @@ function DataTransfersSection() {
               Log transfer
             </Button>
           </div>
-          <p className="text-xs text-neutral-400">
+          <p className="text-xs text-[var(--fg-subtle)]">
             A transfer relying on an Article 49 derogation automatically creates a linked Risk
             in the Risk Register.
           </p>
         </CardContent>
       </Card>
       {transfers?.length === 0 && (
-        <p className="text-sm text-neutral-500">No data transfers recorded yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No data transfers recorded yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {transfers?.map((transfer) => (
           <Card key={transfer.id}>
             <CardContent className="flex items-center justify-between pt-6">
               <div>
-                <div className="font-medium text-neutral-900">{transfer.recipient_name}</div>
-                <div className="text-xs text-neutral-400">
+                <div className="font-medium text-[var(--fg-default)]">{transfer.recipient_name}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">
                   {transfer.destination_country} · {transfer.transfer_mechanism.replace(/_/g, " ")}
                 </div>
                 {transfer.related_risk_id && (
-                  <div className="text-xs text-red-600">Linked risk created</div>
+                  <div className="text-xs text-[var(--critical-600)]">Linked risk created</div>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -1284,7 +1284,7 @@ function PoliciesSection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Policies
       </h2>
       <Card className="mb-4">
@@ -1299,17 +1299,17 @@ function PoliciesSection() {
           </Button>
         </CardContent>
       </Card>
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">Could not load policies.</p>}
-      {policies?.length === 0 && <p className="text-sm text-neutral-500">No policies yet.</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
+      {error && <p className="text-sm text-[var(--critical-600)]">Could not load policies.</p>}
+      {policies?.length === 0 && <p className="text-sm text-[var(--fg-muted)]">No policies yet.</p>}
       <div className="flex flex-col gap-2">
         {policies?.map((policy) => (
           <Card key={policy.id}>
             <CardContent className="flex items-center justify-between pt-6">
-              <div className="font-medium text-neutral-900">{policy.title}</div>
+              <div className="font-medium text-[var(--fg-default)]">{policy.title}</div>
               <div className="flex items-center gap-2">
                 <select
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                  className={selectClassName}
                   value={policy.status}
                   onChange={(e) => updateStatus.mutate({ id: policy.id, status: e.target.value })}
                 >
@@ -1378,7 +1378,7 @@ function EvidenceLibrarySection() {
 
   return (
     <div className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Evidence Library
       </h2>
       <Card className="mb-4">
@@ -1406,19 +1406,19 @@ function EvidenceLibrarySection() {
           >
             {upload.isPending ? "Uploading…" : "Upload evidence"}
           </Button>
-          {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+          {uploadError && <p className="text-sm text-[var(--critical-600)]">{uploadError}</p>}
         </CardContent>
       </Card>
-      {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">Could not load evidence.</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
+      {error && <p className="text-sm text-[var(--critical-600)]">Could not load evidence.</p>}
       {evidence?.length === 0 && (
-        <p className="text-sm text-neutral-500">No evidence uploaded yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No evidence uploaded yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {evidence?.map((item) => (
           <Card key={item.id}>
             <CardContent className="flex items-center justify-between pt-6">
-              <div className="font-medium text-neutral-900">{item.title}</div>
+              <div className="font-medium text-[var(--fg-default)]">{item.title}</div>
               <div className="flex gap-2">
                 {item.control_id && <Badge variant="secondary">linked to control</Badge>}
                 {item.vendor_id && <Badge variant="secondary">linked to vendor</Badge>}
@@ -1459,13 +1459,13 @@ function FrameworksSection() {
 
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Frameworks
       </h2>
       <div className="mb-3 flex flex-wrap gap-2">
         {frameworks?.map((framework) => (
           <Link key={framework.id} href={`/compliance/frameworks/${framework.id}`}>
-            <Badge variant="secondary" className="cursor-pointer hover:bg-neutral-300">
+            <Badge variant="secondary" className="cursor-pointer hover:bg-[var(--gray-200)]">
               {framework.name}
               {framework.is_custom && " (custom)"}
             </Badge>
@@ -1491,29 +1491,77 @@ function FrameworksSection() {
   );
 }
 
+const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
+  {
+    label: "Controls & Risk",
+    render: () => (
+      <>
+        <ControlsSection />
+        <RisksSection />
+        <EvidenceLibrarySection />
+        <PoliciesSection />
+      </>
+    ),
+  },
+  {
+    label: "Assessments",
+    render: () => (
+      <>
+        <QuestionnairesSection />
+        <AuditsSection />
+        <SecurityReviewsSection />
+      </>
+    ),
+  },
+  {
+    label: "AI Governance",
+    render: () => (
+      <>
+        <AISystemsSection />
+        <AIIncidentsSection />
+      </>
+    ),
+  },
+  {
+    label: "Privacy",
+    render: () => (
+      <>
+        <ProcessingActivitiesSection />
+        <DPIASection />
+        <DSARSection />
+        <DataTransfersSection />
+      </>
+    ),
+  },
+  {
+    label: "Vendors & Trust",
+    render: () => (
+      <>
+        <VendorsSection />
+        <TrustCenterSection />
+      </>
+    ),
+  },
+  { label: "Frameworks", render: () => <FrameworksSection /> },
+];
+
 export default function CompliancePage() {
   return (
     <div>
       <PageHeader
         title="Compliance"
-        description="Frameworks, controls, evidence, and risk — spec section 12."
+        description="Frameworks, controls, evidence, and risk. A Framework's Requirements are met by Controls, which are proven by Evidence and Assessments — gaps become Risks and Tasks."
       />
-      <ControlsSection />
-      <RisksSection />
-      <VendorsSection />
-      <QuestionnairesSection />
-      <AuditsSection />
-      <TrustCenterSection />
-      <SecurityReviewsSection />
-      <AISystemsSection />
-      <AIIncidentsSection />
-      <ProcessingActivitiesSection />
-      <DPIASection />
-      <DSARSection />
-      <DataTransfersSection />
-      <PoliciesSection />
-      <EvidenceLibrarySection />
-      <FrameworksSection />
+      <div className="flex flex-col gap-10">
+        {COMPLIANCE_GROUPS.map((group) => (
+          <section key={group.label}>
+            <h2 className="mb-4 border-b border-[var(--border-default)] pb-2 text-sm font-semibold text-[var(--fg-default)]">
+              {group.label}
+            </h2>
+            {group.render()}
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

@@ -58,7 +58,7 @@ export default function SequencesPage() {
         }
       />
       {processDueSteps.data && (
-        <p className="mb-4 text-xs text-neutral-500">
+        <p className="mb-4 text-xs text-[var(--fg-muted)]">
           Processed {processDueSteps.data.processed} due step(s).
         </p>
       )}
@@ -81,14 +81,14 @@ export default function SequencesPage() {
         </CardContent>
       </Card>
       {sequences?.length === 0 && (
-        <p className="text-sm text-neutral-500">No sequences yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No sequences yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {sequences?.map((sequence) => (
           <Link key={sequence.id} href={`/sales/sequences/${sequence.id}`}>
-            <Card className="transition-colors hover:border-neutral-400">
+            <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
-                <div className="font-medium text-neutral-900">{sequence.name}</div>
+                <div className="font-medium text-[var(--fg-default)]">{sequence.name}</div>
                 <StatusBadge status={sequence.status} />
               </CardContent>
             </Card>

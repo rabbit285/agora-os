@@ -22,7 +22,7 @@ export default function SalesInboxPage() {
         description="Every outreach message sent or attempted, across all contacts and channels — outbound status only, no inbound reply tracking yet (spec §24)."
       />
       {messages?.length === 0 && (
-        <p className="text-sm text-neutral-500">No outreach messages yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No outreach messages yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {messages?.map((message) => (
@@ -33,11 +33,11 @@ export default function SalesInboxPage() {
                 <StatusBadge status={message.status} />
               </div>
               {message.subject && (
-                <div className="font-medium text-neutral-900">{message.subject}</div>
+                <div className="font-medium text-[var(--fg-default)]">{message.subject}</div>
               )}
-              <p className="text-sm text-neutral-700">{message.body}</p>
+              <p className="text-sm text-[var(--fg-muted)]">{message.body}</p>
               {message.blocked_reason && (
-                <p className="mt-1 text-xs text-red-600">Blocked: {message.blocked_reason}</p>
+                <p className="mt-1 text-xs text-[var(--critical-600)]">Blocked: {message.blocked_reason}</p>
               )}
             </CardContent>
           </Card>

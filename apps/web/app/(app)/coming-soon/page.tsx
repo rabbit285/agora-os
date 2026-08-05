@@ -19,7 +19,7 @@ export default async function ComingSoonPage({
             in place; this module ships in a later phase.
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-neutral-500">
+        <CardContent className="text-sm text-[var(--fg-muted)]">
           Nothing here is a working page yet, intentionally — see spec section 82 (&quot;No Fake
           Features&quot;) for why this state is shown instead of a broken link or placeholder
           data.

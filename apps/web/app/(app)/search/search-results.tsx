@@ -82,28 +82,28 @@ export function SearchResults({ initialQuery }: { initialQuery: string }) {
       </div>
 
       {!initialQuery.trim() ? (
-        <p className="text-sm text-neutral-500">Enter a search term above.</p>
+        <p className="text-sm text-[var(--fg-muted)]">Enter a search term above.</p>
       ) : isLoading ? (
-        <p className="text-sm text-neutral-500">Searching…</p>
+        <p className="text-sm text-[var(--fg-muted)]">Searching…</p>
       ) : error ? (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-[var(--critical-600)]">
           {error instanceof ApiError ? error.message : "Search failed."}
         </p>
       ) : !data || data.results.length === 0 ? (
-        <p className="text-sm text-neutral-500">No results for &quot;{initialQuery}&quot;.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No results for &quot;{initialQuery}&quot;.</p>
       ) : (
         <div className="flex flex-col gap-6">
           {Array.from(grouped.entries()).map(([module, results]) => (
             <div key={module}>
-              <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+              <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                 {module}
               </div>
               <div className="flex flex-col gap-2">
                 {results.map((result) => (
                   <Link key={`${result.entity_type}-${result.id}`} href={resultHref(result)}>
-                    <Card className="hover:bg-neutral-50">
+                    <Card className="hover:bg-[var(--bg-surface-hover)]">
                       <CardContent className="flex items-center justify-between pt-6">
-                        <div className="text-sm text-neutral-900">{result.label}</div>
+                        <div className="text-sm text-[var(--fg-default)]">{result.label}</div>
                         <Badge variant="secondary">
                           {result.entity_type.replace(/_/g, " ")}
                         </Badge>

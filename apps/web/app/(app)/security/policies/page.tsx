@@ -21,9 +21,9 @@ export default function SecurityPoliciesPage() {
         title="Security Policies"
         description="Published and draft policies — the same policy library maintained in Compliance (spec §12/§13), viewed here in a security context."
       />
-      {isLoading && <p className="text-sm text-neutral-500">Loading policies…</p>}
+      {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading policies…</p>}
       {policies?.length === 0 && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--fg-muted)]">
           No policies yet.{" "}
           <Link href="/compliance" className="underline">
             Create one in Compliance
@@ -35,7 +35,7 @@ export default function SecurityPoliciesPage() {
         {policies?.map((policy) => (
           <Card key={policy.id}>
             <CardContent className="flex items-center justify-between pt-6">
-              <div className="font-medium text-neutral-900">{policy.title}</div>
+              <div className="font-medium text-[var(--fg-default)]">{policy.title}</div>
               <StatusBadge status={policy.status} />
             </CardContent>
           </Card>

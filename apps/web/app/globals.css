@@ -1,26 +1,194 @@
 @import "tailwindcss";
 
+/* Design tokens — docs/DESIGN_SYSTEM.md. Every component should reach for
+   a semantic token utility (bg-surface, text-fg-muted, border-default)
+   rather than a raw Tailwind color, so a future palette change is a
+   one-file edit. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Neutral scale (cool slate) */
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+  --gray-950: #020617;
+
+  /* Primary — deep indigo */
+  --primary-50: #eef2ff;
+  --primary-100: #e0e7ff;
+  --primary-200: #c7d2fe;
+  --primary-500: #6366f1;
+  --primary-600: #4f46e5;
+  --primary-700: #4338ca;
+
+  /* Semantic */
+  --success-50: #ecfdf5;
+  --success-500: #10b981;
+  --success-600: #059669;
+  --success-700: #047857;
+  --warning-50: #fffbeb;
+  --warning-500: #f59e0b;
+  --warning-600: #d97706;
+  --warning-700: #b45309;
+  --critical-50: #fef2f2;
+  --critical-500: #ef4444;
+  --critical-600: #dc2626;
+  --critical-700: #b91c1c;
+  --info-50: #eff6ff;
+  --info-500: #3b82f6;
+  --info-600: #2563eb;
+  --info-700: #1d4ed8;
+
+  /* AI accent — violet, deliberately distinct from primary indigo */
+  --ai-50: #f5f3ff;
+  --ai-100: #ede9fe;
+  --ai-500: #8b5cf6;
+  --ai-600: #7c3aed;
+  --ai-700: #6d28d9;
+
+  /* Semantic surface roles */
+  --bg-app: var(--gray-50);
+  --bg-surface: #ffffff;
+  --bg-surface-hover: var(--gray-50);
+  --bg-sunken: var(--gray-100);
+
+  --fg-default: var(--gray-900);
+  --fg-muted: var(--gray-600);
+  --fg-subtle: var(--gray-400);
+  --fg-on-primary: #ffffff;
+  --fg-on-dark: var(--gray-50);
+
+  --border-default: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-focus: var(--primary-500);
+
+  --brand-primary: var(--primary-600);
+  --brand-primary-hover: var(--primary-700);
+  --brand-primary-subtle: var(--primary-50);
+
+  /* Layout */
+  --sidebar-width: 15.5rem;
+  --sidebar-width-collapsed: 3.5rem;
+  --header-height: 3.25rem;
+  --content-max-width: 88rem;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+
+  /* Transitions */
+  --transition-fast: 120ms ease-out;
+  --transition-base: 180ms ease-out;
+
+  --background: var(--bg-app);
+  --foreground: var(--fg-default);
+}
+
+[data-theme="dark"] {
+  --bg-app: var(--gray-950);
+  --bg-surface: var(--gray-900);
+  --bg-surface-hover: var(--gray-800);
+  --bg-sunken: var(--gray-900);
+  --fg-default: var(--gray-50);
+  --fg-muted: var(--gray-400);
+  --fg-subtle: var(--gray-500);
+  --border-default: var(--gray-800);
+  --border-strong: var(--gray-700);
+  --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+  --background: var(--bg-app);
+  --foreground: var(--fg-default);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-app: var(--gray-950);
+    --bg-surface: var(--gray-900);
+    --bg-surface-hover: var(--gray-800);
+    --bg-sunken: var(--gray-900);
+    --fg-default: var(--gray-50);
+    --fg-muted: var(--gray-400);
+    --fg-subtle: var(--gray-500);
+    --border-default: var(--gray-800);
+    --border-strong: var(--gray-700);
+    --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+    --background: var(--bg-app);
+    --foreground: var(--fg-default);
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-bg-app: var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-surface-hover: var(--bg-surface-hover);
+  --color-sunken: var(--bg-sunken);
+
+  --color-fg-default: var(--fg-default);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-on-primary: var(--fg-on-primary);
+
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-primary-hover: var(--brand-primary-hover);
+  --color-brand-primary-subtle: var(--brand-primary-subtle);
+
+  --color-success-50: var(--success-50);
+  --color-success-500: var(--success-500);
+  --color-success-600: var(--success-600);
+  --color-success-700: var(--success-700);
+  --color-warning-50: var(--warning-50);
+  --color-warning-500: var(--warning-500);
+  --color-warning-600: var(--warning-600);
+  --color-warning-700: var(--warning-700);
+  --color-critical-50: var(--critical-50);
+  --color-critical-500: var(--critical-500);
+  --color-critical-600: var(--critical-600);
+  --color-critical-700: var(--critical-700);
+  --color-info-50: var(--info-50);
+  --color-info-500: var(--info-500);
+  --color-info-600: var(--info-600);
+  --color-info-700: var(--info-700);
+  --color-ai-50: var(--ai-50);
+  --color-ai-100: var(--ai-100);
+  --color-ai-500: var(--ai-500);
+  --color-ai-600: var(--ai-600);
+  --color-ai-700: var(--ai-700);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --shadow-token-sm: var(--shadow-sm);
+  --shadow-token-md: var(--shadow-md);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border-default);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-app);
+  color: var(--fg-default);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

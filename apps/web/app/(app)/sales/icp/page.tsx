@@ -40,7 +40,7 @@ function ICPForm({ profile }: { profile: ICPProfile | null }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <div>
-          <label className="mb-1 block text-sm text-neutral-700">
+          <label className="mb-1 block text-sm text-[var(--fg-muted)]">
             Target industries (comma-separated, leave blank for &ldquo;any&rdquo;)
           </label>
           <Input
@@ -51,11 +51,11 @@ function ICPForm({ profile }: { profile: ICPProfile | null }) {
         </div>
         <div className="flex gap-4">
           <div>
-            <label className="mb-1 block text-sm text-neutral-700">Min employee count</label>
+            <label className="mb-1 block text-sm text-[var(--fg-muted)]">Min employee count</label>
             <Input type="number" value={minCount} onChange={(e) => setMinCount(e.target.value)} />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-neutral-700">Max employee count</label>
+            <label className="mb-1 block text-sm text-[var(--fg-muted)]">Max employee count</label>
             <Input type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} />
           </div>
         </div>
@@ -63,7 +63,7 @@ function ICPForm({ profile }: { profile: ICPProfile | null }) {
           Save &amp; Rescore Accounts
         </Button>
         {save.isSuccess && (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-[var(--fg-muted)]">
             Saved — every existing Account has been rescored against this profile.
           </p>
         )}
@@ -85,7 +85,7 @@ export default function ICPBuilderPage() {
         description="Define your Ideal Customer Profile — saving it immediately rescores every Account (spec §20)."
       />
       {isLoading ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-[var(--fg-muted)]">Loading…</p>
       ) : (
         <ICPForm key={profile?.id ?? "new"} profile={profile ?? null} />
       )}

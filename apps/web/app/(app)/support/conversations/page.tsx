@@ -36,7 +36,7 @@ function ConversationThread({ ticket }: { ticket: SupportTicket }) {
     <Card>
       <CardContent className="pt-6">
         <div className="mb-2 flex items-center justify-between">
-          <div className="font-medium text-neutral-900">{ticket.subject}</div>
+          <div className="font-medium text-[var(--fg-default)]">{ticket.subject}</div>
           <div className="flex items-center gap-2">
             <StatusBadge status={ticket.channel} />
             <StatusBadge status={ticket.status} />
@@ -45,12 +45,12 @@ function ConversationThread({ ticket }: { ticket: SupportTicket }) {
         <div className="mb-3 flex flex-col gap-1">
           {detail?.messages.map((message) => (
             <div key={message.id} className="text-sm">
-              <span className="font-medium text-neutral-500">{message.sender_type}:</span>{" "}
-              <span className="text-neutral-700">{message.body}</span>
+              <span className="font-medium text-[var(--fg-muted)]">{message.sender_type}:</span>{" "}
+              <span className="text-[var(--fg-muted)]">{message.body}</span>
             </div>
           ))}
           {detail?.messages.length === 0 && (
-            <p className="text-xs text-neutral-400">No messages yet.</p>
+            <p className="text-xs text-[var(--fg-subtle)]">No messages yet.</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -86,7 +86,7 @@ export default function ConversationsPage() {
         description="A thread-first view over the same Tickets data, filtered to the conversational channels (email/chat) — spec §32."
       />
       {conversations?.length === 0 && (
-        <p className="text-sm text-neutral-500">No conversations yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No conversations yet.</p>
       )}
       <div className="flex flex-col gap-3">
         {conversations?.map((ticket) => (

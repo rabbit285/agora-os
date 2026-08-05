@@ -54,10 +54,10 @@ function SsoButtons() {
           Sign in with {SSO_LABELS[p.provider] ?? p.provider}
         </Button>
       ))}
-      <div className="flex items-center gap-2 text-xs text-neutral-400">
-        <div className="h-px flex-1 bg-neutral-200" />
+      <div className="flex items-center gap-2 text-xs text-[var(--fg-subtle)]">
+        <div className="h-px flex-1 bg-[var(--gray-200)]" />
         or
-        <div className="h-px flex-1 bg-neutral-200" />
+        <div className="h-px flex-1 bg-[var(--gray-200)]" />
       </div>
     </div>
   );
@@ -67,7 +67,7 @@ function SsoErrorBanner() {
   const searchParams = useSearchParams();
   const ssoError = searchParams.get("error");
   if (!ssoError) return null;
-  return <p className="mb-4 text-sm text-red-600">{ssoError}</p>;
+  return <p className="mb-4 text-sm text-[var(--critical-600)]">{ssoError}</p>;
 }
 
 export default function LoginPage() {
@@ -106,26 +106,26 @@ export default function LoginPage() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-[var(--critical-600)]">{errors.email.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-xs text-neutral-500 hover:underline">
+              <Link href="/forgot-password" className="text-xs text-[var(--fg-muted)] hover:underline">
                 Forgot password?
               </Link>
             </div>
             <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
-            {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-[var(--critical-600)]">{errors.password.message}</p>}
           </div>
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Logging in…" : "Log in"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-neutral-500">
+        <p className="mt-4 text-center text-sm text-[var(--fg-muted)]">
           No account?{" "}
-          <Link href="/signup" className="text-neutral-900 hover:underline">
+          <Link href="/signup" className="text-[var(--fg-default)] hover:underline">
             Sign up
           </Link>
         </p>

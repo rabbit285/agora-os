@@ -79,14 +79,14 @@ export default function SupportKnowledgeBasePage() {
         </CardContent>
       </Card>
       {articles?.length === 0 && (
-        <p className="text-sm text-neutral-500">No knowledge articles yet.</p>
+        <p className="text-sm text-[var(--fg-muted)]">No knowledge articles yet.</p>
       )}
       <div className="flex flex-col gap-2">
         {articles?.map((article) => (
           <Card key={article.id}>
             <CardContent className="pt-6">
               <div className="mb-1 flex items-center justify-between">
-                <div className="font-medium text-neutral-900">{article.title}</div>
+                <div className="font-medium text-[var(--fg-default)]">{article.title}</div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={article.published ? "published" : "draft"} />
                   <Button
@@ -102,9 +102,9 @@ export default function SupportKnowledgeBasePage() {
                 </div>
               </div>
               {article.category && (
-                <div className="mb-1 text-xs text-neutral-400">{article.category}</div>
+                <div className="mb-1 text-xs text-[var(--fg-subtle)]">{article.category}</div>
               )}
-              <p className="text-sm text-neutral-700">{article.body}</p>
+              <p className="text-sm text-[var(--fg-muted)]">{article.body}</p>
             </CardContent>
           </Card>
         ))}

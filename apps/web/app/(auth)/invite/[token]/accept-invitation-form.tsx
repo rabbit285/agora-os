@@ -52,7 +52,7 @@ export function AcceptInvitationForm({ token }: { token: string }) {
             <Label htmlFor="full_name">Your name</Label>
             <Input id="full_name" autoComplete="name" {...register("full_name")} />
             {errors.full_name && (
-              <p className="text-xs text-red-600">{errors.full_name.message}</p>
+              <p className="text-xs text-[var(--critical-600)]">{errors.full_name.message}</p>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
@@ -63,16 +63,16 @@ export function AcceptInvitationForm({ token }: { token: string }) {
               autoComplete="new-password"
               {...register("password")}
             />
-            {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-[var(--critical-600)]">{errors.password.message}</p>}
           </div>
-          {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Joining…" : "Accept and join"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-neutral-500">
+        <p className="mt-4 text-center text-sm text-[var(--fg-muted)]">
           Already have an account?{" "}
-          <Link href="/login" className="text-neutral-900 hover:underline">
+          <Link href="/login" className="text-[var(--fg-default)] hover:underline">
             Log in
           </Link>{" "}
           first, then reopen this link.
