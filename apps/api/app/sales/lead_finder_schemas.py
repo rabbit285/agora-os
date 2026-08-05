@@ -405,6 +405,22 @@ class ManualPersonIn(BaseModel):
     account_id: uuid.UUID | None = None
 
 
+class ProvenanceOut(BaseModel):
+    provider: str
+    record_type: str
+    provider_record_id: str
+    source_url: str | None
+    retrieved_at: datetime
+    last_verified_at: datetime | None
+    verification_status: str
+    enrichment_status: str
+    imported_by_user_id: uuid.UUID | None
+    imported_by_workflow_id: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class SaveCompanyOut(BaseModel):
     account_id: uuid.UUID
     created: bool

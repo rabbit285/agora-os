@@ -96,6 +96,17 @@ const STATUS_VARIANTS: Record<
   cleared: "success",
   security_review: "warning",
   terminated: "destructive",
+  not_configured: "outline",
+  ready_to_connect: "secondary",
+  syncing: "warning",
+  degraded: "warning",
+  rate_limited: "warning",
+  revoked: "destructive",
+  demo: "secondary",
+  user_entered: "secondary",
+  provider_supplied: "success",
+  requires_review: "warning",
+  unknown: "outline",
 };
 
 export function StatusBadge({ status }: { status: string }) {

@@ -1079,6 +1079,234 @@ export type SalesIntelligence = {
   sequence_completion_rate_percent: number;
 };
 
+// ---- Sales Lead Finder (provider-neutral company/people discovery) ----
+// Mirrors apps/api/app/sales/lead_finder_schemas.py field-for-field.
+
+export type CompanyFilters = {
+  name?: string | null;
+  domain?: string | null;
+  locations?: string[];
+  min_employee_count?: number | null;
+  max_employee_count?: number | null;
+  industries?: string[];
+  keywords?: string[];
+  min_revenue?: number | null;
+  max_revenue?: number | null;
+  funding_stages?: string[];
+  technologies?: string[];
+};
+
+export type PersonFilters = {
+  name?: string | null;
+  current_company_domain?: string | null;
+  titles?: string[];
+  title_keywords?: string[];
+  seniorities?: string[];
+  departments?: string[];
+  locations?: string[];
+  require_verified_email?: boolean;
+};
+
+export type NormalizedCompanyOut = {
+  provider: string;
+  provider_record_id: string;
+  name: string;
+  domain: string | null;
+  website: string | null;
+  industry: string | null;
+  locations: string[];
+  employee_count: number | null;
+  employee_range: string | null;
+  revenue_range: string | null;
+  funding_stage: string | null;
+  total_funding_usd: number | null;
+  technologies: string[];
+  linkedin_url: string | null;
+  source_url: string | null;
+  retrieved_at: string;
+  dedupe_status: "new" | "existing";
+  existing_account_id: string | null;
+};
+
+export type NormalizedPersonOut = {
+  provider: string;
+  provider_record_id: string;
+  full_name: string;
+  title: string | null;
+  seniority: string | null;
+  department: string | null;
+  current_company_name: string | null;
+  current_company_domain: string | null;
+  location: string | null;
+  email: string | null;
+  email_status: "verified" | "unverified" | "catch_all" | "unavailable";
+  phone: string | null;
+  phone_status: "verified" | "unverified" | "unavailable";
+  linkedin_url: string | null;
+  source_url: string | null;
+  retrieved_at: string;
+  dedupe_status: "new" | "existing";
+  existing_contact_id: string | null;
+};
+
+export type CompanySearchOut = {
+  provider: string;
+  companies: NormalizedCompanyOut[];
+  total_available: number | null;
+  page: number;
+  page_size: number;
+  credits_used: number | null;
+};
+
+export type PersonSearchOut = {
+  provider: string;
+  people: NormalizedPersonOut[];
+  total_available: number | null;
+  page: number;
+  page_size: number;
+  credits_used: number | null;
+};
+
+export type ProviderCapabilitiesOut = {
+  company_search: boolean;
+  people_search: boolean;
+  company_enrichment: boolean;
+  person_enrichment: boolean;
+  decision_makers: boolean;
+  credit_estimation: boolean;
+};
+
+export type SalesProviderStatus =
+  | "not_configured"
+  | "ready_to_connect"
+  | "connected"
+  | "syncing"
+  | "healthy"
+  | "degraded"
+  | "rate_limited"
+  | "failed"
+  | "disabled"
+  | "revoked"
+  | "demo";
+
+export type ProviderStatusOut = {
+  provider_key: string;
+  status: SalesProviderStatus;
+  capabilities: ProviderCapabilitiesOut;
+  configured: boolean;
+};
+
+export type SavedSearchOut = {
+  id: string;
+  name: string;
+  search_type: "company" | "person";
+  filters: CompanyFilters | PersonFilters;
+  provider: string;
+  columns: string[];
+  sort: { field: string; direction: "asc" | "desc" } | null;
+  density: "comfortable" | "compact";
+  is_shared: boolean;
+  owner_user_id: string;
+  last_executed_at: string | null;
+  last_result_count: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SalesListOut = {
+  id: string;
+  name: string;
+  list_type: "company" | "person";
+  description: string | null;
+  tags: string[];
+  is_shared: boolean;
+  owner_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SalesListItemOut = {
+  id: string;
+  list_id: string;
+  account_id: string | null;
+  contact_id: string | null;
+  added_by_user_id: string;
+  created_at: string;
+};
+
+export type EnrichmentJobOut = {
+  id: string;
+  provider: string;
+  operation: string;
+  status: "pending" | "running" | "succeeded" | "failed" | "partial";
+  estimated_credits: number;
+  actual_credits: number | null;
+  succeeded_count: number;
+  failed_count: number;
+  error_records: { record_id: string; error: string }[];
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type CreditEstimatePreviewOut = {
+  provider: string;
+  operation: string;
+  estimated_credits: number;
+  record_count: number;
+};
+
+export type ParseQueryOut = {
+  company_filters: CompanyFilters;
+  person_filters: PersonFilters;
+  unsupported_criteria: string[];
+  provider: string;
+};
+
+export type EligibilityCheckOut = {
+  status: "eligible" | "requires_review" | "blocked" | "unknown";
+  reasons: string[];
+};
+
+export type SuppressionEntryOut = {
+  id: string;
+  email: string | null;
+  domain: string | null;
+  contact_id: string | null;
+  reason: string;
+  created_by_user_id: string;
+  created_at: string;
+};
+
+export type ImportPreviewOut = {
+  headers: string[];
+  sample_rows: Record<string, string>[];
+  suggested_mapping: Record<string, string | null>;
+  total_rows: number;
+};
+
+export type SaveCompanyOut = {
+  account_id: string;
+  created: boolean;
+};
+
+export type SavePersonOut = {
+  contact_id: string;
+  created: boolean;
+};
+
+export type ImportJobOut = {
+  id: string;
+  record_type: "company" | "person";
+  status: "pending" | "running" | "succeeded" | "failed" | "partial";
+  total_rows: number;
+  imported_rows: number;
+  skipped_rows: number;
+  error_rows: { row_number: number; error: string }[];
+  completed_at: string | null;
+  created_at: string;
+};
+
 export type SupportCustomer = {
   id: string;
   name: string;
