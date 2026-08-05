@@ -270,6 +270,18 @@ async def test_list_create_add_item_and_prevent_duplicate(client: AsyncClient) -
     removed = await client.delete(f"/api/v1/sales/lead-finder/lists/{list_id}/items/{item_id}")
     assert removed.status_code == 204
 
+    # Regression: the delete must actually persist, not just return 204
+    # while leaving the row in place (a real bug caught here — the
+    # endpoint was missing its db.commit()).
+    items = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/items")
+    assert items.status_code == 200
+    assert items.json() == []
+
+    re_add = await client.post(
+        f"/api/v1/sales/lead-finder/lists/{list_id}/items", json={"account_id": account_id}
+    )
+    assert re_add.status_code == 201, re_add.text
+
 
 async def test_lead_finder_view_requires_permission(
     client: AsyncClient, db_session: AsyncSession
@@ -282,6 +294,109 @@ async def test_lead_finder_view_requires_permission(
     client.cookies.set("agora_session", token)
     response = await client.post(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 10}
+    )
+    assert response.status_code == 403
+
+
+async def test_enrich_estimate_reports_zero_for_demo(client: AsyncClient) -> None:
+    await _signup(client, "enrich-est1@example.com", "Enrich Est Org 1")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich/estimate",
+        json={"operation": "enrich_company", "record_ids": [str(uuid.uuid4())]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["estimated_credits"] == 0
+
+
+async def test_enrich_selective_enriches_saved_company(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "enrich1@example.com", "Enrich Org 1")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    account_id = saved.json()["account_id"]
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [account_id]},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "succeeded"
+    assert body["succeeded_count"] == 1
+    assert body["failed_count"] == 0
+
+    account = await db_session.get(Account, uuid.UUID(account_id))
+    assert account is not None
+    assert account.industry == "Industrial Automation"
+
+
+async def test_enrich_selective_rejects_more_than_five_records(client: AsyncClient) -> None:
+    await _signup(client, "enrich2@example.com", "Enrich Org 2")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [str(uuid.uuid4()) for _ in range(6)]},
+    )
+    assert response.status_code == 422
+
+
+async def test_enrich_selective_reports_partial_failure_for_unknown_record(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "enrich3@example.com", "Enrich Org 3")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [str(uuid.uuid4())]},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "failed"
+    assert body["failed_count"] == 1
+    assert len(body["error_records"]) == 1
+
+
+async def test_enrich_bulk_creates_running_job_and_can_be_polled(client: AsyncClient) -> None:
+    await _signup(client, "enrich4@example.com", "Enrich Org 4")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    account_id = saved.json()["account_id"]
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich/bulk",
+        json={"operation": "enrich_company", "record_ids": [account_id]},
+    )
+    assert response.status_code == 201, response.text
+    job_id = response.json()["id"]
+    # The Temporal starter is a no-op in tests (see conftest.py), so the
+    # job stays "running" — this confirms the row is created synchronously
+    # and pollable, not that the workflow itself executed.
+    assert response.json()["status"] == "running"
+
+    poll = await client.get(f"/api/v1/sales/lead-finder/enrichment-jobs/{job_id}")
+    assert poll.status_code == 200
+    assert poll.json()["id"] == job_id
+
+
+async def test_enrich_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "enrich-rbac@example.com", "Enrich RBAC Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="enrich-rbac-employee@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [str(uuid.uuid4())]},
     )
     assert response.status_code == 403
 
@@ -306,3 +421,143 @@ async def test_saved_search_is_isolated_per_organization(
     assert response.status_code in (404, 405)  # GET not allowed; confirms no cross-tenant leak via other verbs
     response = await client.delete(f"/api/v1/sales/lead-finder/saved-searches/{saved_search_id}")
     assert response.status_code == 404
+
+
+async def _create_contact(client: AsyncClient, full_name: str, email: str) -> str:
+    response = await client.post(
+        "/api/v1/sales/contacts", json={"full_name": full_name, "email": email}
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+async def test_eligibility_check_eligible_contact(client: AsyncClient) -> None:
+    await _signup(client, "elig1@example.com", "Elig Org 1")
+    contact_id = await _create_contact(client, "Jane Reachable", "jane.reachable@example.com")
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"contact_id": contact_id}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "eligible"
+
+
+async def test_eligibility_check_blocked_for_do_not_contact(client: AsyncClient) -> None:
+    await _signup(client, "elig2@example.com", "Elig Org 2")
+    contact_id = await _create_contact(client, "Suppressed Person", "suppressed-elig@example.com")
+    await client.patch(f"/api/v1/sales/contacts/{contact_id}", json={"do_not_contact": True})
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"contact_id": contact_id}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert "do-not-contact" in body["reasons"][0]
+
+
+async def test_eligibility_check_unknown_with_no_contact_or_email(client: AsyncClient) -> None:
+    await _signup(client, "elig3@example.com", "Elig Org 3")
+    response = await client.post("/api/v1/sales/lead-finder/eligibility/check", json={})
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+
+
+async def test_suppression_entry_blocks_eligibility_before_contact_is_saved(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "elig4@example.com", "Elig Org 4")
+    add = await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"email": "blocklisted@example.com", "reason": "Requested no contact via LinkedIn"},
+    )
+    assert add.status_code == 201, add.text
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"email": "blocklisted@example.com"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert "Requested no contact" in body["reasons"][0]
+
+
+async def test_suppression_blocks_a_saved_contact_even_without_do_not_contact_flag(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "elig5@example.com", "Elig Org 5")
+    contact_id = await _create_contact(client, "Domain Suppressed", "person@blocked-domain.example")
+    await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"domain": "blocked-domain.example", "reason": "Competitor domain — never contact"},
+    )
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"contact_id": contact_id}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
+
+
+async def test_suppression_list_blocks_sequence_send_without_do_not_contact_flag(
+    client: AsyncClient,
+) -> None:
+    """The suppression list must also gate the real send path (spec §23),
+    not just the preview panel — extends
+    test_advance_respects_suppression's existing do_not_contact coverage
+    to the new, independent suppression-list mechanism."""
+    await _signup(client, "elig6@example.com", "Elig Org 6")
+    sequence = await client.post("/api/v1/sales/sequences", json={"name": "Suppression List Sequence"})
+    sequence_id = sequence.json()["id"]
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/steps",
+        json={"wait_days": 0, "channel": "email", "body_template": "Hi {{first_name}}"},
+    )
+    contact_id = await _create_contact(client, "List Suppressed", "list-suppressed@example.com")
+    await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"email": "list-suppressed@example.com", "reason": "Manually flagged do-not-contact"},
+    )
+
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/enroll", json={"contact_ids": [contact_id]}
+    )
+    await client.post("/api/v1/sales/sequences/process-due-steps")
+
+    inbox = (await client.get("/api/v1/sales/inbox")).json()
+    assert inbox[0]["status"] == "blocked"
+    assert "Suppressed" in inbox[0]["blocked_reason"]
+
+
+async def test_suppression_crud_and_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "supp1@example.com", "Supp Org 1")
+
+    add = await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"email": "toremove@example.com", "reason": "Test entry"},
+    )
+    assert add.status_code == 201, add.text
+    entry_id = add.json()["id"]
+
+    listed = await client.get("/api/v1/sales/lead-finder/suppression")
+    assert any(e["id"] == entry_id for e in listed.json())
+
+    removed = await client.delete(f"/api/v1/sales/lead-finder/suppression/{entry_id}")
+    assert removed.status_code == 204
+
+    listed_again = await client.get("/api/v1/sales/lead-finder/suppression")
+    assert all(e["id"] != entry_id for e in listed_again.json())
+
+    # sales_representative doesn't get sales.suppression.manage (manager-only, see core/rbac.py)
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="supp-rep@example.com",
+        role_key="sales_representative",
+    )
+    client.cookies.set("agora_session", token)
+    denied = await client.get("/api/v1/sales/lead-finder/suppression")
+    assert denied.status_code == 403

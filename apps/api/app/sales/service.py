@@ -57,7 +57,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.compliance.governance import check_contact_permission
+from app.compliance.governance import GovernanceDecision, check_contact_permission
 from app.core.models import Task
 from app.sales.models import Account, Contact, Opportunity, OutreachMessage
 from app.support.models import Customer
@@ -81,6 +81,23 @@ async def send_outreach_message(
     actor_user_id: uuid.UUID | None,
 ) -> OutreachMessage:
     decision = await check_contact_permission(db, organization_id=organization_id, contact=contact)
+    # Also honors the Lead Finder's own suppression list
+    # (sales_suppression_entries) — independent of Contact.do_not_contact
+    # since a person can be suppressed before they're ever saved as a
+    # Contact (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §12). A
+    # superset check: this can only turn an allowed send into a blocked
+    # one, never the reverse, so it can't regress the existing
+    # do_not_contact-only behavior.
+    if decision.allowed:
+        from app.sales.suppression_service import find_matching_suppression
+
+        suppression = await find_matching_suppression(
+            db, organization_id=organization_id, email=contact.email
+        )
+        if suppression is not None:
+            decision = GovernanceDecision(
+                allowed=False, reason=f"Suppressed: {suppression.reason}"
+            )
     if not decision.allowed:
         message.status = "blocked"
         message.blocked_reason = decision.reason
