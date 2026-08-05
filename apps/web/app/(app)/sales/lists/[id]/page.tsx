@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { EmptyState } from "@/components/empty-state";
@@ -10,13 +11,51 @@ import { ErrorState } from "@/components/error-state";
 import { LoadingSkeleton } from "@/components/loading-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, API_URL } from "@/lib/api";
 import type { SalesAccount, SalesContact, SalesListItemOut, SalesListOut } from "@/lib/types";
 
 export default function SalesListDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const listId = params.id;
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  // CSV export streams a file body, not JSON — apiFetch's JSON-only
+  // wrapper doesn't fit, so this talks to the API directly and turns
+  // the response into a real browser download.
+  async function handleExport(listName: string) {
+    setExportError(null);
+    setExporting(true);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/sales/lead-finder/lists/${listId}/export`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        let message = `Export failed with status ${response.status}`;
+        try {
+          const payload = await response.json();
+          message = payload?.error?.message ?? message;
+        } catch {
+          // body wasn't JSON — keep the generic message
+        }
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${listName.replace(/\s+/g, "_")}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // No single-list GET endpoint exists on the backend — find it in the
   // collection instead of fabricating one.
@@ -82,7 +121,22 @@ export default function SalesListDetailPage() {
             {resolvedList.is_shared && <Badge variant="secondary">Shared</Badge>}
           </p>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={exporting || (items ?? []).length === 0}
+          onClick={() => handleExport(resolvedList.name)}
+        >
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+          {exporting ? "Exporting…" : "Export CSV"}
+        </Button>
       </div>
+
+      {exportError && (
+        <p className="mb-4 text-sm text-[var(--critical-600)]" role="alert">
+          {exportError}
+        </p>
+      )}
 
       {(items ?? []).length === 0 ? (
         <EmptyState
@@ -104,7 +158,7 @@ export default function SalesListDetailPage() {
                   onClick={() => account && router.push(`/sales/accounts/${account.id}`)}
                 >
                   <p className="text-sm font-medium">{account?.name ?? "Loading…"}</p>
-                  {account?.industry && <p className="text-xs text-[var(--fg-subtle)]">{account.industry}</p>}
+                  {account?.industry && <p className="text-xs text-[var(--fg-muted)]">{account.industry}</p>}
                 </button>
                 <Button
                   size="sm"
@@ -130,7 +184,7 @@ export default function SalesListDetailPage() {
                   onClick={() => contact && router.push(`/sales/contacts/${contact.id}`)}
                 >
                   <p className="text-sm font-medium">{contact?.full_name ?? "Loading…"}</p>
-                  {contact?.job_title && <p className="text-xs text-[var(--fg-subtle)]">{contact.job_title}</p>}
+                  {contact?.job_title && <p className="text-xs text-[var(--fg-muted)]">{contact.job_title}</p>}
                 </button>
                 <Button
                   size="sm"

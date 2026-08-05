@@ -115,20 +115,38 @@ export function ManualEntryDialog({
         {recordType === "company" ? (
           <div className="flex flex-col gap-3">
             <div>
-              <Label className="mb-1 block text-xs">Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Label htmlFor="manual-company-name" className="mb-1 block text-xs">
+                Name *
+              </Label>
+              <Input id="manual-company-name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label className="mb-1 block text-xs">Domain</Label>
-              <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="acme.com" />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Industry</Label>
-              <Input value={industry} onChange={(e) => setIndustry(e.target.value)} />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Employee count</Label>
+              <Label htmlFor="manual-company-domain" className="mb-1 block text-xs">
+                Domain
+              </Label>
               <Input
+                id="manual-company-domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="acme.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="manual-company-industry" className="mb-1 block text-xs">
+                Industry
+              </Label>
+              <Input
+                id="manual-company-industry"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="manual-company-employee-count" className="mb-1 block text-xs">
+                Employee count
+              </Label>
+              <Input
+                id="manual-company-employee-count"
                 type="number"
                 min={0}
                 value={employeeCount}
@@ -139,28 +157,48 @@ export function ManualEntryDialog({
         ) : (
           <div className="flex flex-col gap-3">
             <div>
-              <Label className="mb-1 block text-xs">Full name *</Label>
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Email</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Title</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-            <div>
-              <Label className="mb-1 block text-xs">Company domain</Label>
+              <Label htmlFor="manual-person-full-name" className="mb-1 block text-xs">
+                Full name *
+              </Label>
               <Input
+                id="manual-person-full-name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="manual-person-email" className="mb-1 block text-xs">
+                Email
+              </Label>
+              <Input
+                id="manual-person-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="manual-person-title" className="mb-1 block text-xs">
+                Title
+              </Label>
+              <Input id="manual-person-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="manual-person-company-domain" className="mb-1 block text-xs">
+                Company domain
+              </Label>
+              <Input
+                id="manual-person-company-domain"
                 value={companyDomain}
                 onChange={(e) => setCompanyDomain(e.target.value)}
                 placeholder="acme.com"
               />
             </div>
             <div>
-              <Label className="mb-1 block text-xs">Phone</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Label htmlFor="manual-person-phone" className="mb-1 block text-xs">
+                Phone
+              </Label>
+              <Input id="manual-person-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
           </div>
         )}

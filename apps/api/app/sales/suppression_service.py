@@ -100,10 +100,30 @@ async def remove_suppression_entry(
 
 
 async def find_matching_suppression(
-    db: AsyncSession, *, organization_id: uuid.UUID, email: str | None
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    email: str | None,
+    contact_id: uuid.UUID | None = None,
 ) -> SalesSuppressionEntry | None:
-    """Matches by exact email, or by the email's domain against any
-    domain-level suppression entry."""
+    """Matches by exact email, by the email's domain against any
+    domain-level suppression entry, or by contact_id directly — a
+    suppression entry created with only a contact_id (spec: suppress an
+    already-saved Contact without needing to also know/repeat their
+    email) must still actually block that contact; email-only matching
+    would silently never find it."""
+    if contact_id is not None:
+        by_contact = (
+            await db.execute(
+                select(SalesSuppressionEntry).where(
+                    SalesSuppressionEntry.organization_id == organization_id,
+                    SalesSuppressionEntry.contact_id == contact_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if by_contact is not None:
+            return by_contact
+
     if not email:
         return None
     email = email.lower()

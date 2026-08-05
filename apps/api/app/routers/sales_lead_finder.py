@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.sales import (
     enrichment_job_service,
     import_job_service,
     lead_finder_service,
+    linkedin_task_service,
     list_service,
     save_service,
     saved_search_service,
@@ -43,6 +44,8 @@ from app.sales.lead_finder_schemas import (
     ImportPreviewIn,
     ImportPreviewOut,
     ImportStartIn,
+    LinkedInOutreachTaskIn,
+    LinkedInOutreachTaskOut,
     ManualCompanyIn,
     ManualPersonIn,
     NormalizedCompanyOut,
@@ -68,7 +71,7 @@ from app.sales.lead_finder_schemas import (
     SuppressionEntryCreate,
     SuppressionEntryOut,
 )
-from app.sales.list_service import DuplicateListItemError
+from app.sales.list_service import DuplicateListItemError, ListExportDisabledError
 from app.sales.models import Contact
 from app.sales.nl_filter_parser import parse_query
 from app.sales.provider_models import (
@@ -255,6 +258,42 @@ async def provider_usage(
             .order_by(SalesProviderCreditUsage.created_at.desc())
             .limit(200)
         )
+    ).scalars()
+    return list(rows)
+
+
+@router.get("/credit-usage", response_model=list[CreditUsageSummaryOut])
+async def credit_usage_dashboard(
+    provider: str | None = None,
+    operation: str | None = None,
+    user_id: uuid.UUID | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.providers.manage")),
+) -> list[SalesProviderCreditUsage]:
+    """Credit-usage dashboard: organization scope is the tenant-isolation
+    boundary itself (never a selectable filter — a cross-org selector
+    here would be a real tenant-isolation bug, not a feature), plus
+    user/provider/operation/date filters and both estimated and actual
+    (never fabricated — see app.sales.enrichment_job_service, actual is
+    only ever recorded when a provider itself reports a real number)."""
+    query = select(SalesProviderCreditUsage).where(
+        SalesProviderCreditUsage.organization_id == context.organization_id
+    )
+    if provider:
+        query = query.where(SalesProviderCreditUsage.provider == provider)
+    if operation:
+        query = query.where(SalesProviderCreditUsage.operation == operation)
+    if user_id:
+        query = query.where(SalesProviderCreditUsage.requested_by_user_id == user_id)
+    if date_from:
+        query = query.where(SalesProviderCreditUsage.created_at >= date_from)
+    if date_to:
+        query = query.where(SalesProviderCreditUsage.created_at <= date_to)
+    rows = (
+        await db.execute(query.order_by(SalesProviderCreditUsage.created_at.desc()).limit(min(limit, 500)))
     ).scalars()
     return list(rows)
 
@@ -664,6 +703,34 @@ async def remove_list_item(
     await db.commit()
 
 
+@router.get("/lists/{list_id}/export")
+async def export_list(
+    list_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.lists.manage")),
+) -> Response:
+    sales_list = await _get_org_list(db, list_id, context.organization_id)
+    ip_address, user_agent = _client_meta(request)
+    try:
+        csv_text, _row_count = await list_service.export_list_csv(
+            db,
+            sales_list=sales_list,
+            actor_user_id=context.user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    except ListExportDisabledError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    await db.commit()
+    filename = f"{sales_list.name.replace(' ', '_')}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ---- Outreach eligibility and suppression ----
 
 
@@ -976,3 +1043,42 @@ async def get_contact_provenance(
             detail="No Lead Finder provenance for this contact (it wasn't created via search/import/manual entry).",
         )
     return record
+
+
+# ---- Manual LinkedIn outreach (no scraping, no automation — see
+# app.sales.linkedin_task_service) ----
+
+
+@router.post(
+    "/contacts/{contact_id}/linkedin-task",
+    response_model=LinkedInOutreachTaskOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_linkedin_outreach_task(
+    contact_id: uuid.UUID,
+    payload: LinkedInOutreachTaskIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.accounts.manage")),
+) -> LinkedInOutreachTaskOut:
+    contact = await db.get(Contact, contact_id)
+    if contact is None or contact.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    if payload.linkedin_url and not linkedin_task_service.is_plausible_linkedin_url(payload.linkedin_url):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="linkedin_url must be a linkedin.com profile URL",
+        )
+    ip_address, user_agent = _client_meta(request)
+    task = await linkedin_task_service.create_linkedin_outreach_task(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        contact=contact,
+        linkedin_url=payload.linkedin_url,
+        message=payload.message,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    return LinkedInOutreachTaskOut(task_id=task.id, linkedin_url=contact.linkedin_url)

@@ -46,6 +46,7 @@ class ContactOut(BaseModel):
     job_title: str | None
     account_id: uuid.UUID | None
     do_not_contact: bool
+    linkedin_url: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import File, Membership, MembershipRole
+from app.core.models import File, Membership, MembershipRole, Organization, Task
 from app.core.rbac import get_system_role
 from app.core.storage import upload_object
 from app.identity.models import User
@@ -403,6 +403,103 @@ async def test_enrich_requires_permission(client: AsyncClient, db_session: Async
     assert response.status_code == 403
 
 
+async def test_credit_usage_dashboard_filters_by_provider_operation_user_and_date(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "credit1@example.com", "Credit Org 1")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    account_id = saved.json()["account_id"]
+    await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [account_id]},
+    )
+
+    all_usage = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert all_usage.status_code == 200
+    rows = all_usage.json()
+    assert len(rows) == 1
+    row = rows[0]
+    # EnrichIn.provider defaults to "apollo" — the requested provider key
+    # is what's recorded regardless of whether it internally fell back to
+    # demo data (Apollo isn't configured in this test environment; see
+    # test_company_search_returns_demo_labeled_results for where the
+    # demo/apollo distinction actually surfaces to the caller instead).
+    assert row["provider"] == "apollo"
+    assert row["operation"] == "enrich_company"
+    assert row["requested_by_user_id"] is not None
+    assert "estimated_credits" in row
+    assert "actual_credits" in row
+
+    by_provider = await client.get("/api/v1/sales/lead-finder/credit-usage?provider=apollo")
+    assert len(by_provider.json()) == 1
+    by_wrong_provider = await client.get("/api/v1/sales/lead-finder/credit-usage?provider=hubspot")
+    assert by_wrong_provider.json() == []
+
+    by_operation = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?operation=enrich_company"
+    )
+    assert len(by_operation.json()) == 1
+    by_wrong_operation = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?operation=enrich_person"
+    )
+    assert by_wrong_operation.json() == []
+
+    by_user = await client.get(f"/api/v1/sales/lead-finder/credit-usage?user_id={row['requested_by_user_id']}")
+    assert len(by_user.json()) == 1
+    by_wrong_user = await client.get(f"/api/v1/sales/lead-finder/credit-usage?user_id={uuid.uuid4()}")
+    assert by_wrong_user.json() == []
+
+    future = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?date_from=2999-01-01T00:00:00Z"
+    )
+    assert future.json() == []
+    past = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?date_from=2000-01-01T00:00:00Z"
+    )
+    assert len(past.json()) == 1
+
+
+async def test_credit_usage_dashboard_requires_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "credit2a@example.com", "Credit Org 2a")
+
+    # sales_representative doesn't get sales.lead_finder.providers.manage (manager-only)
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="credit2a-rep@example.com",
+        role_key="sales_representative",
+    )
+    client.cookies.set("agora_session", token)
+    denied = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert denied.status_code == 403
+
+
+async def test_credit_usage_dashboard_isolated_per_organization(client: AsyncClient) -> None:
+    await _signup(client, "credit3a@example.com", "Credit Org 3a")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [saved.json()["account_id"]]},
+    )
+
+    await _signup(client, "credit3b@example.com", "Credit Org 3b")
+    other_org = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert other_org.status_code == 200
+    assert other_org.json() == []
+
+
 async def test_saved_search_is_isolated_per_organization(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -563,6 +660,49 @@ async def test_suppression_crud_and_permission(
     client.cookies.set("agora_session", token)
     denied = await client.get("/api/v1/sales/lead-finder/suppression")
     assert denied.status_code == 403
+
+
+async def test_suppression_by_contact_id_alone_blocks_eligibility_and_send(
+    client: AsyncClient,
+) -> None:
+    """Regression: a suppression entry created with only a contact_id (no
+    email/domain) must actually block that contact — find_matching_
+    suppression used to only ever match by email/domain, so a contact_id-
+    only entry was silently never found (caught by
+    e2e/sales-lead-finder.spec.ts's "campaign compliance block" journey)."""
+    await _signup(client, "supp-contact1@example.com", "Supp Contact Org 1")
+    contact_id = await _create_contact(client, "Contact ID Suppressed", "contact-id-suppressed@example.com")
+
+    add = await client.post(
+        "/api/v1/sales/lead-finder/suppression",
+        json={"contact_id": contact_id, "reason": "Suppressed by contact_id only"},
+    )
+    assert add.status_code == 201, add.text
+
+    eligibility = await client.post(
+        "/api/v1/sales/lead-finder/eligibility/check", json={"contact_id": contact_id}
+    )
+    assert eligibility.status_code == 200
+    body = eligibility.json()
+    assert body["status"] == "blocked"
+    assert "Suppressed by contact_id only" in body["reasons"][0]
+
+    sequence = await client.post(
+        "/api/v1/sales/sequences", json={"name": "Contact-ID Suppression Sequence"}
+    )
+    sequence_id = sequence.json()["id"]
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/steps",
+        json={"wait_days": 0, "channel": "email", "body_template": "Hi {{first_name}}"},
+    )
+    await client.post(
+        f"/api/v1/sales/sequences/{sequence_id}/enroll", json={"contact_ids": [contact_id]}
+    )
+    await client.post("/api/v1/sales/sequences/process-due-steps")
+
+    inbox = (await client.get("/api/v1/sales/inbox")).json()
+    assert inbox[0]["status"] == "blocked"
+    assert "Suppressed by contact_id only" in inbox[0]["blocked_reason"]
 
 
 # ---- CSV import and manual entry ----
@@ -889,3 +1029,217 @@ async def test_contact_provenance_isolated_per_organization(
     await _signup(client, "provenance3b@example.com", "Provenance Org 3b")
     other_org = await client.get(f"/api/v1/sales/lead-finder/provenance/contact/{contact_id}")
     assert other_org.status_code == 404
+
+
+# ---- Manual LinkedIn outreach ----
+
+
+async def test_linkedin_task_creates_task_and_stores_profile_url(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "linkedin1@example.com", "LinkedIn Org 1")
+    contact_id = await _create_contact(client, "LinkedIn Target", "linkedin-target@example.com")
+
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={
+            "linkedin_url": "https://www.linkedin.com/in/linkedin-target",
+            "message": "Hi — following up after our conversation at the conference.",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["linkedin_url"] == "https://www.linkedin.com/in/linkedin-target"
+
+    contact = await db_session.get(Contact, uuid.UUID(contact_id))
+    assert contact is not None
+    assert contact.linkedin_url == "https://www.linkedin.com/in/linkedin-target"
+
+    task = await db_session.get(Task, uuid.UUID(body["task_id"]))
+    assert task is not None
+    assert task.module == "sales"
+    assert task.entity_type == "sales_contact"
+    assert task.entity_id == contact_id
+    assert "conference" in (task.description or "")
+
+
+async def test_linkedin_task_rejects_a_non_linkedin_url(client: AsyncClient) -> None:
+    await _signup(client, "linkedin2@example.com", "LinkedIn Org 2")
+    contact_id = await _create_contact(client, "Bad URL Target", "bad-url-target@example.com")
+
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"linkedin_url": "https://evil.example.com/scrape", "message": "hi"},
+    )
+    assert response.status_code == 422
+
+
+async def test_linkedin_task_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "linkedin3@example.com", "LinkedIn Org 3")
+    contact_id = await _create_contact(client, "Perm Target", "perm-target@example.com")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="linkedin-employee@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"message": "hi"},
+    )
+    assert response.status_code == 403
+
+
+async def test_linkedin_task_404_for_contact_in_another_organization(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "linkedin4a@example.com", "LinkedIn Org 4a")
+    contact_id = await _create_contact(client, "Cross Tenant Target", "cross-tenant-target@example.com")
+
+    await _signup(client, "linkedin4b@example.com", "LinkedIn Org 4b")
+    response = await client.post(
+        f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
+        json={"message": "hi"},
+    )
+    assert response.status_code == 404
+
+
+# ---- Saved-list CSV export ----
+
+
+async def _create_company_list_with_one_item(client: AsyncClient) -> tuple[str, str]:
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/company",
+        json={"name": "Export Target Co", "domain": "export-target.example", "employee_count": 42},
+    )
+    assert manual.status_code == 201, manual.text
+    account_id = manual.json()["account_id"]
+
+    create_list = await client.post(
+        "/api/v1/sales/lead-finder/lists", json={"name": "Export List", "list_type": "company"}
+    )
+    assert create_list.status_code == 201, create_list.text
+    list_id = create_list.json()["id"]
+
+    add = await client.post(
+        f"/api/v1/sales/lead-finder/lists/{list_id}/items", json={"account_id": account_id}
+    )
+    assert add.status_code == 201, add.text
+    return list_id, account_id
+
+
+async def test_export_company_list_returns_csv_with_expected_rows(client: AsyncClient) -> None:
+    await _signup(client, "export1@example.com", "Export Org 1")
+    list_id, account_id = await _create_company_list_with_one_item(client)
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in response.headers["content-disposition"]
+
+    lines = response.text.strip("\r\n").split("\r\n")
+    header = lines[0].split(",")
+    assert header == [
+        "name",
+        "industry",
+        "website",
+        "employee_count",
+        "icp_score",
+        "status",
+        "account_id",
+        "added_at",
+    ]
+    assert len(lines) == 2
+    row = lines[1].split(",")
+    assert row[0] == "Export Target Co"
+    assert row[3] == "42"
+    assert row[6] == account_id
+
+
+async def test_export_person_list_returns_csv_with_expected_rows(client: AsyncClient) -> None:
+    await _signup(client, "export2@example.com", "Export Org 2")
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/person",
+        json={"full_name": "Export Target Person", "email": "export-target-person@example.com"},
+    )
+    assert manual.status_code == 201, manual.text
+    contact_id = manual.json()["contact_id"]
+
+    create_list = await client.post(
+        "/api/v1/sales/lead-finder/lists", json={"name": "Export People", "list_type": "person"}
+    )
+    list_id = create_list.json()["id"]
+    add = await client.post(
+        f"/api/v1/sales/lead-finder/lists/{list_id}/items", json={"contact_id": contact_id}
+    )
+    assert add.status_code == 201, add.text
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+    lines = response.text.strip("\r\n").split("\r\n")
+    header = lines[0].split(",")
+    assert header == ["full_name", "email", "job_title", "do_not_contact", "contact_id", "added_at"]
+    row = lines[1].split(",")
+    assert row[0] == "Export Target Person"
+    assert row[1] == "export-target-person@example.com"
+    assert row[4] == contact_id
+
+
+async def test_export_list_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "export-rbac@example.com", "Export RBAC Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    token = await _create_member_with_role(
+        db_session, organization_id=organization_id, email="export-employee@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 403
+
+
+async def test_export_list_blocked_when_organization_disables_it(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "export-disabled@example.com", "Export Disabled Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    organization = await db_session.get(Organization, organization_id)
+    assert organization is not None
+    organization.allow_list_export = False
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 403
+    assert "disabled" in response.json()["error"]["message"].lower()
+
+
+async def test_export_list_records_audit_event_with_row_count(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "export-audit@example.com", "Export Audit Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+
+    from app.audit.models import AuditEvent
+
+    event = (
+        await db_session.execute(
+            select(AuditEvent).where(
+                AuditEvent.action == "sales.lead_finder.list.exported",
+                AuditEvent.object_id == list_id,
+            )
+        )
+    ).scalar_one()
+    assert event.after_state["row_count"] == 1
+
+
+async def test_export_list_404_for_list_in_another_organization(client: AsyncClient) -> None:
+    await _signup(client, "export-tenant-a@example.com", "Export Tenant A")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    await _signup(client, "export-tenant-b@example.com", "Export Tenant B")
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 404

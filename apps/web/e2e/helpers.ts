@@ -1,4 +1,13 @@
+import { execSync } from "node:child_process";
+
 import { expect, type Page } from "@playwright/test";
+
+// The FastAPI backend, not the Next.js dev server `page.request` inherits
+// its baseURL from — a request to a *relative* /api/v1/... path would hit
+// the web container's own (nonexistent) route and get its HTML 404 page
+// back instead of JSON. Same host-mapped port apps/web/lib/api.ts's
+// NEXT_PUBLIC_API_URL points the browser's own fetch calls at.
+export const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://localhost:8001";
 
 export type SignedUpOrg = {
   email: string;
@@ -42,4 +51,38 @@ export async function login(page: Page, org: Pick<SignedUpOrg, "email" | "passwo
 export async function logout(page: Page): Promise<void> {
   await page.getByRole("button", { name: "User menu" }).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
+}
+
+/** No real email provider is configured in this environment (spec —
+ * see docs/KNOWN_LIMITATIONS.md), so invitations are logged rather than
+ * emailed (`app.core.invitations._dispatch_invitation_email`) — the
+ * same real docker-compose stack the whole E2E suite already runs
+ * against (project name "agora-origin", infra/docker/docker-compose.yml)
+ * is where that log line actually lands, both locally and in CI. This
+ * reads it back rather than mocking the email step. */
+export async function getLatestInvitationUrl(email: string): Promise<string> {
+  // The container's log driver can lag a moment behind the HTTP response
+  // that triggered it — poll briefly rather than assuming the line is
+  // already flushed the instant the invite request resolves.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    // uvicorn/Python's logging module writes to stderr, not stdout —
+    // execSync only captures stdout by default, so merge streams at the
+    // shell level or the invitation log line (and everything else) is
+    // silently invisible to this process despite `docker logs` showing
+    // it fine in an interactive terminal (which displays both).
+    const logs = execSync("docker logs agora-origin-api-1 --tail 3000 2>&1", { encoding: "utf-8" });
+    const matchingLines = logs
+      .split("\n")
+      .filter((line) => line.includes("Invitation to join") && line.includes(email));
+    const lastLine = matchingLines[matchingLines.length - 1];
+    if (lastLine) {
+      const match = lastLine.match(/(https?:\/\/\S+\/invite\/\S+)/);
+      if (!match) {
+        throw new Error(`Could not parse an invite URL out of log line: ${lastLine}`);
+      }
+      return match[1];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`No invitation log line found for ${email} in the api container's logs`);
 }

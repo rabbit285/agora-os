@@ -66,6 +66,12 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Suppression flag — spec section 91, checked by
     # app.sales.service.send_outreach_message before any send.
     do_not_contact: Mapped[bool] = mapped_column(default=False)
+    # A manually-approved profile URL only — never scraped, never used to
+    # drive automated login/connection-requests/messaging (spec's explicit
+    # LinkedIn prohibitions). See app.sales.linkedin_task_service: the only
+    # things this build ever does with it are store it, open it in a new
+    # tab, and let a human draft a message that becomes a real core.Task.
+    linkedin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # An exact-email duplicate Contact is never legitimate (see
     # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §10) — declared on the model

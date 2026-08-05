@@ -62,7 +62,7 @@ function RunResultsDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">{company.name}</p>
-                      <p className="text-xs text-[var(--fg-subtle)]">{company.domain}</p>
+                      <p className="text-xs text-[var(--fg-muted)]">{company.domain}</p>
                     </div>
                     {company.dedupe_status === "existing" ? (
                       <Badge variant="outline">Saved</Badge>
@@ -83,7 +83,7 @@ function RunResultsDialog({
                   >
                     <div>
                       <p className="text-sm font-medium">{person.full_name}</p>
-                      <p className="text-xs text-[var(--fg-subtle)]">{person.title ?? person.email}</p>
+                      <p className="text-xs text-[var(--fg-muted)]">{person.title ?? person.email}</p>
                     </div>
                     {person.dedupe_status === "existing" ? (
                       <Badge variant="outline">Saved</Badge>

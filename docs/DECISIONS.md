@@ -2538,3 +2538,130 @@ retrieval-grounded `ask_copilot` call, honestly falling back to the
 Copilot's own "no evidence" message when the org's knowledge base has
 nothing relevant, rather than a fabricated summary — stored on the new
 `Lead.ai_account_brief` column.
+
+## ADR-0062 — Sales Lead Finder: a new provider-neutral discovery layer sits beside (not inside) the existing Lead Finder, with Apollo as a single deployment-wide key rather than a per-organization OAuth connection
+
+**Decision**: the pre-existing `/api/v1/sales/leads/find` "Lead Finder"
+(`app.sales.lead_finder.find_and_create_leads`) only ever rescans
+Accounts already in the database against the org's ICP profile — it has
+no external discovery capability and zero "Apollo" (or any prospecting
+provider) references anywhere in the repo, confirmed by a full-repo
+audit (see `docs/SALES_LEAD_FINDER_AUDIT.md`). Rather than overload that
+endpoint's meaning, the new external company/people discovery workspace
+is a separate, bounded surface — `/api/v1/sales/lead-finder/*`
+(`app.routers.sales_lead_finder`) — leaving the original endpoint,
+route, and its existing tests completely unchanged. The two "Lead
+Finder" names collide on purpose only in the product sense (both help a
+rep find leads); `docs/ROUTES_AND_SCREENS.md` calls out the distinction
+explicitly so it doesn't read as a duplicate.
+
+A new `SalesDataProvider` Protocol (`app.sales.providers.base`) is a
+deliberate sibling — not a reuse — of the existing OAuth connector
+adapter Protocol (`app.integrations.adapters.base.
+OAuthConnectorAdapter`): a discovery provider's capability shape
+(search/enrich/estimate-credits, no user-initiated OAuth flow) is
+genuinely different from a CRM sync connector's. Concretely, this means
+Apollo is configured with one deployment-wide `APOLLO_API_KEY` env var
+(the same credential-gated-honesty pattern every other optional
+integration in `app.config` already follows: absent key -> feature
+reports `configured=False` and falls back to a deterministic,
+clearly-labeled demo adapter, matched by a parallel `SalesProviderStatus`
+enum distinct from `apps/web`'s OAuth `IntegrationStatus` — see
+`app.sales.providers.status`), not a per-organization connection a user
+connects/disconnects/revokes through the UI the way HubSpot/Pipedrive
+are. The frontend mirrors this: the Lead Finder's provider status card
+is a small read-only `StatusBadge`, not the OAuth `IntegrationCard`
+component, since there's no Connect/Disconnect/Revoke action to expose.
+
+Selective/bulk enrichment (`SalesBulkEnrichmentWorkflow`) and CSV import
+(`SalesCsvImportWorkflow`) both mirror the existing
+`IntegrationSyncWorkflow`/`app.integrations.service`
+create/execute/run three-way split exactly (a `running` row written
+synchronously so the frontend can poll immediately; the real work in a
+directly-testable `execute_*` function; a small-batch synchronous
+convenience wrapper for tests and sub-threshold requests) — the same
+discipline already established for document ingestion and integration
+syncs, applied to two more domains rather than inventing a new pattern.
+
+CSV-imported and manually-entered records reuse the exact same
+`save_service.save_company_as_account`/`save_person_as_contact`
+dedupe-aware write path a provider search result uses — they differ only
+in `NormalizedCompany.provider` ("csv"/"manual" vs. "apollo"/"demo"),
+which `save_service` maps to `verification_status="user_entered"`
+instead of `"provider_supplied"`. One write path, one place dedupe can
+ever diverge, and a hard guarantee that an imported or hand-typed row
+can never be mistaken for a provider-verified one downstream.
+
+The new outreach-eligibility suppression list
+(`sales_suppression_entries`) extends `app.compliance.governance`'s
+existing `check_contact_permission` gate at `send_outreach_message` as a
+strict superset (can only turn an allowed send into a blocked one, never
+the reverse) rather than a parallel check, which is provably incapable
+of regressing the already-tested `do_not_contact`-only behavior
+(`test_advance_respects_suppression`) while still covering people who
+were suppressed before they were ever saved as a Contact.
+
+## ADR-0063 — Closing the Sales Lead Finder's remaining acceptance gaps: real E2E/accessibility coverage, a manual (non-scraping) LinkedIn task flow, a credit-usage dashboard, and RBAC/policy-gated CSV export
+
+**Decision**: five gaps identified against the original brief (§35 test
+list, §21 accessibility requirement, §23 LinkedIn outreach, §26 credit
+dashboard, §27 list export) were closed as a follow-up pass on top of
+ADR-0062's foundation, each reusing an existing mechanism rather than
+inventing a new one.
+
+**Playwright + accessibility** (`apps/web/e2e/sales-lead-finder.spec.ts`,
+`sales-lead-finder-accessibility.spec.ts`): 19 journeys mapped 1:1 to the
+brief's own numbering (not a superset or a reinterpretation), run against
+the real dev stack — no mocked API, no stubbed auth. The accessibility
+suite is `@axe-core/playwright` (WCAG 2.1 A/AA tag set) across every real
+page state this branch owns, plus two keyboard-only tests proving the
+primary journey and dialog focus-trapping are operable without a mouse
+(axe's static analysis alone can't catch an interaction trap). Building
+these tests against the live stack surfaced three real product bugs,
+fixed rather than worked around: a list-row checkbox whose click bubbled
+into the row's own "open detail dialog" handler; suppression entries
+keyed only by `contact_id` never actually being checked by
+`find_matching_suppression` (which only queried by email/domain); and a
+`text-[var(--fg-subtle)]` (2.56:1 contrast) token used for real text in
+several of this branch's own components, swapped to `--fg-muted`
+(passes AA). One pre-existing violation (`nav[aria-label="Primary"]`,
+shared app-shell chrome used by 70+ routes) was excluded from scans and
+flagged as an out-of-scope follow-up rather than silently ignored or
+fixed inline.
+
+**LinkedIn outreach** (`app.sales.linkedin_task_service`): per the
+brief's explicit no-scraping, no-unofficial-automation constraint, the
+richest capability this build can honestly offer is storing a profile
+URL (`Contact.linkedin_url`, validated against a `linkedin.com/`
+prefix) and turning a drafted message into a real `Task`
+(`entity_type="sales_contact"`) assigned to the acting user — the exact
+same "human does the actual send" pattern already established for email
+sequences' compliance gating, just with no automated send step at all
+for LinkedIn specifically.
+
+**Credit-usage dashboard** (`GET /lead-finder/credit-usage`): filters by
+provider/operation/user/date range, reusing the existing
+`sales.lead_finder.providers.manage` permission rather than minting a
+new key. No organization filter exists by design —
+`context.organization_id` is already the tenant boundary every other
+endpoint in this router enforces, so a cross-org selector here would
+itself be the kind of tenant-isolation bug `tests/test_tenant_isolation.py`
+exists to catch, not a feature. `actual_credits` stays `null`
+("Unknown" in the UI) rather than a fabricated copy of the estimate when
+a provider doesn't report real usage, matching every other
+credit-tracking surface in this module (ADR-0062).
+
+**Saved-list CSV export** (`GET /lead-finder/lists/{id}/export`): gated
+by both the acting user's own RBAC permission
+(`sales.lead_finder.lists.manage`) and a new organization-level policy
+toggle, `Organization.allow_list_export` (default `True`) — independent
+axes on purpose, since an org admin may want to let managers manage
+lists while still disabling bulk data egress entirely, a decision the
+acting user's own permissions can't express. Every export is
+audit-logged with its row count
+(`sales.lead_finder.list.exported`). The frontend's "Export CSV" button
+can't use the app's `apiFetch` JSON-only wrapper for a raw file
+response, so it calls the API directly and turns the response into a
+browser download via a `Blob` + object URL — the same shape a future
+non-JSON download endpoint elsewhere in the app should follow rather
+than reinventing.

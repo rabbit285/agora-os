@@ -97,11 +97,15 @@ table rather than a fourth table.
 
 | Route | Status |
 |---|---|
-| `/sales` | [x] Sales Intelligence dashboard, accounts, leads, pipeline overview, Lead Finder button |
-| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won, and a deal-blocker link to `/compliance/security-reviews/[id]` once a security review exists), ICP score badge, Enrich button |
+| `/sales` | [x] Sales Intelligence dashboard, accounts, leads, pipeline overview, "Run Lead Finder" button (the older DB-only ICP rescanner, `/api/v1/sales/leads/find` — distinct from the external-discovery workspace below) |
+| `/sales/lead-finder` | [x] Lead Finder workspace — provider status card, Companies/People tabs (collapsible filter sidebar, active-filter chips, natural-language search review, dense results table, per-row Save, bulk toolbar with Save/Add to list/Save & enrich with a required credit-estimate confirm, CSV import, manual entry), company detail dialog's decision-makers section with a "Create Lead" action, header link to Credit Usage for managers |
+| `/sales/lead-finder/saved-searches` | [x] saved search CRUD, run-and-review results inline |
+| `/sales/lead-finder/credit-usage` | [x] provider credit-spend dashboard (manager-only) — provider/operation/user/date-range filters, estimated vs. actual (never fabricated; "Unknown" when a provider doesn't report real usage) |
+| `/sales/lists` , `/sales/lists/[id]` | [x] company/person list CRUD, list detail with item removal, CSV export (RBAC + organization `allow_list_export` policy-gated, audited) |
+| `/sales/accounts/[id]` | [x] detail: contacts (suppression toggle), compose/send outreach, opportunities (with an "Onboarded as a Support customer" link once closed_won, and a deal-blocker link to `/compliance/security-reviews/[id]` once a security review exists), ICP score badge, Enrich button, Lead Finder provenance card (source/verification status, shown only for records the Lead Finder created) |
 | `/sales/icp` | [x] ICP Builder — saving immediately rescans every Account |
 | `/sales/leads/[id]` | [x] detail: linked account/contact, status workflow |
-| `/sales/contacts/[id]` | [x] detail: linked account, outreach history, suppression toggle |
+| `/sales/contacts/[id]` | [x] detail: linked account, outreach history, suppression toggle, Lead Finder provenance card, outreach eligibility panel (eligible/requires_review/blocked/unknown with reasons), manual LinkedIn outreach panel (profile URL + draft message → a real Task, no scraping or automated sending) |
 | `/sales/opportunities/[id]` | [x] detail: linked account, stage workflow, onboarding indicator |
 | `/sales/sequences`, `/sales/sequences/[id]` | [x] Sequence list + Sequence Builder (steps, enrollments, enroll-a-contact) |
 | `/sales/campaigns`, `/sales/campaigns/[id]` | [x] Campaign list + create + real stats (enrolled/sent/blocked/completed) |

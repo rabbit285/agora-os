@@ -179,10 +179,14 @@ export function ImportDialog({
             <div className="grid grid-cols-2 gap-2">
               {targetFields.map((field) => (
                 <div key={field}>
-                  <label className="mb-1 block text-xs font-medium capitalize text-[var(--fg-default)]">
+                  <label
+                    htmlFor={`import-mapping-${field}`}
+                    className="mb-1 block text-xs font-medium capitalize text-[var(--fg-default)]"
+                  >
                     {field.replace(/_/g, " ")}
                   </label>
                   <Select
+                    id={`import-mapping-${field}`}
                     value={mapping[field] ?? ""}
                     onChange={(e) => setMapping((m) => ({ ...m, [field]: e.target.value }))}
                   >

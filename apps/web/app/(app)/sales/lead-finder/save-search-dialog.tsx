@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function SaveSearchDialog({
   open,
@@ -36,7 +37,11 @@ export function SaveSearchDialog({
         <DialogHeader>
           <DialogTitle>Save this search</DialogTitle>
         </DialogHeader>
+        <Label htmlFor="save-search-name" className="mb-1 block text-xs">
+          Search name
+        </Label>
         <Input
+          id="save-search-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Series B fintech in DACH"

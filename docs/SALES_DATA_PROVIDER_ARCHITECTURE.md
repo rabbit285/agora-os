@@ -178,6 +178,14 @@ usage" view; the UI shows `estimated_credits` before an action, `actual_credits`
 a value the provider itself didn't supply — the honesty rule from the brief applies
 literally to this field.
 
+`GET /api/v1/sales/lead-finder/credit-usage` (`sales.lead_finder.providers.manage`,
+`/sales/lead-finder/credit-usage` in the frontend) exposes the raw
+`sales_provider_credit_usage` rows directly rather than a pre-aggregated view, with
+provider/operation/`requested_by_user_id`/date-range filters. Deliberately has no
+organization filter: `context.organization_id` is already the tenant boundary every row in
+this table is scoped by, so a cross-org selector would itself be a tenant-isolation bug, not
+a feature.
+
 ## 7. Provenance and retention
 
 New table `sales_provider_records` — the single provenance source of truth for **both**
@@ -303,6 +311,16 @@ a raw search result implicitly runs "save as Account/Contact" first if the recor
 saved yet (surfaced to the user as a single action, one API call, documented as such — never
 a silent double-write the user didn't ask for).
 
+`GET /api/v1/sales/lead-finder/lists/{id}/export` (`sales.lead_finder.lists.manage`) streams
+a real CSV of a list's items — company lists get `name, industry, website, employee_count,
+icp_score, status, account_id, added_at`; person lists get `full_name, email, job_title,
+do_not_contact, contact_id, added_at`. Gated by a second, independent axis beyond the
+acting user's own RBAC permission: `Organization.allow_list_export` (bool, default `True`,
+`app/core/models.py`), an org-admin-controlled policy toggle checked in the service layer
+(`ListExportDisabledError` -> 403) — an org can permit managers to manage lists while still
+disabling bulk data egress entirely, a distinction the user's own permission grant can't
+express on its own.
+
 ## 12. Suppression and outreach eligibility
 
 New table `sales_suppression_entries` (`organization_id, email (nullable, normalized),
@@ -374,6 +392,15 @@ only — the first real manager/rep permission split in this module, called out 
 in the implementation plan since it's a behavior change from today's "identical grants for
 both roles."
 
+The credit-usage dashboard and saved-list CSV export endpoints deliberately reuse
+`sales.lead_finder.providers.manage` and `sales.lead_finder.lists.manage` respectively
+rather than minting new keys — each action's shape (view provider spend; manage a list's
+contents) already matches an existing manager-scoped capability, so a new permission would
+only add a key nobody needs to reason about separately. The LinkedIn outreach task endpoint
+reuses the pre-existing `sales.accounts.manage` for the same reason — creating an outreach
+task against a Contact is the same capability as editing that Contact's other outreach
+fields, not a separate managed surface.
+
 ## 15. Audit events
 
 `sales.lead_finder.search_executed`, `sales.lead_finder.saved_search.created/updated/deleted`,
@@ -383,8 +410,11 @@ both roles."
 `sales.lead_finder.duplicate.detected`, `sales.suppression.added/removed`,
 `sales.lead_finder.eligibility.blocked` (fired whenever `evaluate_outreach_eligibility`
 returns `blocked` for a bulk-enrollment attempt, `policy_decision="denied"` — mirrors the
-existing `sales.outreach.send_attempted` pattern), `sales.lead_finder.provider.status_changed`.
-All follow the existing `record_event()` flush-before-id discipline.
+existing `sales.outreach.send_attempted` pattern), `sales.lead_finder.provider.status_changed`,
+`sales.lead_finder.linkedin_task.created` (contact id, stored `linkedin_url`),
+`sales.lead_finder.list.exported` (list id, exported row count — no row-level content, since
+the audit log is not itself a copy of the export). All follow the existing `record_event()`
+flush-before-id discipline.
 
 ## 16. Temporal workflow
 

@@ -274,10 +274,12 @@ class ProviderStatusOut(BaseModel):
 
 
 class CreditUsageSummaryOut(BaseModel):
+    id: uuid.UUID
     provider: str
     operation: str
     estimated_credits: int
     actual_credits: int | None
+    requested_by_user_id: uuid.UUID | None
     succeeded: bool
     created_at: datetime
 
@@ -403,6 +405,16 @@ class ManualPersonIn(BaseModel):
     phone: str | None = None
     location: str | None = None
     account_id: uuid.UUID | None = None
+
+
+class LinkedInOutreachTaskIn(BaseModel):
+    linkedin_url: str | None = Field(default=None, max_length=500)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class LinkedInOutreachTaskOut(BaseModel):
+    task_id: uuid.UUID
+    linkedin_url: str | None
 
 
 class ProvenanceOut(BaseModel):

@@ -42,11 +42,13 @@ function FilterGroup({
 }
 
 function ListField({
+  id,
   label,
   value,
   onChange,
   placeholder,
 }: {
+  id: string;
   label: string;
   value: string[] | undefined;
   onChange: (next: string[]) => void;
@@ -54,8 +56,11 @@ function ListField({
 }) {
   return (
     <div>
-      <Label className="mb-1 block text-xs">{label}</Label>
+      <Label htmlFor={id} className="mb-1 block text-xs">
+        {label}
+      </Label>
       <Input
+        id={id}
         defaultValue={(value ?? []).join(", ")}
         onBlur={(e) => onChange(parseList(e.target.value))}
         placeholder={placeholder ?? "Comma-separated"}
@@ -125,16 +130,22 @@ export function CompanyFilterFields({
     <>
       <FilterGroup title="Company">
         <div>
-          <Label className="mb-1 block text-xs">Name</Label>
+          <Label htmlFor="company-filter-name" className="mb-1 block text-xs">
+            Name
+          </Label>
           <Input
+            id="company-filter-name"
             value={filters.name ?? ""}
             onChange={(e) => onChange({ ...filters, name: e.target.value || undefined })}
             className="text-xs"
           />
         </div>
         <div>
-          <Label className="mb-1 block text-xs">Domain</Label>
+          <Label htmlFor="company-filter-domain" className="mb-1 block text-xs">
+            Domain
+          </Label>
           <Input
+            id="company-filter-domain"
             value={filters.domain ?? ""}
             onChange={(e) => onChange({ ...filters, domain: e.target.value || undefined })}
             placeholder="acme.com"
@@ -142,19 +153,24 @@ export function CompanyFilterFields({
           />
         </div>
         <ListField
+          id="company-filter-locations"
           label="Locations"
           value={filters.locations}
           onChange={(next) => onChange({ ...filters, locations: next })}
         />
         <ListField
+          id="company-filter-industries"
           label="Industries"
           value={filters.industries}
           onChange={(next) => onChange({ ...filters, industries: next })}
         />
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="mb-1 block text-xs">Min employees</Label>
+            <Label htmlFor="company-filter-min-employees" className="mb-1 block text-xs">
+              Min employees
+            </Label>
             <Input
+              id="company-filter-min-employees"
               type="number"
               min={0}
               value={filters.min_employee_count ?? ""}
@@ -168,8 +184,11 @@ export function CompanyFilterFields({
             />
           </div>
           <div>
-            <Label className="mb-1 block text-xs">Max employees</Label>
+            <Label htmlFor="company-filter-max-employees" className="mb-1 block text-xs">
+              Max employees
+            </Label>
             <Input
+              id="company-filter-max-employees"
               type="number"
               min={0}
               value={filters.max_employee_count ?? ""}
@@ -186,16 +205,19 @@ export function CompanyFilterFields({
       </FilterGroup>
       <FilterGroup title="Signals" defaultOpen={false}>
         <ListField
+          id="company-filter-technologies"
           label="Technologies"
           value={filters.technologies}
           onChange={(next) => onChange({ ...filters, technologies: next })}
         />
         <ListField
+          id="company-filter-keywords"
           label="Keywords"
           value={filters.keywords}
           onChange={(next) => onChange({ ...filters, keywords: next })}
         />
         <ListField
+          id="company-filter-funding-stages"
           label="Funding stages"
           value={filters.funding_stages}
           onChange={(next) => onChange({ ...filters, funding_stages: next })}
@@ -203,8 +225,11 @@ export function CompanyFilterFields({
         />
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="mb-1 block text-xs">Min revenue</Label>
+            <Label htmlFor="company-filter-min-revenue" className="mb-1 block text-xs">
+              Min revenue
+            </Label>
             <Input
+              id="company-filter-min-revenue"
               type="number"
               min={0}
               value={filters.min_revenue ?? ""}
@@ -215,8 +240,11 @@ export function CompanyFilterFields({
             />
           </div>
           <div>
-            <Label className="mb-1 block text-xs">Max revenue</Label>
+            <Label htmlFor="company-filter-max-revenue" className="mb-1 block text-xs">
+              Max revenue
+            </Label>
             <Input
+              id="company-filter-max-revenue"
               type="number"
               min={0}
               value={filters.max_revenue ?? ""}
@@ -242,16 +270,22 @@ export function PersonFilterFields({
   return (
     <FilterGroup title="People">
       <div>
-        <Label className="mb-1 block text-xs">Name</Label>
+        <Label htmlFor="person-filter-name" className="mb-1 block text-xs">
+          Name
+        </Label>
         <Input
+          id="person-filter-name"
           value={filters.name ?? ""}
           onChange={(e) => onChange({ ...filters, name: e.target.value || undefined })}
           className="text-xs"
         />
       </div>
       <div>
-        <Label className="mb-1 block text-xs">Company domain</Label>
+        <Label htmlFor="person-filter-company-domain" className="mb-1 block text-xs">
+          Company domain
+        </Label>
         <Input
+          id="person-filter-company-domain"
           value={filters.current_company_domain ?? ""}
           onChange={(e) =>
             onChange({ ...filters, current_company_domain: e.target.value || undefined })
@@ -261,27 +295,32 @@ export function PersonFilterFields({
         />
       </div>
       <ListField
+        id="person-filter-titles"
         label="Titles"
         value={filters.titles}
         onChange={(next) => onChange({ ...filters, titles: next })}
       />
       <ListField
+        id="person-filter-title-keywords"
         label="Title keywords"
         value={filters.title_keywords}
         onChange={(next) => onChange({ ...filters, title_keywords: next })}
       />
       <ListField
+        id="person-filter-seniorities"
         label="Seniorities"
         value={filters.seniorities}
         onChange={(next) => onChange({ ...filters, seniorities: next })}
         placeholder="director, vp, c_suite"
       />
       <ListField
+        id="person-filter-departments"
         label="Departments"
         value={filters.departments}
         onChange={(next) => onChange({ ...filters, departments: next })}
       />
       <ListField
+        id="person-filter-locations"
         label="Locations"
         value={filters.locations}
         onChange={(next) => onChange({ ...filters, locations: next })}

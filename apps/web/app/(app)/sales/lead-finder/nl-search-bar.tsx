@@ -45,6 +45,7 @@ export function NaturalLanguageSearchBar({
   return (
     <div className="mb-3 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">
       <Textarea
+        aria-label="Describe who you're looking for in plain English"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="e.g. VP of Engineering at Series B fintech companies in Germany with 50-200 employees"

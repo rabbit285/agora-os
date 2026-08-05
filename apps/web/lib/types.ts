@@ -917,6 +917,7 @@ export type SalesContact = {
   job_title: string | null;
   account_id: string | null;
   do_not_contact: boolean;
+  linkedin_url: string | null;
   created_at: string;
 };
 
@@ -1256,6 +1257,17 @@ export type CreditEstimatePreviewOut = {
   record_count: number;
 };
 
+export type CreditUsageSummaryOut = {
+  id: string;
+  provider: string;
+  operation: string;
+  estimated_credits: number;
+  actual_credits: number | null;
+  requested_by_user_id: string | null;
+  succeeded: boolean;
+  created_at: string;
+};
+
 export type ParseQueryOut = {
   company_filters: CompanyFilters;
   person_filters: PersonFilters;
@@ -1283,6 +1295,20 @@ export type ImportPreviewOut = {
   sample_rows: Record<string, string>[];
   suggested_mapping: Record<string, string | null>;
   total_rows: number;
+};
+
+export type ProvenanceOut = {
+  provider: string;
+  record_type: string;
+  provider_record_id: string;
+  source_url: string | null;
+  retrieved_at: string;
+  last_verified_at: string | null;
+  verification_status: string;
+  enrichment_status: string;
+  imported_by_user_id: string | null;
+  imported_by_workflow_id: string | null;
+  created_at: string;
 };
 
 export type SaveCompanyOut = {
