@@ -40,6 +40,14 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     deletion_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Sales Lead Finder outreach eligibility (spec — see
+    # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §12): when set, a provider
+    # record/contact missing lawful-basis metadata is "Requires Review"
+    # rather than "Eligible" for campaign/sequence enrollment. Off by
+    # default — this build has no structured per-contact consent model, so
+    # this single org-level toggle is a documented, honest simplification
+    # rather than a fabricated jurisdiction/consent engine.
+    requires_lawful_basis_metadata: Mapped[bool] = mapped_column(default=False)
 
 
 class LegalEntity(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -34,6 +34,7 @@ from app.recommendations import models as _recommendations_models  # noqa: F401
 from app.reporting import models as _reporting_models  # noqa: F401
 from app.rules_engine import models as _rules_engine_models  # noqa: F401
 from app.sales import models as _sales_models  # noqa: F401
+from app.sales import provider_models as _sales_provider_models  # noqa: F401
 from app.secops import models as _secops_models  # noqa: F401
 from app.support import models as _support_models  # noqa: F401
 from app.trust_center import models as _trust_center_models  # noqa: F401
