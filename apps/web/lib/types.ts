@@ -917,6 +917,7 @@ export type SalesContact = {
   job_title: string | null;
   account_id: string | null;
   do_not_contact: boolean;
+  linkedin_url: string | null;
   created_at: string;
 };
 

@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Users } from "lucide-react";
+
 import {
   Dialog,
   DialogContent,
@@ -9,14 +13,89 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { NormalizedCompanyOut, NormalizedPersonOut } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
+import type { NormalizedCompanyOut, NormalizedPersonOut, PersonSearchOut } from "@/lib/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null;
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-wide text-[var(--fg-subtle)]">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">{label}</dt>
       <dd className="text-sm text-[var(--fg-default)]">{value}</dd>
+    </div>
+  );
+}
+
+/** Journey: "find decision-makers" — a company-scoped person search
+ * against the same POST /decision-makers the brief specifies, shown
+ * inline rather than a full tab switch so the company context stays
+ * visible. Results go through the exact same save path as any other
+ * person search result. */
+function DecisionMakersSection({
+  domain,
+  onSavePerson,
+  saving,
+}: {
+  domain: string;
+  onSavePerson: (person: NormalizedPersonOut) => void;
+  saving: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const findDecisionMakers = useMutation({
+    mutationFn: () =>
+      apiFetch<PersonSearchOut>("/api/v1/sales/lead-finder/decision-makers", {
+        method: "POST",
+        body: { company_domain: domain },
+      }),
+  });
+
+  if (!expanded) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setExpanded(true);
+          findDecisionMakers.mutate();
+        }}
+      >
+        <Users className="h-3.5 w-3.5" />
+        Find decision-makers
+      </Button>
+    );
+  }
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3">
+      <p className="mb-2 text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
+        Decision-makers
+      </p>
+      {findDecisionMakers.isPending && (
+        <p className="text-xs text-[var(--fg-muted)]">Searching…</p>
+      )}
+      {findDecisionMakers.data && findDecisionMakers.data.people.length === 0 && (
+        <p className="text-xs text-[var(--fg-muted)]">No decision-makers found for this domain.</p>
+      )}
+      <ul className="flex flex-col gap-2">
+        {findDecisionMakers.data?.people.map((person) => (
+          <li
+            key={person.provider_record_id}
+            className="flex items-center justify-between rounded-[var(--radius-sm)] bg-[var(--bg-sunken)] px-2 py-1.5"
+          >
+            <div>
+              <p className="text-sm font-medium">{person.full_name}</p>
+              <p className="text-xs text-[var(--fg-muted)]">{person.title}</p>
+            </div>
+            {person.dedupe_status === "existing" ? (
+              <Badge variant="outline">Saved</Badge>
+            ) : (
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => onSavePerson(person)}>
+                Save
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -26,11 +105,15 @@ export function CompanyDetailDialog({
   onOpenChange,
   onSave,
   saving,
+  onSavePerson,
+  savingPerson,
 }: {
   company: NormalizedCompanyOut | null;
   onOpenChange: (open: boolean) => void;
   onSave: (company: NormalizedCompanyOut) => void;
   saving: boolean;
+  onSavePerson: (person: NormalizedPersonOut) => void;
+  savingPerson: boolean;
 }) {
   return (
     <Dialog open={company !== null} onOpenChange={onOpenChange}>
@@ -54,7 +137,7 @@ export function CompanyDetailDialog({
           </dl>
           {company.technologies.length > 0 && (
             <div>
-              <p className="mb-1 text-[11px] uppercase tracking-wide text-[var(--fg-subtle)]">
+              <p className="mb-1 text-[11px] uppercase tracking-wide text-[var(--fg-muted)]">
                 Technologies
               </p>
               <div className="flex flex-wrap gap-1">
@@ -66,9 +149,16 @@ export function CompanyDetailDialog({
               </div>
             </div>
           )}
-          <p className="text-[11px] text-[var(--fg-subtle)]">
+          <p className="text-[11px] text-[var(--fg-muted)]">
             Source: {company.provider} · retrieved {new Date(company.retrieved_at).toLocaleString()}
           </p>
+          {company.domain && (
+            <DecisionMakersSection
+              domain={company.domain}
+              onSavePerson={onSavePerson}
+              saving={savingPerson}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
@@ -128,7 +218,7 @@ export function PersonDetailDialog({
               value={person.phone ? <>{person.phone} <Badge variant="outline">{person.phone_status}</Badge></> : null}
             />
           </dl>
-          <p className="text-[11px] text-[var(--fg-subtle)]">
+          <p className="text-[11px] text-[var(--fg-muted)]">
             Source: {person.provider} · retrieved {new Date(person.retrieved_at).toLocaleString()}
           </p>
           <DialogFooter>

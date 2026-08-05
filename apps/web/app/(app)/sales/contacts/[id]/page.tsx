@@ -5,6 +5,7 @@ import { use } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EligibilityPanel } from "@/components/eligibility-panel";
+import { LinkedInOutreachPanel } from "@/components/linkedin-outreach-panel";
 import { PageHeader } from "@/components/page-header";
 import { ProvenanceCard } from "@/components/provenance-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -49,6 +50,7 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
       />
       <ProvenanceCard recordType="contact" recordId={id} />
       <EligibilityPanel contactId={id} />
+      <LinkedInOutreachPanel contactId={id} initialUrl={contact.linkedin_url} />
 
       {contact.account && (
         <Card className="mb-6">

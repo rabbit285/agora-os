@@ -80,6 +80,7 @@ export default function SalesListsPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Input
+          aria-label="New list name"
           placeholder="New list name"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -88,7 +89,12 @@ export default function SalesListsPage() {
           }}
           className="max-w-sm"
         />
-        <Select value={listType} onChange={(e) => setListType(e.target.value as "company" | "person")} className="w-36">
+        <Select
+          aria-label="List type"
+          value={listType}
+          onChange={(e) => setListType(e.target.value as "company" | "person")}
+          className="w-36"
+        >
           <option value="company">Companies</option>
           <option value="person">People</option>
         </Select>

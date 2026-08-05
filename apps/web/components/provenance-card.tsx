@@ -43,7 +43,7 @@ export function ProvenanceCard({
           <StatusBadge status={data.verification_status} />
           {data.enrichment_status !== "none" && <StatusBadge status={data.enrichment_status} />}
         </div>
-        <p className="mt-2 text-xs text-[var(--fg-subtle)]">
+        <p className="mt-2 text-xs text-[var(--fg-muted)]">
           Retrieved {new Date(data.retrieved_at).toLocaleString()}
           {data.last_verified_at && ` · Last verified ${new Date(data.last_verified_at).toLocaleString()}`}
         </p>

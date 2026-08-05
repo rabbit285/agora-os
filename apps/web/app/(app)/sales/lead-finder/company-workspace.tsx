@@ -12,6 +12,7 @@ import type {
   CreditEstimatePreviewOut,
   EnrichmentJobOut,
   NormalizedCompanyOut,
+  NormalizedPersonOut,
   SavedSearchOut,
 } from "@/lib/types";
 
@@ -93,6 +94,17 @@ export function CompanyWorkspace() {
             : current,
       );
     },
+  });
+
+  // Decision-makers found from a company's detail dialog are people, not
+  // companies — a small standalone save mutation rather than plumbing
+  // the whole PersonWorkspace's state through here.
+  const saveDecisionMaker = useMutation({
+    mutationFn: (person: NormalizedPersonOut) =>
+      apiFetch<{ contact_id: string; created: boolean }>("/api/v1/sales/lead-finder/people/save", {
+        method: "POST",
+        body: person,
+      }),
   });
 
   async function saveSelected(): Promise<string[]> {
@@ -236,7 +248,13 @@ export function CompanyWorkspace() {
             >
               {density === "comfortable" ? "Compact" : "Comfortable"}
             </Button>
-            <Button size="sm" variant="ghost" disabled={!appliedFilters} onClick={() => searchResult.refetch()}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!appliedFilters}
+              onClick={() => searchResult.refetch()}
+              aria-label="Refresh results"
+            >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -314,6 +332,8 @@ export function CompanyWorkspace() {
         onOpenChange={(open) => !open && setViewing(null)}
         onSave={(company) => saveCompany.mutate(company)}
         saving={saveCompany.isPending}
+        onSavePerson={(person) => saveDecisionMaker.mutate(person)}
+        savingPerson={saveDecisionMaker.isPending}
       />
       <SaveSearchDialog
         open={saveSearchOpen}

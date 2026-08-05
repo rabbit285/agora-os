@@ -1,10 +1,13 @@
 "use client";
 
-import { Check, Plus } from "lucide-react";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Check, Plus, Target } from "lucide-react";
 
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 import type { NormalizedCompanyOut, NormalizedPersonOut } from "@/lib/types";
 
 function DedupeBadge({ status }: { status: "new" | "existing" }) {
@@ -12,6 +15,45 @@ function DedupeBadge({ status }: { status: "new" | "existing" }) {
     <Badge variant="outline">Existing</Badge>
   ) : (
     <Badge variant="secondary">New</Badge>
+  );
+}
+
+/** "Create Lead" for an already-saved Account/Contact — reuses the
+ * existing POST /api/v1/sales/leads endpoint directly rather than adding
+ * a Lead Finder-specific one, since Lead creation itself isn't
+ * provider-specific. Self-contained so results-table doesn't need a new
+ * prop threaded through both workspace components. */
+function CreateLeadButton({ accountId, contactId }: { accountId?: string; contactId?: string }) {
+  const [created, setCreated] = useState(false);
+  const createLead = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/v1/sales/leads", {
+        method: "POST",
+        body: { source: "lead_finder", account_id: accountId, contact_id: contactId },
+      }),
+    onSuccess: () => setCreated(true),
+  });
+
+  if (created) {
+    return (
+      <Badge variant="success">
+        <Check className="h-3 w-3" /> Lead created
+      </Badge>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={createLead.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        createLead.mutate();
+      }}
+    >
+      <Target className="h-3.5 w-3.5" />
+      {createLead.isPending ? "Creating…" : "Create Lead"}
+    </Button>
   );
 }
 
@@ -29,6 +71,7 @@ function SelectCheckbox({
       type="checkbox"
       checked={checked}
       onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
       aria-label={label}
       className="h-3.5 w-3.5 accent-[var(--brand-primary)]"
     />
@@ -61,7 +104,7 @@ export function CompanyResultsTable({
   const columns: DataTableColumn<NormalizedCompanyOut>[] = [
     {
       key: "select",
-      header: "",
+      header: "Select",
       render: (company) => (
         <SelectCheckbox
           checked={selected.has(company.provider_record_id)}
@@ -77,7 +120,7 @@ export function CompanyResultsTable({
       render: (company) => (
         <div className="flex flex-col">
           <span className="font-medium">{company.name}</span>
-          {company.domain && <span className="text-xs text-[var(--fg-subtle)]">{company.domain}</span>}
+          {company.domain && <span className="text-xs text-[var(--fg-muted)]">{company.domain}</span>}
         </div>
       ),
       sortValue: (company) => company.name.toLowerCase(),
@@ -115,7 +158,7 @@ export function CompanyResultsTable({
             </Badge>
           ))}
           {company.technologies.length > 3 && (
-            <span className="text-xs text-[var(--fg-subtle)]">+{company.technologies.length - 3}</span>
+            <span className="text-xs text-[var(--fg-muted)]">+{company.technologies.length - 3}</span>
           )}
         </div>
       ),
@@ -141,9 +184,14 @@ export function CompanyResultsTable({
       emptyDescription="Adjust the filters or clear them to broaden the search."
       rowActions={(company) =>
         company.dedupe_status === "existing" ? (
-          <Badge variant="outline">
-            <Check className="h-3 w-3" /> Saved
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline">
+              <Check className="h-3 w-3" /> Saved
+            </Badge>
+            {company.existing_account_id && (
+              <CreateLeadButton accountId={company.existing_account_id} />
+            )}
+          </div>
         ) : (
           <Button
             size="sm"
@@ -191,7 +239,7 @@ export function PersonResultsTable({
   const columns: DataTableColumn<NormalizedPersonOut>[] = [
     {
       key: "select",
-      header: "",
+      header: "Select",
       render: (person) => (
         <SelectCheckbox
           checked={selected.has(person.provider_record_id)}
@@ -207,7 +255,7 @@ export function PersonResultsTable({
       render: (person) => (
         <div className="flex flex-col">
           <span className="font-medium">{person.full_name}</span>
-          {person.title && <span className="text-xs text-[var(--fg-subtle)]">{person.title}</span>}
+          {person.title && <span className="text-xs text-[var(--fg-muted)]">{person.title}</span>}
         </div>
       ),
       sortValue: (person) => person.full_name.toLowerCase(),
@@ -253,9 +301,14 @@ export function PersonResultsTable({
       emptyDescription="Adjust the filters or clear them to broaden the search."
       rowActions={(person) =>
         person.dedupe_status === "existing" ? (
-          <Badge variant="outline">
-            <Check className="h-3 w-3" /> Saved
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline">
+              <Check className="h-3 w-3" /> Saved
+            </Badge>
+            {person.existing_contact_id && (
+              <CreateLeadButton contactId={person.existing_contact_id} />
+            )}
+          </div>
         ) : (
           <Button
             size="sm"

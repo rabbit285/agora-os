@@ -70,10 +70,17 @@ export function ListPickerDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--fg-default)]">
+            <label
+              htmlFor="list-picker-existing"
+              className="mb-1 block text-xs font-medium text-[var(--fg-default)]"
+            >
               Existing list
             </label>
-            <Select value={selectedListId} onChange={(e) => setSelectedListId(e.target.value)}>
+            <Select
+              id="list-picker-existing"
+              value={selectedListId}
+              onChange={(e) => setSelectedListId(e.target.value)}
+            >
               <option value="">Select a list…</option>
               {(lists ?? []).map((list) => (
                 <option key={list.id} value={list.id}>
@@ -84,10 +91,14 @@ export function ListPickerDialog({
           </div>
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--fg-default)]">
+              <label
+                htmlFor="list-picker-new-name"
+                className="mb-1 block text-xs font-medium text-[var(--fg-default)]"
+              >
                 Or create a new list
               </label>
               <Input
+                id="list-picker-new-name"
                 value={newListName}
                 onChange={(e) => setNewListName(e.target.value)}
                 placeholder="New list name"

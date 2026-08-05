@@ -232,7 +232,13 @@ export function PersonWorkspace() {
             >
               {density === "comfortable" ? "Compact" : "Comfortable"}
             </Button>
-            <Button size="sm" variant="ghost" disabled={!appliedFilters} onClick={() => searchResult.refetch()}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!appliedFilters}
+              onClick={() => searchResult.refetch()}
+              aria-label="Refresh results"
+            >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
           </div>
