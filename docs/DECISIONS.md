@@ -2538,3 +2538,65 @@ retrieval-grounded `ask_copilot` call, honestly falling back to the
 Copilot's own "no evidence" message when the org's knowledge base has
 nothing relevant, rather than a fabricated summary — stored on the new
 `Lead.ai_account_brief` column.
+
+## ADR-0062 — Sales Lead Finder: a new provider-neutral discovery layer sits beside (not inside) the existing Lead Finder, with Apollo as a single deployment-wide key rather than a per-organization OAuth connection
+
+**Decision**: the pre-existing `/api/v1/sales/leads/find` "Lead Finder"
+(`app.sales.lead_finder.find_and_create_leads`) only ever rescans
+Accounts already in the database against the org's ICP profile — it has
+no external discovery capability and zero "Apollo" (or any prospecting
+provider) references anywhere in the repo, confirmed by a full-repo
+audit (see `docs/SALES_LEAD_FINDER_AUDIT.md`). Rather than overload that
+endpoint's meaning, the new external company/people discovery workspace
+is a separate, bounded surface — `/api/v1/sales/lead-finder/*`
+(`app.routers.sales_lead_finder`) — leaving the original endpoint,
+route, and its existing tests completely unchanged. The two "Lead
+Finder" names collide on purpose only in the product sense (both help a
+rep find leads); `docs/ROUTES_AND_SCREENS.md` calls out the distinction
+explicitly so it doesn't read as a duplicate.
+
+A new `SalesDataProvider` Protocol (`app.sales.providers.base`) is a
+deliberate sibling — not a reuse — of the existing OAuth connector
+adapter Protocol (`app.integrations.adapters.base.
+OAuthConnectorAdapter`): a discovery provider's capability shape
+(search/enrich/estimate-credits, no user-initiated OAuth flow) is
+genuinely different from a CRM sync connector's. Concretely, this means
+Apollo is configured with one deployment-wide `APOLLO_API_KEY` env var
+(the same credential-gated-honesty pattern every other optional
+integration in `app.config` already follows: absent key -> feature
+reports `configured=False` and falls back to a deterministic,
+clearly-labeled demo adapter, matched by a parallel `SalesProviderStatus`
+enum distinct from `apps/web`'s OAuth `IntegrationStatus` — see
+`app.sales.providers.status`), not a per-organization connection a user
+connects/disconnects/revokes through the UI the way HubSpot/Pipedrive
+are. The frontend mirrors this: the Lead Finder's provider status card
+is a small read-only `StatusBadge`, not the OAuth `IntegrationCard`
+component, since there's no Connect/Disconnect/Revoke action to expose.
+
+Selective/bulk enrichment (`SalesBulkEnrichmentWorkflow`) and CSV import
+(`SalesCsvImportWorkflow`) both mirror the existing
+`IntegrationSyncWorkflow`/`app.integrations.service`
+create/execute/run three-way split exactly (a `running` row written
+synchronously so the frontend can poll immediately; the real work in a
+directly-testable `execute_*` function; a small-batch synchronous
+convenience wrapper for tests and sub-threshold requests) — the same
+discipline already established for document ingestion and integration
+syncs, applied to two more domains rather than inventing a new pattern.
+
+CSV-imported and manually-entered records reuse the exact same
+`save_service.save_company_as_account`/`save_person_as_contact`
+dedupe-aware write path a provider search result uses — they differ only
+in `NormalizedCompany.provider` ("csv"/"manual" vs. "apollo"/"demo"),
+which `save_service` maps to `verification_status="user_entered"`
+instead of `"provider_supplied"`. One write path, one place dedupe can
+ever diverge, and a hard guarantee that an imported or hand-typed row
+can never be mistaken for a provider-verified one downstream.
+
+The new outreach-eligibility suppression list
+(`sales_suppression_entries`) extends `app.compliance.governance`'s
+existing `check_contact_permission` gate at `send_outreach_message` as a
+strict superset (can only turn an allowed send into a blocked one, never
+the reverse) rather than a parallel check, which is provably incapable
+of regressing the already-tested `do_not_contact`-only behavior
+(`test_advance_respects_suppression`) while still covering people who
+were suppressed before they were ever saved as a Contact.
