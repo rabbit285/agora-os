@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,7 +71,7 @@ from app.sales.lead_finder_schemas import (
     SuppressionEntryCreate,
     SuppressionEntryOut,
 )
-from app.sales.list_service import DuplicateListItemError
+from app.sales.list_service import DuplicateListItemError, ListExportDisabledError
 from app.sales.models import Contact
 from app.sales.nl_filter_parser import parse_query
 from app.sales.provider_models import (
@@ -701,6 +701,34 @@ async def remove_list_item(
         user_agent=user_agent,
     )
     await db.commit()
+
+
+@router.get("/lists/{list_id}/export")
+async def export_list(
+    list_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.lists.manage")),
+) -> Response:
+    sales_list = await _get_org_list(db, list_id, context.organization_id)
+    ip_address, user_agent = _client_meta(request)
+    try:
+        csv_text, _row_count = await list_service.export_list_csv(
+            db,
+            sales_list=sales_list,
+            actor_user_id=context.user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    except ListExportDisabledError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    await db.commit()
+    filename = f"{sales_list.name.replace(' ', '_')}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---- Outreach eligibility and suppression ----

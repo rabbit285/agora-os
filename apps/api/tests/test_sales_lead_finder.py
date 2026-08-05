@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import File, Membership, MembershipRole, Task
+from app.core.models import File, Membership, MembershipRole, Organization, Task
 from app.core.rbac import get_system_role
 from app.core.storage import upload_object
 from app.identity.models import User
@@ -1102,4 +1102,144 @@ async def test_linkedin_task_404_for_contact_in_another_organization(
         f"/api/v1/sales/lead-finder/contacts/{contact_id}/linkedin-task",
         json={"message": "hi"},
     )
+    assert response.status_code == 404
+
+
+# ---- Saved-list CSV export ----
+
+
+async def _create_company_list_with_one_item(client: AsyncClient) -> tuple[str, str]:
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/company",
+        json={"name": "Export Target Co", "domain": "export-target.example", "employee_count": 42},
+    )
+    assert manual.status_code == 201, manual.text
+    account_id = manual.json()["account_id"]
+
+    create_list = await client.post(
+        "/api/v1/sales/lead-finder/lists", json={"name": "Export List", "list_type": "company"}
+    )
+    assert create_list.status_code == 201, create_list.text
+    list_id = create_list.json()["id"]
+
+    add = await client.post(
+        f"/api/v1/sales/lead-finder/lists/{list_id}/items", json={"account_id": account_id}
+    )
+    assert add.status_code == 201, add.text
+    return list_id, account_id
+
+
+async def test_export_company_list_returns_csv_with_expected_rows(client: AsyncClient) -> None:
+    await _signup(client, "export1@example.com", "Export Org 1")
+    list_id, account_id = await _create_company_list_with_one_item(client)
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in response.headers["content-disposition"]
+
+    lines = response.text.strip("\r\n").split("\r\n")
+    header = lines[0].split(",")
+    assert header == [
+        "name",
+        "industry",
+        "website",
+        "employee_count",
+        "icp_score",
+        "status",
+        "account_id",
+        "added_at",
+    ]
+    assert len(lines) == 2
+    row = lines[1].split(",")
+    assert row[0] == "Export Target Co"
+    assert row[3] == "42"
+    assert row[6] == account_id
+
+
+async def test_export_person_list_returns_csv_with_expected_rows(client: AsyncClient) -> None:
+    await _signup(client, "export2@example.com", "Export Org 2")
+    manual = await client.post(
+        "/api/v1/sales/lead-finder/manual/person",
+        json={"full_name": "Export Target Person", "email": "export-target-person@example.com"},
+    )
+    assert manual.status_code == 201, manual.text
+    contact_id = manual.json()["contact_id"]
+
+    create_list = await client.post(
+        "/api/v1/sales/lead-finder/lists", json={"name": "Export People", "list_type": "person"}
+    )
+    list_id = create_list.json()["id"]
+    add = await client.post(
+        f"/api/v1/sales/lead-finder/lists/{list_id}/items", json={"contact_id": contact_id}
+    )
+    assert add.status_code == 201, add.text
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+    lines = response.text.strip("\r\n").split("\r\n")
+    header = lines[0].split(",")
+    assert header == ["full_name", "email", "job_title", "do_not_contact", "contact_id", "added_at"]
+    row = lines[1].split(",")
+    assert row[0] == "Export Target Person"
+    assert row[1] == "export-target-person@example.com"
+    assert row[4] == contact_id
+
+
+async def test_export_list_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "export-rbac@example.com", "Export RBAC Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    token = await _create_member_with_role(
+        db_session, organization_id=organization_id, email="export-employee@example.com", role_key="employee"
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 403
+
+
+async def test_export_list_blocked_when_organization_disables_it(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "export-disabled@example.com", "Export Disabled Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    organization = await db_session.get(Organization, organization_id)
+    assert organization is not None
+    organization.allow_list_export = False
+    await db_session.commit()
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 403
+    assert "disabled" in response.json()["error"]["message"].lower()
+
+
+async def test_export_list_records_audit_event_with_row_count(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "export-audit@example.com", "Export Audit Org")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
+    assert response.status_code == 200, response.text
+
+    from app.audit.models import AuditEvent
+
+    event = (
+        await db_session.execute(
+            select(AuditEvent).where(
+                AuditEvent.action == "sales.lead_finder.list.exported",
+                AuditEvent.object_id == list_id,
+            )
+        )
+    ).scalar_one()
+    assert event.after_state["row_count"] == 1
+
+
+async def test_export_list_404_for_list_in_another_organization(client: AsyncClient) -> None:
+    await _signup(client, "export-tenant-a@example.com", "Export Tenant A")
+    list_id, _account_id = await _create_company_list_with_one_item(client)
+
+    await _signup(client, "export-tenant-b@example.com", "Export Tenant B")
+    response = await client.get(f"/api/v1/sales/lead-finder/lists/{list_id}/export")
     assert response.status_code == 404

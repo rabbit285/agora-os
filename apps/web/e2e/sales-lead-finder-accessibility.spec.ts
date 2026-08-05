@@ -101,6 +101,33 @@ test.describe("Accessibility: automated axe scans", () => {
     const results = await runAxeScan(page);
     expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
   });
+
+  test("Credit Usage dashboard", async ({ page }) => {
+    await signup(page, "a11y09");
+    await page.goto("/sales/lead-finder/credit-usage");
+    await page.getByRole("heading", { name: "Credit Usage" }).waitFor();
+    const results = await runAxeScan(page);
+    expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+  });
+
+  test("List detail page with Export CSV button", async ({ page }) => {
+    await signup(page, "a11y10");
+    const account = await page.request.post(`${API_BASE_URL}/api/v1/sales/lead-finder/manual/company`, {
+      data: { name: "A11y Export Co", domain: `a11y-export-${Date.now()}.example` },
+    });
+    const accountBody = await account.json();
+    const list = await page.request.post(`${API_BASE_URL}/api/v1/sales/lead-finder/lists`, {
+      data: { name: "A11y Export List", list_type: "company" },
+    });
+    const listBody = await list.json();
+    await page.request.post(`${API_BASE_URL}/api/v1/sales/lead-finder/lists/${listBody.id}/items`, {
+      data: { account_id: accountBody.account_id },
+    });
+    await page.goto(`/sales/lists/${listBody.id}`);
+    await page.getByRole("button", { name: "Export CSV" }).waitFor();
+    const results = await runAxeScan(page);
+    expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+  });
 });
 
 test.describe("Accessibility: keyboard-only navigation", () => {
