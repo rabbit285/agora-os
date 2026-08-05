@@ -24,6 +24,7 @@ from app.core.storage import ensure_bucket
 from worker.activities import (
     create_scheduled_workflow_run_activity,
     execute_integration_sync_activity,
+    execute_sales_enrichment_activity,
     ingest_document_activity,
     ping_activity,
     run_workflow_step_batch_activity,
@@ -32,6 +33,7 @@ from worker.workflows import (
     DocumentIngestionWorkflow,
     HealthCheckWorkflow,
     IntegrationSyncWorkflow,
+    SalesBulkEnrichmentWorkflow,
     ScheduledWorkflowRunWorkflow,
     WorkflowRunWorkflow,
 )
@@ -54,6 +56,7 @@ async def main() -> None:
             HealthCheckWorkflow,
             DocumentIngestionWorkflow,
             IntegrationSyncWorkflow,
+            SalesBulkEnrichmentWorkflow,
             WorkflowRunWorkflow,
             ScheduledWorkflowRunWorkflow,
         ],
@@ -61,6 +64,7 @@ async def main() -> None:
             ping_activity,
             ingest_document_activity,
             execute_integration_sync_activity,
+            execute_sales_enrichment_activity,
             run_workflow_step_batch_activity,
             create_scheduled_workflow_run_activity,
         ],

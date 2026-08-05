@@ -284,6 +284,35 @@ class CreditUsageSummaryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SuppressionEntryCreate(BaseModel):
+    email: str | None = None
+    domain: str | None = None
+    contact_id: uuid.UUID | None = None
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class SuppressionEntryOut(BaseModel):
+    id: uuid.UUID
+    email: str | None
+    domain: str | None
+    contact_id: uuid.UUID | None
+    reason: str
+    created_by_user_id: uuid.UUID
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EligibilityCheckIn(BaseModel):
+    contact_id: uuid.UUID | None = None
+    email: str | None = None
+
+
+class EligibilityCheckOut(BaseModel):
+    status: Literal["eligible", "requires_review", "blocked", "unknown"]
+    reasons: list[str]
+
+
 class ParseQueryIn(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
 
@@ -293,6 +322,36 @@ class ParseQueryOut(BaseModel):
     person_filters: PersonFiltersIn
     unsupported_criteria: list[str]
     provider: str
+
+
+class EnrichIn(BaseModel):
+    operation: Literal["enrich_company", "enrich_person"]
+    record_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    provider: str = "apollo"
+
+
+class EnrichmentJobOut(BaseModel):
+    id: uuid.UUID
+    provider: str
+    operation: str
+    status: str
+    estimated_credits: int
+    actual_credits: int | None
+    succeeded_count: int
+    failed_count: int
+    error_records: list[dict[str, Any]]
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreditEstimatePreviewOut(BaseModel):
+    provider: str
+    operation: str
+    estimated_credits: int
+    record_count: int
 
 
 class SaveCompanyOut(BaseModel):

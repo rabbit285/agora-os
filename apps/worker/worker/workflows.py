@@ -68,6 +68,31 @@ class IntegrationSyncWorkflow:
 
 
 @workflow.defn
+class SalesBulkEnrichmentWorkflow:
+    """Runs a Sales Lead Finder bulk-enrichment job durably (see
+    docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §16) — the same
+    request/durable-execution split as `IntegrationSyncWorkflow`. The
+    `SalesEnrichmentJob` row already exists (created synchronously by the
+    API) and this workflow finalizes it; per-record partial failures are
+    handled *inside* the activity (see `execute_sales_enrichment_activity`)
+    so one bad record never fails the whole batch."""
+
+    @workflow.run
+    async def run(self, job_id: str) -> str:
+        return await workflow.execute_activity(
+            "execute_sales_enrichment_activity",
+            job_id,
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=5),
+                backoff_coefficient=2.0,
+                maximum_interval=timedelta(minutes=1),
+                maximum_attempts=3,
+            ),
+        )
+
+
+@workflow.defn
 class WorkflowRunWorkflow:
     """Runs a Business Process Automation `WorkflowRun` durably (spec §36,
     §61) — the `WorkflowRun`/`WorkflowStepRun` rows already exist/are

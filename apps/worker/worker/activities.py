@@ -78,6 +78,31 @@ async def execute_integration_sync_activity(
         return sync_run.status
 
 
+@activity.defn(name="execute_sales_enrichment_activity")
+async def execute_sales_enrichment_activity(job_id: str) -> str:
+    import app.db.register_all_models  # noqa: F401 — see module docstring
+    from app.db.session import AsyncSessionLocal
+    from app.sales.enrichment_job_service import execute_enrichment_job
+    from app.sales.provider_models import SalesEnrichmentJob
+
+    job_uuid = uuid.UUID(job_id)
+    async with AsyncSessionLocal() as db:
+        job = await db.get(SalesEnrichmentJob, job_uuid)
+        if job is None:
+            raise LookupError(f"SalesEnrichmentJob {job_id} not found")
+
+        job = await execute_enrichment_job(db, job=job)
+        await db.commit()
+        logger.info(
+            "Sales enrichment job %s finished with status=%s (succeeded=%d, failed=%d)",
+            job_id,
+            job.status,
+            job.succeeded_count,
+            job.failed_count,
+        )
+        return job.status
+
+
 @activity.defn(name="run_workflow_step_batch_activity")
 async def run_workflow_step_batch_activity(run_id: str) -> dict[str, object]:
     """Executes as many of a Business Process Automation `WorkflowRun`'s
