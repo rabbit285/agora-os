@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
+import { ProvenanceCard } from "@/components/provenance-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,8 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
             : "Company enrichment is not configured for this organization (no Clearbit API key set)."}
         </p>
       )}
+
+      <ProvenanceCard recordType="account" recordId={id} />
 
       <div className="mb-8">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">

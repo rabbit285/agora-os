@@ -4,7 +4,9 @@ import Link from "next/link";
 import { use } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { EligibilityPanel } from "@/components/eligibility-panel";
 import { PageHeader } from "@/components/page-header";
+import { ProvenanceCard } from "@/components/provenance-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +47,9 @@ export default function ContactDetailPage({ params }: { params: Promise<{ id: st
           </Button>
         }
       />
+      <ProvenanceCard recordType="contact" recordId={id} />
+      <EligibilityPanel contactId={id} />
+
       {contact.account && (
         <Card className="mb-6">
           <CardContent className="pt-6">

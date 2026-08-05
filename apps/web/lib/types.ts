@@ -1285,6 +1285,20 @@ export type ImportPreviewOut = {
   total_rows: number;
 };
 
+export type ProvenanceOut = {
+  provider: string;
+  record_type: string;
+  provider_record_id: string;
+  source_url: string | null;
+  retrieved_at: string;
+  last_verified_at: string | null;
+  verification_status: string;
+  enrichment_status: string;
+  imported_by_user_id: string | null;
+  imported_by_workflow_id: string | null;
+  created_at: string;
+};
+
 export type SaveCompanyOut = {
   account_id: string;
   created: boolean;
