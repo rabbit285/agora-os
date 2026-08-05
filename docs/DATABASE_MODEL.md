@@ -699,6 +699,7 @@ sales_contacts
   job_title TEXT NULL
   do_not_contact BOOLEAN NOT NULL DEFAULT false   -- suppression flag, see below
   created_at, updated_at
+  UNIQUE (organization_id, lower(email))   -- added with the Lead Finder, see below
 
 sales_leads
   id UUID PK
@@ -736,6 +737,133 @@ sales_outreach_messages
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   sent_at TIMESTAMPTZ NULL
 ```
+
+## Tables (Sales Lead Finder — provider-neutral discovery/enrichment)
+
+See `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md` for the full design. A
+raw provider search result is never persisted — only an explicit save/
+enrich/list action writes a `sales_provider_records` row.
+
+```text
+sales_provider_records
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  provider TEXT NOT NULL   -- apollo|demo|csv|manual
+  record_type TEXT NOT NULL   -- company|person
+  provider_record_id TEXT NOT NULL
+  normalized_domain TEXT NULL
+  normalized_email TEXT NULL
+  source_url TEXT NULL
+  retrieved_at TIMESTAMPTZ NOT NULL
+  last_verified_at TIMESTAMPTZ NULL
+  verification_status TEXT NOT NULL   -- verified|provider_supplied|unverified|unavailable|stale|user_entered|demo
+  enrichment_status TEXT NOT NULL DEFAULT 'none'   -- none|partial|complete|failed
+  confidence NUMERIC(4,3) NULL
+  raw_payload JSON NOT NULL
+  linked_account_id UUID FK sales_accounts NULL
+  linked_contact_id UUID FK sales_contacts NULL
+  imported_by_user_id UUID FK users NULL
+  imported_by_workflow_id TEXT NULL
+  credit_usage_id UUID FK sales_provider_credit_usage NULL
+  created_at, updated_at
+
+sales_provider_credit_usage
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  provider TEXT NOT NULL
+  operation TEXT NOT NULL   -- search_companies|search_people|enrich_company|enrich_person|find_decision_makers
+  estimated_credits INTEGER NOT NULL
+  actual_credits INTEGER NULL   -- Unknown until the provider's response reports one
+  requested_by_user_id UUID FK users NULL
+  requested_by_workflow_id TEXT NULL
+  source_record_ids JSON NOT NULL
+  succeeded BOOLEAN NOT NULL DEFAULT true
+  created_at, updated_at
+
+sales_saved_searches
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  owner_user_id UUID FK users NOT NULL
+  name TEXT NOT NULL
+  search_type TEXT NOT NULL   -- company|person
+  filters JSON NOT NULL
+  provider TEXT NOT NULL DEFAULT 'apollo'
+  columns JSON NOT NULL
+  sort JSON NULL
+  density TEXT NOT NULL DEFAULT 'comfortable'
+  is_shared BOOLEAN NOT NULL DEFAULT false
+  last_executed_at TIMESTAMPTZ NULL
+  last_result_count INTEGER NULL
+  created_at, updated_at
+
+sales_lists
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  owner_user_id UUID FK users NOT NULL
+  name TEXT NOT NULL
+  list_type TEXT NOT NULL   -- company|person
+  description TEXT NULL
+  tags JSON NOT NULL
+  is_shared BOOLEAN NOT NULL DEFAULT false
+  created_at, updated_at
+
+sales_list_items
+  id UUID PK
+  list_id UUID FK sales_lists NOT NULL
+  account_id UUID FK sales_accounts NULL
+  contact_id UUID FK sales_contacts NULL
+  added_by_user_id UUID FK users NOT NULL
+  created_at, updated_at
+  UNIQUE (list_id, account_id) WHERE account_id IS NOT NULL
+  UNIQUE (list_id, contact_id) WHERE contact_id IS NOT NULL
+
+sales_suppression_entries
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  email TEXT NULL
+  domain TEXT NULL
+  contact_id UUID FK sales_contacts NULL
+  reason TEXT NOT NULL
+  created_by_user_id UUID FK users NOT NULL
+  created_at, updated_at
+
+sales_import_jobs
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  record_type TEXT NOT NULL   -- company|person
+  status TEXT NOT NULL DEFAULT 'pending'   -- pending|running|succeeded|failed|partial
+  file_id UUID FK files NULL
+  column_mapping JSON NOT NULL
+  total_rows INTEGER NOT NULL DEFAULT 0
+  imported_rows INTEGER NOT NULL DEFAULT 0
+  skipped_rows INTEGER NOT NULL DEFAULT 0
+  error_rows JSON NOT NULL
+  requested_by_user_id UUID FK users NOT NULL
+  completed_at TIMESTAMPTZ NULL
+  created_at, updated_at
+
+sales_enrichment_jobs
+  id UUID PK
+  organization_id UUID FK organizations NOT NULL
+  provider TEXT NOT NULL
+  operation TEXT NOT NULL   -- enrich_company|enrich_person|find_decision_makers
+  status TEXT NOT NULL DEFAULT 'pending'   -- pending|running|succeeded|failed|partial
+  requested_by_user_id UUID FK users NOT NULL
+  target_record_ids JSON NOT NULL
+  estimated_credits INTEGER NOT NULL DEFAULT 0
+  actual_credits INTEGER NULL
+  succeeded_count INTEGER NOT NULL DEFAULT 0
+  failed_count INTEGER NOT NULL DEFAULT 0
+  error_records JSON NOT NULL
+  started_at TIMESTAMPTZ NULL
+  completed_at TIMESTAMPTZ NULL
+  created_at, updated_at
+```
+
+`organizations` also gains `requires_lawful_basis_metadata BOOLEAN NOT
+NULL DEFAULT false` — a coarse org-level outreach-eligibility policy
+toggle (architecture doc §12), not a structured consent/jurisdiction
+model.
 
 ## Tables (Phase 6 — Customer Support)
 

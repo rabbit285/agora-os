@@ -341,11 +341,25 @@ erDiagram
   — the explicit "Compliance governs Sales" connection, implemented as a
   real, tested check rather than an aspiration.
 
-Not modeled yet: sequences/campaigns (multi-step outreach automation —
-spec §25), lead scoring beyond a raw numeric field, meetings, sales
-conversations/inbox, pipeline events, playbooks. Real lead-finding,
-enrichment, and message sending all depend on external connectors that
-don't exist yet (spec's progressive trust model, §B1).
+Sequences/campaigns (multi-step outreach automation, spec §25) and
+Meetings (with AI Copilot-grounded prep notes) are implemented — see
+`app.sales.sequences`/`app.sales.meetings` and `docs/IMPLEMENTATION_STATUS.md`;
+this section predates that work. Not modeled yet: lead scoring beyond a
+raw numeric field, pipeline events, playbooks. Real message sending
+(email/LinkedIn) still depends on external connectors that don't exist
+yet (spec's progressive trust model, §B1) — every send only transitions
+`OutreachMessage.status`, gated by the same real compliance check
+regardless.
+
+**Sales Lead Finder** (external company/people discovery and
+enrichment) is now real, separate from the entities above — see
+`docs/SALES_DATA_PROVIDER_ARCHITECTURE.md` for the full design.
+`SalesProviderRecord` is the provenance record for a search result the
+user acted on (save/enrich/list) — companies/people are still saved as
+the same `Account`/`Contact` entities described above, not a duplicate
+domain model; `SalesSavedSearch`, `SalesList`/`SalesListItem`,
+`SalesSuppressionEntry`, `SalesProviderCreditUsage`, and
+`SalesImportJob`/`SalesEnrichmentJob` are the new supporting entities.
 
 ## Phase 6 entities (implemented — Customer Support backbone)
 
