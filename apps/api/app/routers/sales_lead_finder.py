@@ -7,20 +7,34 @@ discovery layer reads as its own bounded surface."""
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.compliance.governance import evaluate_outreach_eligibility
 from app.db.session import get_db
 from app.dependencies import OrgContext, require_permission
-from app.sales import lead_finder_service, list_service, save_service, saved_search_service
+from app.sales import (
+    enrichment_job_service,
+    lead_finder_service,
+    list_service,
+    save_service,
+    saved_search_service,
+    suppression_service,
+)
 from app.sales.lead_finder_schemas import (
     CompanyFiltersIn,
     CompanySearchIn,
     CompanySearchOut,
+    CreditEstimatePreviewOut,
     CreditUsageSummaryOut,
     DecisionMakerIn,
+    EligibilityCheckIn,
+    EligibilityCheckOut,
+    EnrichIn,
+    EnrichmentJobOut,
     NormalizedCompanyOut,
     NormalizedPersonOut,
     ParseQueryIn,
@@ -40,14 +54,20 @@ from app.sales.lead_finder_schemas import (
     SavedSearchUpdate,
     SavePersonOut,
     SortSpecIn,
+    SuppressionEntryCreate,
+    SuppressionEntryOut,
 )
 from app.sales.list_service import DuplicateListItemError
+from app.sales.models import Contact
 from app.sales.nl_filter_parser import parse_query
 from app.sales.provider_models import (
+    SalesEnrichmentJob,
     SalesList,
     SalesListItem,
     SalesProviderCreditUsage,
+    SalesProviderRecord,
     SalesSavedSearch,
+    SalesSuppressionEntry,
 )
 from app.sales.providers.registry import (
     apollo_status,
@@ -62,6 +82,7 @@ from app.sales.providers.schemas import (
     PersonFilters,
     SortSpec,
 )
+from app.sales.workflow_client import EnrichmentStarter, get_enrichment_starter
 
 router = APIRouter(prefix="/api/v1/sales/lead-finder", tags=["sales-lead-finder"])
 
@@ -268,6 +289,99 @@ async def save_person(
     return SavePersonOut(contact_id=contact.id, created=created)
 
 
+# ---- Selective / bulk enrichment ----
+
+_SYNC_ENRICHMENT_MAX_RECORDS = 5
+
+
+@router.post("/enrich/estimate", response_model=CreditEstimatePreviewOut)
+async def estimate_enrichment(
+    payload: EnrichIn,
+    context: OrgContext = Depends(require_permission("sales.lead_finder.enrich")),
+) -> CreditEstimatePreviewOut:
+    estimated = await enrichment_job_service.estimate_enrichment_credits(
+        provider_key=payload.provider, operation=payload.operation, record_count=len(payload.record_ids)
+    )
+    return CreditEstimatePreviewOut(
+        provider=payload.provider,
+        operation=payload.operation,
+        estimated_credits=estimated,
+        record_count=len(payload.record_ids),
+    )
+
+
+@router.post("/enrich", response_model=EnrichmentJobOut, status_code=status.HTTP_201_CREATED)
+async def enrich_selected(
+    payload: EnrichIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.enrich")),
+) -> SalesEnrichmentJob:
+    """Synchronous path for small selections (≤5 records) — runs inline
+    rather than round-tripping through Temporal for a sub-second job.
+    Larger selections must use `/enrich/bulk`."""
+    if len(payload.record_ids) > _SYNC_ENRICHMENT_MAX_RECORDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Use /enrich/bulk for more than {_SYNC_ENRICHMENT_MAX_RECORDS} records",
+        )
+    ip_address, user_agent = _client_meta(request)
+    job = await enrichment_job_service.run_enrichment_job(
+        db,
+        organization_id=context.organization_id,
+        provider_key=payload.provider,
+        operation=payload.operation,
+        requested_by_user_id=context.user.id,
+        target_record_ids=payload.record_ids,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    await db.refresh(job)
+    return job
+
+
+@router.post("/enrich/bulk", response_model=EnrichmentJobOut, status_code=status.HTTP_201_CREATED)
+async def enrich_selected_bulk(
+    payload: EnrichIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.enrich")),
+    start_enrichment: EnrichmentStarter = Depends(get_enrichment_starter),
+) -> SalesEnrichmentJob:
+    """Durable path via Temporal — the job row is created synchronously so
+    `GET /enrichment-jobs/{id}` shows it as `running` immediately; the
+    caller polls that endpoint for the running -> succeeded/partial/failed
+    transition rather than waiting on this request."""
+    ip_address, user_agent = _client_meta(request)
+    job = await enrichment_job_service.create_enrichment_job(
+        db,
+        organization_id=context.organization_id,
+        provider_key=payload.provider,
+        operation=payload.operation,
+        requested_by_user_id=context.user.id,
+        target_record_ids=payload.record_ids,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    await db.refresh(job)
+    await start_enrichment(job.id)
+    return job
+
+
+@router.get("/enrichment-jobs/{job_id}", response_model=EnrichmentJobOut)
+async def get_enrichment_job(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.enrich")),
+) -> SalesEnrichmentJob:
+    job = await db.get(SalesEnrichmentJob, job_id)
+    if job is None or job.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrichment job not found")
+    return job
+
+
 # ---- Saved searches ----
 
 
@@ -465,6 +579,16 @@ async def _get_org_list(db: AsyncSession, list_id: uuid.UUID, organization_id: u
     return sales_list
 
 
+@router.get("/lists/{list_id}/items", response_model=list[SalesListItemOut])
+async def get_list_items(
+    list_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
+) -> list[SalesListItem]:
+    await _get_org_list(db, list_id, context.organization_id)
+    return await list_service.list_items(db, list_id=list_id)
+
+
 @router.post("/lists/{list_id}/items", response_model=SalesListItemOut, status_code=status.HTTP_201_CREATED)
 async def add_list_item(
     list_id: uuid.UUID,
@@ -520,4 +644,106 @@ async def remove_list_item(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    await db.commit()
+
+
+# ---- Outreach eligibility and suppression ----
+
+
+@router.post("/eligibility/check", response_model=EligibilityCheckOut)
+async def check_eligibility(
+    payload: EligibilityCheckIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
+) -> EligibilityCheckOut:
+    """Preview surfaced before enrolling a contact into a Sequence/Campaign
+    (spec §23's eligibility panel) — the *authoritative* block still
+    happens at send time (`app.sales.service.send_outreach_message`,
+    unchanged and already tested), so this is a real, honest preview of
+    what will happen, not a separate gate that could drift from it."""
+    contact: Contact | None = None
+    if payload.contact_id is not None:
+        contact = await db.get(Contact, payload.contact_id)
+        if contact is None or contact.organization_id != context.organization_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    provider_record: SalesProviderRecord | None = None
+    if contact is None and payload.email:
+        provider_record = (
+            await db.execute(
+                select(SalesProviderRecord).where(
+                    SalesProviderRecord.organization_id == context.organization_id,
+                    SalesProviderRecord.normalized_email == payload.email.lower(),
+                )
+            )
+        ).scalars().first()
+        if provider_record is None:
+            # No saved record yet — construct a throwaway one just to carry
+            # the email through the same evaluation path.
+            provider_record = SalesProviderRecord(
+                organization_id=context.organization_id,
+                provider="unknown",
+                record_type="person",
+                provider_record_id="preview",
+                normalized_email=payload.email.lower(),
+                retrieved_at=datetime.now(UTC),
+                verification_status="unverified",
+            )
+
+    eligibility = await evaluate_outreach_eligibility(
+        db, organization_id=context.organization_id, contact=contact, provider_record=provider_record
+    )
+    return EligibilityCheckOut(status=eligibility.status, reasons=eligibility.reasons)
+
+
+@router.get("/suppression", response_model=list[SuppressionEntryOut])
+async def list_suppression(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.suppression.manage")),
+) -> list[SalesSuppressionEntry]:
+    return await suppression_service.list_suppression_entries(db, organization_id=context.organization_id)
+
+
+@router.post("/suppression", response_model=SuppressionEntryOut, status_code=status.HTTP_201_CREATED)
+async def add_suppression(
+    payload: SuppressionEntryCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.suppression.manage")),
+) -> SalesSuppressionEntry:
+    ip_address, user_agent = _client_meta(request)
+    try:
+        entry = await suppression_service.add_suppression_entry(
+            db,
+            organization_id=context.organization_id,
+            created_by_user_id=context.user.id,
+            reason=payload.reason,
+            email=payload.email,
+            domain=payload.domain,
+            contact_id=payload.contact_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
+@router.delete("/suppression/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def remove_suppression(
+    entry_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.suppression.manage")),
+) -> None:
+    entry = await db.get(SalesSuppressionEntry, entry_id)
+    if entry is None or entry.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suppression entry not found")
+    ip_address, user_agent = _client_meta(request)
+    await suppression_service.remove_suppression_entry(
+        db, entry=entry, removed_by_user_id=context.user.id, ip_address=ip_address, user_agent=user_agent
+    )
+    await db.commit()
     await db.commit()

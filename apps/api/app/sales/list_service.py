@@ -28,6 +28,17 @@ async def list_lists(
     return list((await db.execute(query.order_by(SalesList.updated_at.desc()))).scalars().all())
 
 
+async def list_items(db: AsyncSession, *, list_id: uuid.UUID) -> list[SalesListItem]:
+    rows = (
+        await db.execute(
+            select(SalesListItem)
+            .where(SalesListItem.list_id == list_id)
+            .order_by(SalesListItem.created_at.desc())
+        )
+    ).scalars()
+    return list(rows)
+
+
 async def create_list(
     db: AsyncSession,
     *,

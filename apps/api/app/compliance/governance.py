@@ -28,17 +28,21 @@ outcome.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.models import DSAR, DataTransfer
+from app.core.models import Organization
 from app.sales.models import Contact
+from app.sales.provider_models import SalesProviderRecord
 from app.support.models import Customer
 
 _PENDING_DELETION_STATUSES = ("received", "in_progress")
 _CLASSIFICATIONS_REQUIRING_TRANSFER_REVIEW = ("confidential", "restricted")
+_STALE_VERIFICATION_STATUSES = ("unverified", "unavailable", "stale")
 
 
 @dataclass
@@ -60,6 +64,72 @@ async def check_contact_permission(
             reason="Contact is marked do-not-contact (opted out / suppressed).",
         )
     return GovernanceDecision(allowed=True)
+
+
+@dataclass
+class OutreachEligibility:
+    """Richer than `GovernanceDecision` — Lead Finder's eligibility panel
+    needs a `requires_review` tier `check_contact_permission`'s plain
+    allowed/blocked doesn't have (spec: "Eligible / Requires Review /
+    Blocked / Unknown"). Built *on top of* `check_contact_permission`
+    (called first, unchanged) rather than replacing it — every existing
+    call site of that function keeps working exactly as before."""
+
+    status: Literal["eligible", "requires_review", "blocked", "unknown"]
+    reasons: list[str] = field(default_factory=list)
+
+
+async def evaluate_outreach_eligibility(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    contact: Contact | None = None,
+    provider_record: SalesProviderRecord | None = None,
+) -> OutreachEligibility:
+    """Sales Lead Finder's eligibility panel (see
+    docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §12): checks, in order —
+    (1) the existing suppression-flag check every outreach send already
+    uses, unchanged; (2) the Lead-Finder-specific suppression list, which
+    can block a person before they're ever saved as a Contact; (3)
+    verification staleness; (4) the organization's coarse lawful-basis
+    policy toggle. A record with no email at all (nothing to evaluate) is
+    `unknown`, not `eligible` — eligibility must be earned by an actual
+    check passing, never assumed by default."""
+    from app.sales.suppression_service import find_matching_suppression
+
+    email = contact.email if contact is not None else provider_record.normalized_email if provider_record else None
+    if contact is None and not email:
+        return OutreachEligibility(
+            status="unknown", reasons=["No contact record or email to evaluate yet."]
+        )
+
+    if contact is not None:
+        decision = await check_contact_permission(db, organization_id=organization_id, contact=contact)
+        if not decision.allowed:
+            return OutreachEligibility(status="blocked", reasons=[decision.reason or "Not permitted."])
+
+    suppression = await find_matching_suppression(db, organization_id=organization_id, email=email)
+    if suppression is not None:
+        return OutreachEligibility(
+            status="blocked", reasons=[f"Suppressed: {suppression.reason}"]
+        )
+
+    reasons: list[str] = []
+    if provider_record is not None and provider_record.verification_status in _STALE_VERIFICATION_STATUSES:
+        reasons.append(
+            f"Contact verification status is '{provider_record.verification_status}' — "
+            "re-verify before outreach."
+        )
+
+    organization = await db.get(Organization, organization_id)
+    if organization is not None and organization.requires_lawful_basis_metadata:
+        reasons.append("Organization policy requires lawful-basis review before outreach.")
+
+    if reasons:
+        return OutreachEligibility(status="requires_review", reasons=reasons)
+    return OutreachEligibility(
+        status="eligible", reasons=["Verified business contact; no suppression or policy flags."]
+    )
 
 
 async def check_customer_disclosure_permission(
