@@ -39,6 +39,7 @@ from app.routers import (
     reporting,
     rules_engine,
     sales,
+    sales_lead_finder,
     search,
     security,
     support,
@@ -146,6 +147,7 @@ app.include_router(knowledge.router)
 app.include_router(compliance.router)
 app.include_router(security.router)
 app.include_router(sales.router)
+app.include_router(sales_lead_finder.router)
 app.include_router(support.router)
 app.include_router(automation.router)
 app.include_router(integrations.router)
