@@ -87,6 +87,25 @@ class ModelAdapter(Protocol):
     async def rerank(self, query: str, documents: list[str]) -> list[float]: ...
 
 
+def _demo_construct(schema: type[BaseModel], text: str) -> BaseModel:
+    """Best-effort: populate the first string field of the schema with the
+    demo text, and recursively default-construct any nested `BaseModel`
+    field (e.g. `app.sales.nl_filter_parser.ParsedQuery`'s
+    `company_filters`/`person_filters`), so structured-output callers with
+    nested schemas still get a fully valid, clearly-labeled object rather
+    than `None` sitting in a field their type declares as required."""
+    payload: dict[str, Any] = {}
+    for name, info in schema.model_fields.items():
+        annotation = info.annotation
+        if annotation is str:
+            payload[name] = text
+        elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            payload[name] = _demo_construct(annotation, text)
+        elif info.is_required():
+            payload[name] = None
+    return schema.model_construct(**payload)
+
+
 class DemoAdapter:
     """Deterministic, clearly-labeled adapter used when no provider is
     configured. Never presented to end users as a live result — every
@@ -114,17 +133,7 @@ class DemoAdapter:
         self, request: GenerateRequest, schema: type[BaseModel]
     ) -> BaseModel:
         result = await self.generate(request)
-        # Best-effort: populate the first string field of the schema with
-        # the demo text so structured-output callers still get a valid,
-        # clearly-labeled object rather than a crash.
-        fields = schema.model_fields
-        payload: dict[str, Any] = {}
-        for name, info in fields.items():
-            if info.annotation is str:
-                payload[name] = result.text
-            elif info.is_required():
-                payload[name] = None
-        return schema.model_construct(**payload)
+        return _demo_construct(schema, result.text)
 
     async def stream(self, request: GenerateRequest) -> AsyncIterator[str]:
         result = await self.generate(request)
@@ -231,6 +240,51 @@ class ModelGateway:
                     output={"text": result.text} if result else None,
                     citations=resolved_citations,
                     confidence=result.confidence if result else None,
+                    latency_ms=latency_ms,
+                    policy_result="allowed" if error is None else "error",
+                    error=error,
+                )
+            )
+            await db.flush()
+
+    async def generate_structured(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: uuid.UUID,
+        requested_by: uuid.UUID | None,
+        request: GenerateRequest,
+        schema: type[BaseModel],
+    ) -> BaseModel:
+        """Facade wrapper the adapter-level `generate_structured` was
+        missing (it's used internally by `rerank()` but had no public,
+        AiRun-logged entry point for domain services) — same governance
+        logging as `generate()`, structured-output shape instead of free
+        text."""
+        start = time.perf_counter()
+        error: str | None = None
+        result: BaseModel | None = None
+        try:
+            result = await self._adapter.generate_structured(request, schema)
+            return result
+        except Exception as exc:  # noqa: BLE001 - logged into AiRun, then re-raised
+            error = str(exc)
+            raise
+        finally:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            db.add(
+                AiRun(
+                    organization_id=organization_id,
+                    requested_by=requested_by,
+                    task_type=request.task_type,
+                    provider=self._adapter.provider_name,
+                    model=schema.__name__,
+                    prompt_template=request.prompt_template,
+                    prompt_version=request.prompt_version,
+                    input_classification=request.input_classification,
+                    output=result.model_dump(mode="json") if result else None,
+                    citations=[],
+                    confidence=None,
                     latency_ms=latency_ms,
                     policy_result="allowed" if error is None else "error",
                     error=error,

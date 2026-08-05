@@ -63,6 +63,13 @@ PERMISSIONS: dict[str, str] = {
     "sales.icp.manage": "Configure the Ideal Customer Profile and rescoring",
     "sales.sequences.manage": "Create sequences, campaigns, and enroll contacts",
     "sales.meetings.manage": "Schedule meetings and generate prep notes",
+    "sales.lead_finder.view": "View the Lead Finder workspace and run company/people searches",
+    "sales.lead_finder.enrich": "Trigger selective or bulk enrichment (spends provider credits)",
+    "sales.lead_finder.saved_searches.manage": "Create, edit, and delete saved Lead Finder searches",
+    "sales.lead_finder.lists.manage": "Create and manage Lead Finder company/people lists",
+    "sales.lead_finder.import": "Import companies/people via CSV or manual entry",
+    "sales.lead_finder.providers.manage": "Configure and view Lead Finder data-provider status and credit usage",
+    "sales.suppression.manage": "Add and remove Sales suppression-list entries",
     "support.tickets.manage": "Create and update support tickets and messages",
     "support.knowledge.manage": "Create, edit, and publish knowledge articles",
     "support.ai_agent.manage": "Configure the Support AI Agent's auto-response behavior",
@@ -114,6 +121,25 @@ SALES_PERMISSIONS = [
     "sales.icp.manage",
     "sales.sequences.manage",
     "sales.meetings.manage",
+]
+
+# Search/save/enrich — granted to the whole Sales team (both roles below),
+# same as the rest of SALES_PERMISSIONS.
+SALES_LEAD_FINDER_VIEW_PERMISSIONS = [
+    "sales.lead_finder.view",
+    "sales.lead_finder.enrich",
+    "sales.lead_finder.saved_searches.manage",
+    "sales.lead_finder.lists.manage",
+]
+
+# Provider configuration/credit spend, bulk import, and suppression-list
+# management are manager-only — the first real sales_manager/
+# sales_representative permission split in this module (every other Sales
+# permission is granted identically to both roles today).
+SALES_LEAD_FINDER_MANAGE_PERMISSIONS = [
+    "sales.lead_finder.import",
+    "sales.lead_finder.providers.manage",
+    "sales.suppression.manage",
 ]
 
 SUPPORT_PERMISSIONS = [
@@ -213,8 +239,15 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
         + BUSINESS_RULES_PERMISSIONS
         + _CROSS_CUTTING_PERMISSIONS
     ),
-    "sales_manager": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
-    "sales_representative": SALES_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
+    "sales_manager": (
+        SALES_PERMISSIONS
+        + SALES_LEAD_FINDER_VIEW_PERMISSIONS
+        + SALES_LEAD_FINDER_MANAGE_PERMISSIONS
+        + _CROSS_CUTTING_PERMISSIONS
+    ),
+    "sales_representative": (
+        SALES_PERMISSIONS + SALES_LEAD_FINDER_VIEW_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+    ),
     "support_manager": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "support_agent": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "automation_manager": (
