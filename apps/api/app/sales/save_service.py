@@ -24,6 +24,16 @@ _EMAIL_STATUS_TO_VERIFICATION_STATUS = {
     "unavailable": "unavailable",
 }
 
+# CSV-imported and manually-entered records are never presented as
+# provider-verified (spec: "guessed contact details presented as verified"
+# is a hard prohibition) — both map to the same honest "user_entered"
+# status regardless of what the row happened to contain.
+_NON_PROVIDER_SOURCE_VERIFICATION_STATUS = {
+    "demo": "demo",
+    "csv": "user_entered",
+    "manual": "user_entered",
+}
+
 
 def _normalize_domain(website_or_domain: str) -> str:
     return (
@@ -88,7 +98,9 @@ async def save_company_as_account(
         source_url=company.source_url,
         retrieved_at=company.retrieved_at,
         last_verified_at=datetime.now(UTC),
-        verification_status="demo" if company.provider == "demo" else "provider_supplied",
+        verification_status=_NON_PROVIDER_SOURCE_VERIFICATION_STATUS.get(
+            company.provider, "provider_supplied"
+        ),
         raw_payload=company.raw,
         linked_account_id=account.id,
         imported_by_user_id=actor_user_id,
@@ -155,10 +167,9 @@ async def save_person_as_contact(
         source_url=person.source_url,
         retrieved_at=person.retrieved_at,
         last_verified_at=datetime.now(UTC),
-        verification_status=(
-            "demo"
-            if person.provider == "demo"
-            else _EMAIL_STATUS_TO_VERIFICATION_STATUS.get(person.email_status, "unverified")
+        verification_status=_NON_PROVIDER_SOURCE_VERIFICATION_STATUS.get(
+            person.provider,
+            _EMAIL_STATUS_TO_VERIFICATION_STATUS.get(person.email_status, "unverified"),
         ),
         raw_payload=person.raw,
         linked_contact_id=contact.id,

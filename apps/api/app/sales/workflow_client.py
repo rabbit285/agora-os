@@ -21,9 +21,11 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 WORKFLOW_NAME = "SalesBulkEnrichmentWorkflow"
+IMPORT_WORKFLOW_NAME = "SalesCsvImportWorkflow"
 TASK_QUEUE = "agora-default"
 
 EnrichmentStarter = Callable[[uuid.UUID], Awaitable[None]]
+ImportStarter = Callable[[uuid.UUID], Awaitable[None]]
 
 
 async def start_bulk_enrichment(job_id: uuid.UUID) -> None:
@@ -42,3 +44,25 @@ async def start_bulk_enrichment(job_id: uuid.UUID) -> None:
 
 async def get_enrichment_starter() -> EnrichmentStarter:
     return start_bulk_enrichment
+
+
+async def start_csv_import(job_id: uuid.UUID) -> None:
+    """Same request/durable-execution split as `start_bulk_enrichment` — the
+    `SalesImportJob` row already exists (created synchronously by
+    `app.sales.import_job_service.create_import_job`), so the frontend polls
+    `GET .../import-jobs/{id}` rather than needing a workflow handle."""
+    from temporalio.client import Client
+
+    from app.config import settings
+
+    client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
+    await client.start_workflow(
+        IMPORT_WORKFLOW_NAME,
+        args=[str(job_id)],
+        id=f"sales-import-{job_id}",
+        task_queue=TASK_QUEUE,
+    )
+
+
+async def get_import_starter() -> ImportStarter:
+    return start_csv_import

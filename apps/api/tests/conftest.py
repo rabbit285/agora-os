@@ -29,7 +29,7 @@ from app.db.session import get_db
 from app.integrations.workflow_client import get_sync_starter
 from app.knowledge.workflow_client import get_ingestion_starter
 from app.main import app
-from app.sales.workflow_client import get_enrichment_starter
+from app.sales.workflow_client import get_enrichment_starter, get_import_starter
 
 engine = create_async_engine(
     "sqlite+aiosqlite:///:memory:",
@@ -122,7 +122,18 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides[get_run_signaler] = _noop_run_signaler
     app.dependency_overrides[get_schedule_syncer] = _noop_schedule_syncer
     app.dependency_overrides[get_schedule_deleter] = _noop_schedule_deleter
+    async def _noop_import_starter():  # type: ignore[no-untyped-def]
+        async def _start(job_id: object) -> None:
+            # Tests never have a real Temporal server; import execution is
+            # tested directly against
+            # app.sales.import_job_service.execute_import_job (see
+            # tests/test_sales_lead_finder.py), not through the workflow.
+            return None
+
+        return _start
+
     app.dependency_overrides[get_enrichment_starter] = _noop_enrichment_starter
+    app.dependency_overrides[get_import_starter] = _noop_import_starter
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

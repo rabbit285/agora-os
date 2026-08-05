@@ -354,6 +354,57 @@ class CreditEstimatePreviewOut(BaseModel):
     record_count: int
 
 
+class ImportPreviewIn(BaseModel):
+    file_id: uuid.UUID
+    record_type: Literal["company", "person"]
+
+
+class ImportPreviewOut(BaseModel):
+    headers: list[str]
+    sample_rows: list[dict[str, str]]
+    suggested_mapping: dict[str, str | None]
+    total_rows: int
+
+
+class ImportStartIn(BaseModel):
+    file_id: uuid.UUID
+    record_type: Literal["company", "person"]
+    column_mapping: dict[str, str | None]
+
+
+class ImportJobOut(BaseModel):
+    id: uuid.UUID
+    record_type: str
+    status: str
+    total_rows: int
+    imported_rows: int
+    skipped_rows: int
+    error_rows: list[dict[str, Any]]
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ManualCompanyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    domain: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    employee_count: int | None = None
+    location: str | None = None
+
+
+class ManualPersonIn(BaseModel):
+    full_name: str = Field(min_length=1, max_length=300)
+    email: str | None = None
+    title: str | None = None
+    company_domain: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    account_id: uuid.UUID | None = None
+
+
 class SaveCompanyOut(BaseModel):
     account_id: uuid.UUID
     created: bool

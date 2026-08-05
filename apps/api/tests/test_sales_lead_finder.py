@@ -3,10 +3,12 @@ from __future__ import annotations
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import Membership, MembershipRole
+from app.core.models import File, Membership, MembershipRole
 from app.core.rbac import get_system_role
+from app.core.storage import upload_object
 from app.identity.models import User
 from app.identity.service import create_session
 from app.sales.models import Account, Contact
@@ -561,3 +563,283 @@ async def test_suppression_crud_and_permission(
     client.cookies.set("agora_session", token)
     denied = await client.get("/api/v1/sales/lead-finder/suppression")
     assert denied.status_code == 403
+
+
+# ---- CSV import and manual entry ----
+
+
+async def _upload_csv(
+    client: AsyncClient, db_session: AsyncSession, *, organization_id, email: str, content: str
+) -> str:
+    """Writes real bytes to object storage (the same discipline
+    test_reporting.py uses for report downloads) rather than mocking
+    storage, so these tests exercise the real download/parse pipeline —
+    not just the row-mapping logic in isolation."""
+    user_id = (await db_session.execute(select(User.id).where(User.email == email))).scalar_one()
+    storage_key = f"org/{organization_id}/{uuid.uuid4()}/import.csv"
+    upload_object(storage_key, content.encode("utf-8"), "text/csv")
+    file_record = File(
+        organization_id=organization_id,
+        storage_key=storage_key,
+        original_filename="import.csv",
+        content_type="text/csv",
+        size_bytes=len(content),
+        uploaded_by=user_id,
+    )
+    db_session.add(file_record)
+    await db_session.flush()
+    await db_session.commit()
+    return str(file_record.id)
+
+
+async def test_import_preview_suggests_column_mapping(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "import1@example.com", "Import Org 1")
+    file_id = await _upload_csv(
+        client,
+        db_session,
+        organization_id=organization_id,
+        email="import1@example.com",
+        content="Company Name,Website,Employees\nAcme Robotics,acme-robotics.example,120\n",
+    )
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import/preview",
+        json={"file_id": file_id, "record_type": "company"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total_rows"] == 1
+    assert body["suggested_mapping"]["name"] == "Company Name"
+    assert body["suggested_mapping"]["website"] == "Website"
+    assert body["sample_rows"][0]["Company Name"] == "Acme Robotics"
+
+
+async def test_import_small_file_runs_synchronously_and_creates_accounts(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "import2@example.com", "Import Org 2")
+    file_id = await _upload_csv(
+        client,
+        db_session,
+        organization_id=organization_id,
+        email="import2@example.com",
+        content=(
+            "Company Name,Website\n"
+            "Acme Robotics,acme-robotics.example\n"
+            "Bolt Logistics,bolt-logistics.example\n"
+        ),
+    )
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import",
+        json={
+            "file_id": file_id,
+            "record_type": "company",
+            "column_mapping": {"name": "Company Name", "website": "Website"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "succeeded"
+    assert body["total_rows"] == 2
+    assert body["imported_rows"] == 2
+    assert body["skipped_rows"] == 0
+
+    accounts = (
+        await db_session.execute(
+            select(Account).where(Account.organization_id == organization_id)
+        )
+    ).scalars().all()
+    assert {a.name for a in accounts} == {"Acme Robotics", "Bolt Logistics"}
+
+    provider_records = (
+        await db_session.execute(
+            select(SalesProviderRecord).where(
+                SalesProviderRecord.organization_id == organization_id,
+                SalesProviderRecord.provider == "csv",
+            )
+        )
+    ).scalars().all()
+    assert len(provider_records) == 2
+    # CSV-imported records are never presented as provider-verified (spec
+    # prohibition on "guessed contact details presented as verified").
+    assert all(r.verification_status == "user_entered" for r in provider_records)
+
+    poll = await client.get(f"/api/v1/sales/lead-finder/import-jobs/{body['id']}")
+    assert poll.status_code == 200
+    assert poll.json()["status"] == "succeeded"
+
+
+async def test_import_reports_row_errors_without_failing_the_whole_file(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "import3@example.com", "Import Org 3")
+    file_id = await _upload_csv(
+        client,
+        db_session,
+        organization_id=organization_id,
+        email="import3@example.com",
+        content="Full Name,Email\nJane Doe,jane@example.com\n,missing-name@example.com\nBad Email,not-an-email\n",
+    )
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import",
+        json={
+            "file_id": file_id,
+            "record_type": "person",
+            "column_mapping": {"full_name": "Full Name", "email": "Email"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["total_rows"] == 3
+    assert body["imported_rows"] == 1
+    assert body["skipped_rows"] == 2
+    assert len(body["error_rows"]) == 2
+    assert any("name" in e["error"].lower() for e in body["error_rows"])
+    assert any("email" in e["error"].lower() for e in body["error_rows"])
+
+
+async def test_import_dedupes_against_an_existing_saved_account(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "import4@example.com", "Import Org 4")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    existing_account_id = saved.json()["account_id"]
+
+    file_id = await _upload_csv(
+        client,
+        db_session,
+        organization_id=organization_id,
+        email="import4@example.com",
+        content=f"Company Name,Website\nNorthwind,{company['domain']}\n",
+    )
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import",
+        json={
+            "file_id": file_id,
+            "record_type": "company",
+            "column_mapping": {"name": "Company Name", "website": "Website"},
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["imported_rows"] == 1
+
+    accounts = (
+        await db_session.execute(
+            select(Account).where(Account.organization_id == organization_id)
+        )
+    ).scalars().all()
+    # The CSV row matched the existing account by domain rather than
+    # creating a duplicate (see save_service.save_company_as_account) — its
+    # name is untouched by the CSV row's ("Northwind") differing label.
+    assert len(accounts) == 1
+    assert str(accounts[0].id) == existing_account_id
+    assert accounts[0].name == company["name"]
+
+
+async def test_import_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "import-rbac@example.com", "Import RBAC Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="import-rbac-employee@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import",
+        json={"file_id": str(uuid.uuid4()), "record_type": "company", "column_mapping": {}},
+    )
+    assert response.status_code == 403
+
+
+async def test_import_rejects_file_from_another_organization(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    org_a = await _signup(client, "import-tenant-a@example.com", "Import Tenant A")
+    file_id = await _upload_csv(
+        client,
+        db_session,
+        organization_id=org_a,
+        email="import-tenant-a@example.com",
+        content="Company Name\nAcme\n",
+    )
+
+    await _signup(client, "import-tenant-b@example.com", "Import Tenant B")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/import/preview",
+        json={"file_id": file_id, "record_type": "company"},
+    )
+    assert response.status_code == 404
+
+
+async def test_manual_add_company_creates_account_with_user_entered_status(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "manual1@example.com", "Manual Org 1")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/manual/company",
+        json={"name": "Handwritten Co", "domain": "handwritten.example", "employee_count": 12},
+    )
+    assert response.status_code == 201, response.text
+    account_id = response.json()["account_id"]
+    assert response.json()["created"] is True
+
+    account = await db_session.get(Account, uuid.UUID(account_id))
+    assert account is not None
+    assert account.name == "Handwritten Co"
+
+    provider_record = (
+        await db_session.execute(
+            select(SalesProviderRecord).where(
+                SalesProviderRecord.organization_id == organization_id,
+                SalesProviderRecord.provider == "manual",
+            )
+        )
+    ).scalar_one()
+    assert provider_record.verification_status == "user_entered"
+
+
+async def test_manual_add_person_creates_contact_with_user_entered_status(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _signup(client, "manual2@example.com", "Manual Org 2")
+    response = await client.post(
+        "/api/v1/sales/lead-finder/manual/person",
+        json={"full_name": "Pat Rivera", "email": "pat.rivera@example.com", "title": "VP Sales"},
+    )
+    assert response.status_code == 201, response.text
+    contact_id = response.json()["contact_id"]
+
+    contact = await db_session.get(Contact, uuid.UUID(contact_id))
+    assert contact is not None
+    assert contact.full_name == "Pat Rivera"
+    assert contact.job_title == "VP Sales"
+
+    provider_record = (
+        await db_session.execute(
+            select(SalesProviderRecord).where(SalesProviderRecord.linked_contact_id == contact.id)
+        )
+    ).scalar_one()
+    assert provider_record.verification_status == "user_entered"
+
+
+async def test_manual_add_requires_permission(client: AsyncClient, db_session: AsyncSession) -> None:
+    organization_id = await _signup(client, "manual-rbac@example.com", "Manual RBAC Org")
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="manual-rbac-employee@example.com",
+        role_key="employee",
+    )
+    client.cookies.set("agora_session", token)
+    response = await client.post(
+        "/api/v1/sales/lead-finder/manual/company", json={"name": "Should Be Blocked"}
+    )
+    assert response.status_code == 403
