@@ -403,6 +403,103 @@ async def test_enrich_requires_permission(client: AsyncClient, db_session: Async
     assert response.status_code == 403
 
 
+async def test_credit_usage_dashboard_filters_by_provider_operation_user_and_date(
+    client: AsyncClient,
+) -> None:
+    await _signup(client, "credit1@example.com", "Credit Org 1")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    account_id = saved.json()["account_id"]
+    await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [account_id]},
+    )
+
+    all_usage = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert all_usage.status_code == 200
+    rows = all_usage.json()
+    assert len(rows) == 1
+    row = rows[0]
+    # EnrichIn.provider defaults to "apollo" — the requested provider key
+    # is what's recorded regardless of whether it internally fell back to
+    # demo data (Apollo isn't configured in this test environment; see
+    # test_company_search_returns_demo_labeled_results for where the
+    # demo/apollo distinction actually surfaces to the caller instead).
+    assert row["provider"] == "apollo"
+    assert row["operation"] == "enrich_company"
+    assert row["requested_by_user_id"] is not None
+    assert "estimated_credits" in row
+    assert "actual_credits" in row
+
+    by_provider = await client.get("/api/v1/sales/lead-finder/credit-usage?provider=apollo")
+    assert len(by_provider.json()) == 1
+    by_wrong_provider = await client.get("/api/v1/sales/lead-finder/credit-usage?provider=hubspot")
+    assert by_wrong_provider.json() == []
+
+    by_operation = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?operation=enrich_company"
+    )
+    assert len(by_operation.json()) == 1
+    by_wrong_operation = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?operation=enrich_person"
+    )
+    assert by_wrong_operation.json() == []
+
+    by_user = await client.get(f"/api/v1/sales/lead-finder/credit-usage?user_id={row['requested_by_user_id']}")
+    assert len(by_user.json()) == 1
+    by_wrong_user = await client.get(f"/api/v1/sales/lead-finder/credit-usage?user_id={uuid.uuid4()}")
+    assert by_wrong_user.json() == []
+
+    future = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?date_from=2999-01-01T00:00:00Z"
+    )
+    assert future.json() == []
+    past = await client.get(
+        "/api/v1/sales/lead-finder/credit-usage?date_from=2000-01-01T00:00:00Z"
+    )
+    assert len(past.json()) == 1
+
+
+async def test_credit_usage_dashboard_requires_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    organization_id = await _signup(client, "credit2a@example.com", "Credit Org 2a")
+
+    # sales_representative doesn't get sales.lead_finder.providers.manage (manager-only)
+    token = await _create_member_with_role(
+        db_session,
+        organization_id=organization_id,
+        email="credit2a-rep@example.com",
+        role_key="sales_representative",
+    )
+    client.cookies.set("agora_session", token)
+    denied = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert denied.status_code == 403
+
+
+async def test_credit_usage_dashboard_isolated_per_organization(client: AsyncClient) -> None:
+    await _signup(client, "credit3a@example.com", "Credit Org 3a")
+    search = await client.post(
+        "/api/v1/sales/lead-finder/companies/search",
+        json={"filters": {"name": "Northwind"}, "page": 1, "page_size": 10},
+    )
+    company = search.json()["companies"][0]
+    saved = await client.post("/api/v1/sales/lead-finder/companies/save", json=company)
+    await client.post(
+        "/api/v1/sales/lead-finder/enrich",
+        json={"operation": "enrich_company", "record_ids": [saved.json()["account_id"]]},
+    )
+
+    await _signup(client, "credit3b@example.com", "Credit Org 3b")
+    other_org = await client.get("/api/v1/sales/lead-finder/credit-usage")
+    assert other_org.status_code == 200
+    assert other_org.json() == []
+
+
 async def test_saved_search_is_isolated_per_organization(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

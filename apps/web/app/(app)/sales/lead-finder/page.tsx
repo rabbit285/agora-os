@@ -17,6 +17,7 @@ import { ProviderStatusCard } from "./provider-status-card";
 export default function LeadFinderPage() {
   const { data: permissions } = useCurrentPermissions();
   const canView = !permissions || permissions.includes("sales.lead_finder.view");
+  const canManageProviders = permissions?.includes("sales.lead_finder.providers.manage") ?? false;
 
   const { data: providers } = useQuery<ProviderStatusOut[]>({
     queryKey: ["sales", "lead-finder", "providers"],
@@ -53,6 +54,13 @@ export default function LeadFinderPage() {
                 Lists
               </Button>
             </Link>
+            {canManageProviders && (
+              <Link href="/sales/lead-finder/credit-usage">
+                <Button variant="outline" size="sm">
+                  Credit Usage
+                </Button>
+              </Link>
+            )}
           </div>
         }
       />

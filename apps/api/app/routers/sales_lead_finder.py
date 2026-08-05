@@ -262,6 +262,42 @@ async def provider_usage(
     return list(rows)
 
 
+@router.get("/credit-usage", response_model=list[CreditUsageSummaryOut])
+async def credit_usage_dashboard(
+    provider: str | None = None,
+    operation: str | None = None,
+    user_id: uuid.UUID | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.providers.manage")),
+) -> list[SalesProviderCreditUsage]:
+    """Credit-usage dashboard: organization scope is the tenant-isolation
+    boundary itself (never a selectable filter — a cross-org selector
+    here would be a real tenant-isolation bug, not a feature), plus
+    user/provider/operation/date filters and both estimated and actual
+    (never fabricated — see app.sales.enrichment_job_service, actual is
+    only ever recorded when a provider itself reports a real number)."""
+    query = select(SalesProviderCreditUsage).where(
+        SalesProviderCreditUsage.organization_id == context.organization_id
+    )
+    if provider:
+        query = query.where(SalesProviderCreditUsage.provider == provider)
+    if operation:
+        query = query.where(SalesProviderCreditUsage.operation == operation)
+    if user_id:
+        query = query.where(SalesProviderCreditUsage.requested_by_user_id == user_id)
+    if date_from:
+        query = query.where(SalesProviderCreditUsage.created_at >= date_from)
+    if date_to:
+        query = query.where(SalesProviderCreditUsage.created_at <= date_to)
+    rows = (
+        await db.execute(query.order_by(SalesProviderCreditUsage.created_at.desc()).limit(min(limit, 500)))
+    ).scalars()
+    return list(rows)
+
+
 # ---- Save as Account / Contact ----
 
 

@@ -1257,6 +1257,17 @@ export type CreditEstimatePreviewOut = {
   record_count: number;
 };
 
+export type CreditUsageSummaryOut = {
+  id: string;
+  provider: string;
+  operation: string;
+  estimated_credits: number;
+  actual_credits: number | null;
+  requested_by_user_id: string | null;
+  succeeded: boolean;
+  created_at: string;
+};
+
 export type ParseQueryOut = {
   company_filters: CompanyFilters;
   person_filters: PersonFilters;

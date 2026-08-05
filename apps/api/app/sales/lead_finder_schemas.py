@@ -274,10 +274,12 @@ class ProviderStatusOut(BaseModel):
 
 
 class CreditUsageSummaryOut(BaseModel):
+    id: uuid.UUID
     provider: str
     operation: str
     estimated_credits: int
     actual_credits: int | None
+    requested_by_user_id: uuid.UUID | None
     succeeded: bool
     created_at: datetime
 
