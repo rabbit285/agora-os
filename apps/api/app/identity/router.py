@@ -136,7 +136,7 @@ async def sso_callback_endpoint(
     elif is_new_user:
         redirect = RedirectResponse(url=f"{settings.app_url}/onboarding")
     else:
-        redirect = RedirectResponse(url=f"{settings.app_url}/")
+        redirect = RedirectResponse(url=f"{settings.app_url}/dashboard")
     _set_session_cookie(redirect, session.raw_token)  # type: ignore[attr-defined]
     return redirect
 

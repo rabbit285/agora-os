@@ -30,7 +30,7 @@ export default function MfaChallengePage() {
     setServerError(null);
     try {
       await apiFetch("/api/v1/auth/mfa/verify", { method: "POST", body: values });
-      router.push("/");
+      router.push("/dashboard");
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : "Invalid code");
     }

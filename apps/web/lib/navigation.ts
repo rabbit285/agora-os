@@ -56,7 +56,7 @@ export const NAVIGATION: NavGroup[] = [
   {
     label: "Command Center",
     items: [
-      { label: "Overview", href: "/", implemented: true, icon: Gauge },
+      { label: "Overview", href: "/dashboard", implemented: true, icon: Gauge },
       { label: "AI Copilot", href: "/copilot", implemented: true, icon: Sparkles },
       { label: "Tasks", href: "/tasks", implemented: true, icon: ClipboardCheck },
       { label: "Approvals", href: "/approvals", implemented: true, icon: ShieldCheck },
@@ -176,7 +176,7 @@ export const NAVIGATION: NavGroup[] = [
 ];
 
 export const MODULES = [
-  { key: "overview", label: "Business Overview", href: "/", implemented: true },
+  { key: "overview", label: "Business Overview", href: "/dashboard", implemented: true },
   { key: "compliance", label: "Compliance", href: "/compliance", implemented: true },
   { key: "security", label: "Security", href: "/security", implemented: true },
   { key: "sales", label: "Sales", href: "/sales", implemented: true },

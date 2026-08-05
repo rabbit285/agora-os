@@ -12,8 +12,7 @@ export function ModuleSwitcher() {
   return (
     <div className="flex items-center gap-1 overflow-x-auto">
       {MODULES.map((module) => {
-        const active =
-          module.href === "/" ? pathname === "/" : pathname.startsWith(module.href);
+        const active = pathname.startsWith(module.href);
         return (
           <Link
             key={module.key}

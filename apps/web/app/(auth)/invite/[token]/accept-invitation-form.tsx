@@ -35,7 +35,7 @@ export function AcceptInvitationForm({ token }: { token: string }) {
         method: "POST",
         body: { token, full_name: values.full_name, password: values.password },
       });
-      router.push("/");
+      router.push("/dashboard");
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : "Something went wrong");
     }

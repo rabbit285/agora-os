@@ -31,6 +31,7 @@ from app.routers import (
     health,
     integrations,
     knowledge,
+    marketing,
     memory,
     notifications,
     onboarding,
@@ -158,3 +159,4 @@ app.include_router(recommendations.router)
 app.include_router(briefing.router)
 app.include_router(memory.router)
 app.include_router(rules_engine.router)
+app.include_router(marketing.router)

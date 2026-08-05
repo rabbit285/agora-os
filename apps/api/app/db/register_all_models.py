@@ -28,6 +28,7 @@ from app.core import models as _core_models  # noqa: F401
 from app.identity import models as _identity_models  # noqa: F401
 from app.integrations import models as _integrations_models  # noqa: F401
 from app.knowledge import models as _knowledge_models  # noqa: F401
+from app.marketing import models as _marketing_models  # noqa: F401
 from app.memory import models as _memory_models  # noqa: F401
 from app.onboarding import models as _onboarding_models  # noqa: F401
 from app.recommendations import models as _recommendations_models  # noqa: F401

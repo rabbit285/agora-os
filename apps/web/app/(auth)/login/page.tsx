@@ -86,7 +86,7 @@ export default function LoginPage() {
         method: "POST",
         body: values,
       });
-      router.push(result.mfa_required ? "/mfa-challenge" : "/");
+      router.push(result.mfa_required ? "/mfa-challenge" : "/dashboard");
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : "Something went wrong");
     }

@@ -40,7 +40,7 @@ test("a new organization can walk the full 9-screen onboarding wizard end to end
   // Screen 9 — real, live-computed Business AI Readiness (spec §68 step 10)
   await expect(page.getByText("Your Business AI Readiness")).toBeVisible();
   await page.getByRole("button", { name: "Open Business Command Center" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/dashboard");
 });
 
 test("onboarding progress survives a reload (resumable, spec §68)", async ({ page }) => {

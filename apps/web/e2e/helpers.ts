@@ -43,7 +43,7 @@ export async function login(page: Page, org: Pick<SignedUpOrg, "email" | "passwo
   await page.getByLabel("Email").fill(org.email);
   await page.getByLabel("Password").fill(org.password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/dashboard");
 }
 
 /** Log out is a menu item inside the top-nav user menu, not a standalone

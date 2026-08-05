@@ -134,6 +134,6 @@ describe("OnboardingPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Open Business Command Center" }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 });

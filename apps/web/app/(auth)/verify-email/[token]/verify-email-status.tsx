@@ -46,7 +46,7 @@ export function VerifyEmailStatus({ token }: { token: string }) {
         )}
         <div className="mt-4 text-center">
           <Button asChild>
-            <Link href="/">Go to dashboard</Link>
+            <Link href="/dashboard">Go to dashboard</Link>
           </Button>
         </div>
       </CardContent>

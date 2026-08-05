@@ -356,7 +356,7 @@ function ReadinessStep() {
 
   const complete = useMutation({
     mutationFn: () => apiFetch<OnboardingProfile>("/api/v1/onboarding/complete", { method: "POST" }),
-    onSuccess: () => router.push("/"),
+    onSuccess: () => router.push("/dashboard"),
   });
 
   const dimensions = readiness
