@@ -93,6 +93,32 @@ class SalesBulkEnrichmentWorkflow:
 
 
 @workflow.defn
+class SalesCsvImportWorkflow:
+    """Runs a Sales Lead Finder CSV import durably for files over the
+    synchronous row-count threshold (see
+    docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §13, and
+    `_SYNC_IMPORT_MAX_ROWS` in app.routers.sales_lead_finder) — the same
+    request/durable-execution split as `SalesBulkEnrichmentWorkflow`. The
+    `SalesImportJob` row already exists (created synchronously by the API)
+    and this workflow finalizes it; per-row failures are handled *inside*
+    the activity so one bad row never fails the whole file."""
+
+    @workflow.run
+    async def run(self, job_id: str) -> str:
+        return await workflow.execute_activity(
+            "execute_sales_csv_import_activity",
+            job_id,
+            start_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(
+                initial_interval=timedelta(seconds=5),
+                backoff_coefficient=2.0,
+                maximum_interval=timedelta(minutes=1),
+                maximum_attempts=3,
+            ),
+        )
+
+
+@workflow.defn
 class WorkflowRunWorkflow:
     """Runs a Business Process Automation `WorkflowRun` durably (spec §36,
     §61) — the `WorkflowRun`/`WorkflowStepRun` rows already exist/are

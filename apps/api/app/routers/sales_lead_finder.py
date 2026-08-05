@@ -14,10 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.governance import evaluate_outreach_eligibility
+from app.core.models import File
+from app.core.storage import download_object
 from app.db.session import get_db
 from app.dependencies import OrgContext, require_permission
 from app.sales import (
+    csv_import,
     enrichment_job_service,
+    import_job_service,
     lead_finder_service,
     list_service,
     save_service,
@@ -35,6 +39,12 @@ from app.sales.lead_finder_schemas import (
     EligibilityCheckOut,
     EnrichIn,
     EnrichmentJobOut,
+    ImportJobOut,
+    ImportPreviewIn,
+    ImportPreviewOut,
+    ImportStartIn,
+    ManualCompanyIn,
+    ManualPersonIn,
     NormalizedCompanyOut,
     NormalizedPersonOut,
     ParseQueryIn,
@@ -62,6 +72,7 @@ from app.sales.models import Contact
 from app.sales.nl_filter_parser import parse_query
 from app.sales.provider_models import (
     SalesEnrichmentJob,
+    SalesImportJob,
     SalesList,
     SalesListItem,
     SalesProviderCreditUsage,
@@ -82,7 +93,12 @@ from app.sales.providers.schemas import (
     PersonFilters,
     SortSpec,
 )
-from app.sales.workflow_client import EnrichmentStarter, get_enrichment_starter
+from app.sales.workflow_client import (
+    EnrichmentStarter,
+    ImportStarter,
+    get_enrichment_starter,
+    get_import_starter,
+)
 
 router = APIRouter(prefix="/api/v1/sales/lead-finder", tags=["sales-lead-finder"])
 
@@ -746,4 +762,165 @@ async def remove_suppression(
         db, entry=entry, removed_by_user_id=context.user.id, ip_address=ip_address, user_agent=user_agent
     )
     await db.commit()
+
+
+# ---- CSV import and manual entry ----
+
+_SYNC_IMPORT_MAX_ROWS = 200
+
+
+@router.post("/import/preview", response_model=ImportPreviewOut)
+async def preview_import(
+    payload: ImportPreviewIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.import")),
+) -> ImportPreviewOut:
+    file_record = await db.get(File, payload.file_id)
+    if file_record is None or file_record.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    file_bytes = download_object(file_record.storage_key)
+    preview = csv_import.parse_preview(file_bytes, record_type=payload.record_type)
+    return ImportPreviewOut(
+        headers=preview.headers,
+        sample_rows=preview.sample_rows,
+        suggested_mapping=preview.suggested_mapping,
+        total_rows=preview.total_rows,
+    )
+
+
+@router.post("/import", response_model=ImportJobOut, status_code=status.HTTP_201_CREATED)
+async def start_import(
+    payload: ImportStartIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.import")),
+    start_import_job: ImportStarter = Depends(get_import_starter),
+) -> SalesImportJob:
+    """Small files (<=200 rows) import synchronously so the response
+    already reflects the final counts; larger files hand off to
+    `SalesCsvImportWorkflow` and the caller polls `GET
+    /import-jobs/{id}` for the running -> succeeded/partial/failed
+    transition, the same split `/enrich` vs `/enrich/bulk` uses."""
+    file_record = await db.get(File, payload.file_id)
+    if file_record is None or file_record.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    ip_address, user_agent = _client_meta(request)
+    file_bytes = download_object(file_record.storage_key)
+    total_rows = len(csv_import.read_all_rows(file_bytes))
+
+    job = await import_job_service.create_import_job(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        record_type=payload.record_type,
+        file_id=file_record.id,
+        column_mapping=payload.column_mapping,
+        total_rows=total_rows,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    if total_rows <= _SYNC_IMPORT_MAX_ROWS:
+        job = await import_job_service.execute_import_job(db, job=job)
+        await db.commit()
+        await db.refresh(job)
+        return job
+
     await db.commit()
+    await db.refresh(job)
+    await start_import_job(job.id)
+    return job
+
+
+@router.get("/import-jobs/{job_id}", response_model=ImportJobOut)
+async def get_import_job(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.import")),
+) -> SalesImportJob:
+    job = await db.get(SalesImportJob, job_id)
+    if job is None or job.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import job not found")
+    return job
+
+
+@router.post("/manual/company", response_model=SaveCompanyOut, status_code=status.HTTP_201_CREATED)
+async def manual_add_company(
+    payload: ManualCompanyIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.import")),
+) -> SaveCompanyOut:
+    """Manually-entered records are source-classified the same way CSV
+    imports are (`provider="manual"` -> `verification_status=
+    "user_entered"`, see save_service) — never presented as
+    provider-verified."""
+    ip_address, user_agent = _client_meta(request)
+    company = NormalizedCompany(
+        provider="manual",
+        provider_record_id=f"manual-{uuid.uuid4()}",
+        name=payload.name,
+        domain=payload.domain,
+        website=payload.website,
+        industry=payload.industry,
+        locations=[payload.location] if payload.location else [],
+        employee_count=payload.employee_count,
+        employee_range=None,
+        revenue_range=None,
+        funding_stage=None,
+        total_funding_usd=None,
+        technologies=[],
+        linkedin_url=None,
+        source_url=None,
+        retrieved_at=datetime.now(UTC),
+        raw={},
+    )
+    account, created = await save_service.save_company_as_account(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        company=company,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    return SaveCompanyOut(account_id=account.id, created=created)
+
+
+@router.post("/manual/person", response_model=SavePersonOut, status_code=status.HTTP_201_CREATED)
+async def manual_add_person(
+    payload: ManualPersonIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("sales.lead_finder.import")),
+) -> SavePersonOut:
+    ip_address, user_agent = _client_meta(request)
+    person = NormalizedPerson(
+        provider="manual",
+        provider_record_id=f"manual-{uuid.uuid4()}",
+        full_name=payload.full_name,
+        title=payload.title,
+        seniority=None,
+        department=None,
+        current_company_name=None,
+        current_company_domain=payload.company_domain,
+        location=payload.location,
+        email=payload.email.lower() if payload.email else None,
+        email_status="unverified" if payload.email else "unavailable",
+        phone=payload.phone,
+        phone_status="unverified" if payload.phone else "unavailable",
+        linkedin_url=None,
+        source_url=None,
+        retrieved_at=datetime.now(UTC),
+        raw={},
+    )
+    contact, created = await save_service.save_person_as_contact(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        person=person,
+        account_id=payload.account_id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    await db.commit()
+    return SavePersonOut(contact_id=contact.id, created=created)

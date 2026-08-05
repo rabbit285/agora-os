@@ -103,6 +103,31 @@ async def execute_sales_enrichment_activity(job_id: str) -> str:
         return job.status
 
 
+@activity.defn(name="execute_sales_csv_import_activity")
+async def execute_sales_csv_import_activity(job_id: str) -> str:
+    import app.db.register_all_models  # noqa: F401 — see module docstring
+    from app.db.session import AsyncSessionLocal
+    from app.sales.import_job_service import execute_import_job
+    from app.sales.provider_models import SalesImportJob
+
+    job_uuid = uuid.UUID(job_id)
+    async with AsyncSessionLocal() as db:
+        job = await db.get(SalesImportJob, job_uuid)
+        if job is None:
+            raise LookupError(f"SalesImportJob {job_id} not found")
+
+        job = await execute_import_job(db, job=job)
+        await db.commit()
+        logger.info(
+            "Sales CSV import job %s finished with status=%s (imported=%d, skipped=%d)",
+            job_id,
+            job.status,
+            job.imported_rows,
+            job.skipped_rows,
+        )
+        return job.status
+
+
 @activity.defn(name="run_workflow_step_batch_activity")
 async def run_workflow_step_batch_activity(run_id: str) -> dict[str, object]:
     """Executes as many of a Business Process Automation `WorkflowRun`'s
