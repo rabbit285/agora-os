@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     # company profile.
     clearbit_api_key: str | None = Field(default=None, alias="CLEARBIT_API_KEY")
 
+    # Sales Lead Finder's external company/people discovery provider (see
+    # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md) — optional, same honesty
+    # shape as every other key here: absent, the SalesDataProvider registry
+    # falls back to the deterministic demo adapter (identical to how
+    # ANTHROPIC_API_KEY/OPENAI_API_KEY absence falls back to the AI
+    # Gateway's DemoAdapter) rather than crashing or faking live results.
+    apollo_api_key: str | None = Field(default=None, alias="APOLLO_API_KEY")
+
     # Billing — optional
     stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
@@ -174,6 +182,7 @@ def _diagnose(settings: Settings) -> None:
         "INTERCOM_CLIENT_ID": settings.intercom_client_id,
         "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
         "CLEARBIT_API_KEY": settings.clearbit_api_key,
+        "APOLLO_API_KEY": settings.apollo_api_key,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:

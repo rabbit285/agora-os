@@ -26,7 +26,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, Index, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -66,6 +66,19 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Suppression flag — spec section 91, checked by
     # app.sales.service.send_outreach_message before any send.
     do_not_contact: Mapped[bool] = mapped_column(default=False)
+
+    # An exact-email duplicate Contact is never legitimate (see
+    # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §10) — declared on the model
+    # itself, not only as an Alembic migration op, so it's also present
+    # when tests build the schema via Base.metadata.create_all().
+    __table_args__ = (
+        Index(
+            "ix_sales_contacts_org_email_unique",
+            "organization_id",
+            func.lower(email),
+            unique=True,
+        ),
+    )
 
 
 class Lead(UUIDPrimaryKeyMixin, TimestampMixin, Base):

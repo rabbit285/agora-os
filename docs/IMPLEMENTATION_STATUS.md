@@ -149,9 +149,10 @@ Last updated: 2026-07-30 (Phase 1 + Phase 2 complete; Phase 3 Compliance, Phase 
 - [x] RBAC: `sales_manager` / `sales_representative` system roles granted sales permissions
 - [x] Frontend: `/sales` overview (accounts, pipeline) + `/sales/accounts/[id]` detail (contacts with suppression toggle, compose/send outreach, opportunities with an "Onboarded as a Support customer" link once closed_won)
 - [x] Seed script: 1 account, 2 contacts (1 suppressed), 1 opportunity, 2 outreach attempts (1 sent, 1 blocked) for the demo org
-- [ ] Sequences/campaigns (multi-step outreach automation) — not started
-- [ ] Meetings, sales conversations/inbox, pipeline events, playbooks — not started
-- [ ] Real lead-finding, enrichment, email/LinkedIn sending — depend on external connectors (Phase 9)
+- [x] Sequences/campaigns (multi-step outreach automation)
+- [x] Meetings (with AI Copilot-grounded prep notes); sales conversations/inbox — outbound status only, no inbound reply tracking
+- [ ] Real email/LinkedIn sending — no live provider connector; every send only transitions message status, gated by the same real compliance check regardless
+- [x] **Sales Lead Finder** (`docs/SALES_DATA_PROVIDER_ARCHITECTURE.md`, `docs/SALES_LEAD_FINDER_IMPLEMENTATION_PLAN.md`) — provider-neutral external company/people discovery and enrichment: `SalesDataProvider` Protocol, real Apollo adapter (company/people search, enrichment, decision-maker discovery — httpx calls against Apollo's documented API, gated on `APOLLO_API_KEY`, never exercised end-to-end without real credentials in this environment, the same disclosed limitation as the HubSpot/Pipedrive/Salesforce/etc. OAuth adapters), deterministic demo-labeled fallback when unconfigured, saved searches, lists, provenance (`sales_provider_records`), deduplication against existing Accounts/Contacts, credit-usage tracking (estimated vs. actual, never fabricated), and a natural-language-to-filter AI assist that returns structured filters for user review — never fabricated company/person records. `/api/v1/sales/lead-finder/*` router, RBAC (`sales.lead_finder.*`, `sales.suppression.manage`), audited. Backend only so far — frontend workspace, selective/bulk enrichment via Temporal, CSV import, and outreach-eligibility/suppression gating are tracked as remaining phases in the implementation plan doc.
 
 ## Support
 

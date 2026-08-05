@@ -87,6 +87,12 @@ responses are just clearly labeled demo output until a key is added.
 |---|---|
 | `CLEARBIT_API_KEY` | Company enrichment (`POST /api/v1/sales/accounts/{id}/enrich`) reports `configured: false` and changes nothing — see `docs/KNOWN_LIMITATIONS.md`. |
 
+## Sales Lead Finder data provider — optional
+
+| Variable | Behavior when unset |
+|---|---|
+| `APOLLO_API_KEY` | The Lead Finder's company/people search, enrichment, and decision-maker discovery (`/api/v1/sales/lead-finder/*`) fall back to a deterministic, clearly-labeled demo provider (`provider: "demo"` on every returned record) instead of failing — identical fallback shape to `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` falling back to the AI Gateway's `DemoAdapter`. See `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md`. Never logged, never sent to the frontend, never hard-coded, never baked into a Docker image layer — read once at process start via `pydantic-settings` from the environment, compatible with AWS Secrets Manager and Render secret environment variables since both inject standard process env vars. |
+
 ## Integrations — optional
 
 Every OAuth provider follows the identical three-variable shape

@@ -123,10 +123,18 @@ implied to work.
   match + employee-count fit, 50 points each), not a black-box model.
   Lead Finder (`app.sales.lead_finder`) surfaces the org's own existing
   ICP-fit Accounts lacking an open Lead — it is not an external
-  prospecting data source. Company Enrichment (`app.sales.enrichment`)
-  is real when a `CLEARBIT_API_KEY` is configured, honestly
-  `configured=false` otherwise — the same credential-gated pattern as
-  the AI providers, OAuth integrations, and AWS Cloud Security scanning.
+  prospecting data source. That capability is separate: the Sales Lead
+  Finder workspace (`/sales/lead-finder`, `app.sales.lead_finder_service`,
+  `app.sales.providers.*` — see `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md`)
+  is a real, provider-neutral external company/people discovery and
+  enrichment layer with Apollo as its adapter, honestly falling back to a
+  deterministic, clearly-labeled demo provider when `APOLLO_API_KEY` is
+  unset — the same credential-gated pattern as every other optional
+  provider in this build. Company Enrichment (`app.sales.enrichment`) is
+  a separate, narrower, pre-existing firmographic lookup, real when a
+  `CLEARBIT_API_KEY` is configured, honestly `configured=false` otherwise;
+  it is intentionally not merged into the newer provider-neutral layer
+  (see architecture doc §3).
   Meetings exist with a real AI Copilot-generated prep-notes feature
   (`app.sales.meetings`, honestly falls back to "no evidence" when the
   knowledge base has nothing relevant) — there is no real calendar sync
