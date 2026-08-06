@@ -598,6 +598,26 @@ implied to work.
   covered by a live smoke test, but neither would have been caught by
   pytest alone — a reminder that fast in-memory tests validate logic, not
   cross-service integration.
+- **The org-deletion schema-drift safety net (`_verify_table_coverage`,
+  Postgres-only) caught a real gap during this session's full-stack
+  Playwright pass, 2026-08-05**: the Sales Lead Finder work had added 7
+  org-scoped tables (`sales_lists`, `sales_saved_searches`,
+  `sales_suppression_entries`, `sales_import_jobs`,
+  `sales_enrichment_jobs`, `sales_provider_credit_usage`,
+  `sales_provider_records`, plus a `sales_list_items` child table) without
+  updating `app.core.organization_deletion`'s coverage list — so a real
+  org deletion 500'd instead of silently under-deleting, exactly per the
+  safety net's own design. Fixed (all 8 tables added). Separately, the
+  same test caught that clicking "Permanently delete now" left the
+  browser's session cookie behind after the server-side `sessions` row
+  was purged — harmless before this branch's `middleware.ts` existed, but
+  with it in place a stale cookie made the post-deletion redirect to
+  `/login` bounce straight back to `/dashboard` (cookie *presence*, not
+  validity, is what the middleware checks — see its own design notes).
+  Fixed by clearing the cookie in the deletion-execute response. Neither
+  bug was catchable by the SQLite-backed unit suite (no Postgres-only
+  check, no real middleware in that test harness) — only a real
+  Docker+Postgres+browser run surfaced them.
 - **The full-stack smoke test was API-level (curl), not a real browser
   click-through.** Verified: signup → session cookie → `/me` → create task
   → list tasks → AI gateway demo response, all through the live API

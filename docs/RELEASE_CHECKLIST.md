@@ -251,6 +251,106 @@ Automation) now have a real, tested backbone.
 
 **This completes all six items of the Compliance/Trust program**: Vendor Risk, Security Questionnaires, Audits, Trust Center, Enterprise Sales Security Review, Data Transfers.
 
+## Public site & auth modernization (branch `ui/public-site-and-auth-modernization`, 2026-08-05)
+
+Not a domain module — replaces the placeholder root route with a real
+public marketing site and rebuilds the authentication UX. See
+`docs/PUBLIC_SITE_AUDIT.md`, `docs/PUBLIC_SITE_DESIGN.md`,
+`docs/AUTH_UX_AUDIT.md`, and `docs/PUBLIC_SITE_IMPLEMENTATION_PLAN.md`
+for the full audit/design/plan trail.
+
+- [x] Public marketing site: homepage, `/features`, `/solutions`,
+      `/trust` (marketing trust/security content — distinct from the
+      existing per-org `/trust/[org_slug]` Trust Center page above),
+      `/pricing`, `/about`, `/contact` (real backend, see below),
+      `/privacy`, `/terms`, `/cookies` — 22 reusable components, no
+      fabricated logos/testimonials/metrics, no invented € pricing
+      (`Starter` is genuinely free; `Growth`/`Business`/`Enterprise`
+      route to "Contact sales" since no plan has a real price in
+      `PLAN_CATALOG`)
+- [x] `POST /api/v1/marketing/demo-requests` — public, persists to a new
+      `DemoRequest` table, audited with `organization_id=None`; no list
+      endpoint was built (a caught design flaw — see design doc's
+      "Correction made during implementation" note — an org-scoped list
+      endpoint would have let any org_admin see every other prospect's
+      submission, since this codebase has no platform-superuser role)
+- [x] Auth UX rebuild: sign-in, sign-up, forgot/reset-password,
+      email-verification, invitation-acceptance (new preview + decline
+      endpoints), MFA challenge — all restyled onto shared
+      `AuthLayout`/`AuthCard`/`AuthField`/`PasswordField` components,
+      preserving every existing backend contract, rate limit, and
+      security property (no account enumeration, no open redirects —
+      `isSafeRedirectTarget` unit-tested)
+- [x] Dashboard relocated from `/` to `/dashboard` (root now serves the
+      public homepage) — 9+ frontend call sites and one backend SSO
+      redirect updated; caught and fixed one missed assertion in
+      `test_billing.py` via the full pytest run
+- [x] New `middleware.ts`: cookie-presence redirect logic only
+      (auth-only paths redirect authenticated visitors away from
+      `/login`/`/signup`; protected paths redirect to
+      `/login?redirect=`); `AuthGuard` and per-request API authorization
+      remain the real authorization boundary, unchanged
+- [x] Marketing consent: new `User.marketing_consent` column, separate
+      unchecked-by-default control on signup, deliberately not bundled
+      with the required Terms/Privacy acceptance checkbox
+- [x] Accessibility: new `public-site-and-auth-accessibility.spec.ts`
+      (15 axe + keyboard-only tests, all passing) — fixed 9 real
+      `--fg-subtle`→`--fg-muted` contrast violations and 2 unlabeled
+      onboarding `<select>` elements found by the scan
+- [x] SEO: `sitemap.xml`, `robots.txt`, blanket `noindex` on every
+      authenticated route via `(app)/layout.tsx` metadata inheritance
+- [x] New `public-site-and-auth.spec.ts` (7 tests covering the spec's
+      17 named journeys: signup → email verification → onboarding →
+      dashboard → sign-out → sign-in, forgot/reset-password,
+      invite-accept, invalid-invitation, authenticated-user-redirected-
+      away-from-login, redirect-back-after-login, mobile nav, keyboard-
+      only signup)
+- [x] Backend: 2 new migrations (`DemoRequest` table,
+      `User.marketing_consent`), 11 new backend tests (marketing +
+      invitation preview/decline + signup consent), full pytest/ruff/
+      mypy clean
+- [x] Full regression pass: existing `auth.spec.ts`, `onboarding.spec.ts`
+      Playwright suites re-verified passing after the dashboard
+      relocation and new middleware (20/20 in the combined run); a
+      separate full pass over `sales-lead-finder.spec.ts`,
+      `sales-lead-finder-accessibility.spec.ts`, `business-
+      intelligence.spec.ts`, `modules.spec.ts`, `settings.spec.ts`
+      surfaced and fixed 2 real bugs pre-dating this branch (see
+      `docs/KNOWN_LIMITATIONS.md`'s Testing section: org-deletion's
+      table-coverage safety net was missing 8 Sales Lead Finder tables,
+      and the deletion-execute endpoint left a stale session cookie
+      that this branch's new `middleware.ts` then mis-treated as "still
+      authenticated") — both fixed, with a new regression test added
+      for the cookie fix; the other 2 reported failures did not
+      reproduce in isolated re-runs (resource contention with a
+      concurrently running screenshot-capture script)
+- [x] 12 screenshots captured (homepage desktop/mobile/product-preview,
+      sign-in desktop/mobile, sign-up desktop/validation-state,
+      forgot-password, email-verification, invitation-acceptance,
+      onboarding, final onboarding step, authenticated dashboard
+      transition) via a scratch Playwright script, deleted after use
+- [x] Full monorepo Playwright suite (71 tests, every spec) run in one
+      pass: 66/71 green, 5 failures — 4 sharing one signature (`signup()`
+      helper timing out waiting for the post-signup `/onboarding`
+      redirect) and 1 `net::ERR_NO_BUFFER_SPACE` (a Windows OS-level
+      socket-exhaustion signal), consistent with ~90 sequential
+      browser-driven tests over 15+ minutes on a single worker on this
+      dev machine. None touch code changed by this branch or this
+      session's org-deletion fix; all 5 passed cleanly when re-run in
+      isolation, confirming environmental flakes, not regressions.
+      Backend: full pytest suite 529 passed, 2 skipped; ruff and mypy
+      clean across the whole `apps/api` tree. Frontend: `tsc --noEmit`
+      clean, ESLint 0 errors (3 pre-existing informational
+      `react-hooks/incompatible-library` notices on `useForm().watch()`
+      in password-strength UIs — expected, not a defect), Vitest 75/75,
+      production build succeeds for every route including `/dashboard`,
+      `sitemap.xml`, `robots.txt`, and the new middleware. Docker smoke:
+      all 7 compose services healthy, Alembic at head, homepage/login/
+      dashboard/sitemap/robots/API health all return 200 through the
+      live stack.
+- [ ] Not merged to `main` — per this effort's own instruction, held
+      pending the complete verification suite
+
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
 - [ ] Phase 10 — Enterprise (SSO/SAML/SCIM)

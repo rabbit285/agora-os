@@ -15,17 +15,40 @@ Full target screen inventory is spec §67 (Required Product Screens) and §6
 marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 (page exists, minimal/placeholder content), `[ ]` not started.
 
-## AUTH
+## PUBLIC SITE
+
+Built `ui/public-site-and-auth-modernization` (see
+`docs/PUBLIC_SITE_AUDIT.md`, `docs/PUBLIC_SITE_DESIGN.md`,
+`docs/PUBLIC_SITE_IMPLEMENTATION_PLAN.md`). None of these routes existed
+before this effort — `/` previously resolved to the authenticated
+dashboard.
 
 | Route | Status |
 |---|---|
-| `/login` | [x] redirects to MFA challenge when the account has TOTP enabled; real "Sign in with Google/Microsoft" SSO buttons shown only for a provider that's actually configured (spec §59, PLAT-18) |
-| `/signup` | [x] |
-| `/invite/[token]` | [x] accept an org invitation, creating or attaching the user |
-| `/forgot-password` | [x] |
-| `/reset-password/[token]` | [x] |
-| `/verify-email/[token]` | [x] |
-| MFA challenge (`/mfa-challenge`) | [x] TOTP code entry, gates `get_org_context` until verified |
+| `/` | [x] Homepage — hero with a real product preview (built from the app's own `MetricCard` component, persistently labeled "Demo data"), problem, platform (6 modules), how-it-works, AI Copilot, cross-module value, trust/governance, integrations (9 real adapters), ideal customers, pricing preview, final CTA |
+| `/features` | [x] module-by-module feature detail |
+| `/solutions` | [x] audience-oriented positioning |
+| `/trust` | [x] public security & governance page — deliberately not at `/security`, which is the real authenticated Security Operations module (see `docs/PUBLIC_SITE_DESIGN.md` §2) |
+| `/pricing` | [x] real plan names/entitlements from `GET /api/v1/billing/plans`; Starter "Free", Growth/Business/Enterprise "Contact sales" — no euro figure exists anywhere in the system to display |
+| `/about` | [x] |
+| `/contact` | [x] real demo-request form, `POST /api/v1/marketing/demo-requests` |
+| `/privacy`, `/terms`, `/cookies` | [x] real, accurate content (no analytics/certification claims not backed by the actual system) |
+
+## AUTH
+
+Rebuilt on shared `AuthLayout`/`AuthCard`/`AuthField`/`PasswordField`/
+`OAuthButtons`/`AuthAlert` components in the same effort — every backend
+call/contract is unchanged from before (see `docs/AUTH_UX_AUDIT.md`).
+
+| Route | Status |
+|---|---|
+| `/login` | [x] redirects to MFA challenge when the account has TOTP enabled; real "Sign in with Google/Microsoft" SSO buttons shown only for a provider that's actually configured (spec §59, PLAT-18); honors `?redirect=` (validated by `lib/auth-redirect.ts`) to return to the originally-requested protected route after sign-in |
+| `/signup` | [x] adds a required password-confirmation field, a real password-strength indicator, and a separate, unchecked-by-default marketing-consent opt-in (persisted on `User.marketing_consent`) kept apart from the required Terms/Privacy checkbox |
+| `/invite/[token]` | [x] a real preview (`GET /api/v1/auth/invitations/{token}`) shows the inviting org, inviter, role, and expiration before the visitor commits; branches to "sign in to accept" when the invited email already has an account; a real Decline action (`POST .../decline`) |
+| `/forgot-password` | [x] adds a client-side resend action on top of the existing server-side rate limiter |
+| `/reset-password/[token]` | [x] adds password confirmation + strength; a real success state before the sign-in action |
+| `/verify-email/[token]` | [x] a signed-in visitor whose email is already verified skips the token check; an anonymous visitor gets "sign in to request a new link" since resend requires auth |
+| MFA challenge (`/mfa-challenge`) | [x] TOTP code entry, gates `get_org_context` until verified; honors a carried-through `?redirect=` |
 
 ## ONBOARDING
 
@@ -37,7 +60,7 @@ marks Phase 1 status per route. Legend: `[x]` implemented, `[~]` scaffolded
 
 | Route | Status |
 |---|---|
-| `/` (Unified Dashboard) | [~] placeholder metrics |
+| `/dashboard` (Unified Dashboard) — moved from `/` 2026-08-05 when `/` became the public homepage, see "## PUBLIC SITE" above | [~] placeholder metrics |
 | `/copilot` | [x] retrieval-grounded Q&A with citations |
 | `/tasks` | [x] list + create |
 | `/approvals` | [x] list + approve/reject |
