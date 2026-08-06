@@ -5,6 +5,7 @@ import { CustomerTypeSection } from "@/components/marketing/customer-type-sectio
 import { FinalCTA } from "@/components/marketing/final-cta";
 import { HeroSection } from "@/components/marketing/hero-section";
 import { IntegrationGrid } from "@/components/marketing/integration-grid";
+import { ModuleCarousel } from "@/components/marketing/module-carousel";
 import { ModuleOverview } from "@/components/marketing/module-overview";
 import { PricingPreview } from "@/components/marketing/pricing-preview";
 import { SectionHeader } from "@/components/marketing/section-header";
@@ -59,6 +60,8 @@ export default function HomePage() {
       </section>
 
       <ModuleOverview />
+
+      <ModuleCarousel />
 
       <section className="mx-auto max-w-[var(--content-max-width)] px-4 py-20 sm:px-6 lg:px-8">
         <SectionHeader eyebrow="How it works" title="From connected data to reviewed action" />

@@ -260,3 +260,62 @@ that per-page metadata overrides, not something removed.
   design language (real `Card`/`Badge`/`MetricCard`-style pieces, clearly labeled demo
   values), not a commissioned illustration or a stock photo, per the brief's own explicit
   list of things to avoid.
+
+## 11. Product-module carousel (`ui/homepage-module-carousel`)
+
+Added after the initial public-site build, as its own branch — a major visual showcase
+of the six modules `ModuleOverview` already introduces textually, placed directly below
+it on the homepage (`apps/web/components/marketing/module-carousel.tsx`).
+
+- **Images**: six real photographs, one per module (Compliance, Security, Sales,
+  Customer Support, Automation, AI Governance), supplied directly rather than generated
+  or stocked from a library — converted from the originals (~1.5MB PNGs) to mozjpeg
+  quality-82 JPEGs (~80-100KB each, no visible quality loss) since photographs don't
+  need PNG's lossless/alpha overhead. No headline/CTA text is baked into the images
+  themselves — every piece of copy (module badge, headline, description, CTA) renders as
+  real HTML over a controlled gradient overlay (`linear-gradient` from
+  `rgba(15,23,42,0.85)` at the bottom to transparent by ~75% up — the app's own
+  `--gray-900` ink tone, not a generic black or a full-image blue filter), so text
+  contrast is guaranteed regardless of the underlying photo's content. `next/image` with
+  `fill` + a `sizes` attribute; only the first slide's image is `priority`-loaded.
+- **Layout**: a centered-active-slide-with-partial-peek layout on tablet/desktop
+  (`flex-[0_0_84%]` at `sm:`, `flex-[0_0_68%]` at `lg:`, via `embla-carousel-react` —
+  the first carousel dependency in this codebase; deliberately small, no autoplay
+  plugin), collapsing to one full-width slide on mobile with a taller `aspect-[3/4]`
+  crop (vs. `16/9` at `sm:` and up) and a rightward `object-position` bias, since all six
+  source photos place their subject right-of-center — without the bias, a portrait crop
+  centered by default would cut the subject out of frame on narrow viewports.
+- **CTAs and routing**: each module's "Explore <Module>" link points at a real,
+  newly-added anchor on `/features` (`#compliance`, `#security`, `#sales`, `#support`,
+  `#automation`, `#ai-governance` — added to that page's existing `SECTIONS` array,
+  which previously had no `id` per section) rather than a decorative link or six
+  identical un-anchored links to the same page, per the brief's own rule against
+  decorative CTAs. No dedicated per-module public page exists elsewhere in the site to
+  link to instead.
+- **Autoplay**: ~7s interval, pauses on hover/focus/manual pause (a visible
+  play/pause toggle), and is never offered at all under `prefers-reduced-motion:
+  reduce` (checked via `matchMedia`, this codebase's first use of that check in
+  application code — previously only a blanket CSS rule existed, see
+  `docs/KNOWN_LIMITATIONS.md`). Manual navigation (prev/next/dots/arrow keys) always
+  works regardless of autoplay or reduced-motion state.
+- **Accessibility**: non-active slides are `aria-hidden` with their interactive content
+  (`tabIndex={-1}`) removed from the tab order — a keyboard or screen-reader user never
+  lands on an off-screen link. A visually-hidden `aria-live="polite"` status announces
+  the current slide on every change. Zero axe violations in either the default state or
+  after navigating to a non-initial slide (`e2e/public-site-and-auth-accessibility.spec.ts`).
+- **Two real bugs found and fixed during implementation**, neither pre-existing:
+  1. `middleware.ts`'s route matcher only excluded a hardcoded list of specific static
+     paths (`_next/static`, `favicon.ico`, `sitemap.xml`, ...), so the new
+     `/images/modules/*.jpg` assets fell through to "protected route" and redirected to
+     `/login`. Fixed generically, not by adding `/images` to the list: the matcher now
+     excludes any path whose last segment contains a dot, since real Next.js page routes
+     are always extensionless — this closes the same class of bug for any future static
+     asset added under `/public`, not just this one.
+  2. Embla's own `pointerdown`/`click` handling on its viewport container ran (and could
+     call `preventDefault()`) before React's delegated `onClick` on the in-slide CTA
+     `<Link>` ever fired, so Next's router saw `event.defaultPrevented` and silently
+     skipped navigation — real mouse clicks failed while keyboard `Enter` activation
+     worked fine (confirming the mechanism). Fixed via Embla's documented `watchDrag`
+     callback, which skips drag-engagement entirely when a gesture starts on an
+     `<a>`/`<button>` — the sanctioned way Embla supports interactive content inside
+     slides, not a propagation-order workaround.

@@ -175,3 +175,22 @@ Sub-slices within a numbered commit are committed separately when independently 
 following the same "implement → check → commit" discipline as every prior effort in this
 codebase. Push to `origin/ui/public-site-and-auth-modernization` after each phase; do not
 merge until the complete verification suite in Phase 7 passes.
+
+## Phase 8 — Homepage product-module carousel (`ui/homepage-module-carousel`, follow-on branch)
+
+A separate branch on top of the merged public site, adding a major visual showcase of
+the six modules to the homepage. See `docs/PUBLIC_SITE_DESIGN.md` §11 for the full
+design (image handling, layout, autoplay, accessibility, two real bugs found and fixed).
+
+Commit strategy (this branch's own brief, followed literally):
+
+1. Optimized product-module image assets (6 real photos, PNG→JPEG).
+2. Responsive homepage module carousel (`embla-carousel-react`, `/features` anchors,
+   the `middleware.ts` static-asset matcher fix, the Embla `watchDrag` click fix).
+3. Carousel accessibility and interaction tests (18 Vitest, 9 Playwright functional
+   journeys, 2 additional axe/keyboard tests).
+4. Documentation.
+
+Verification: full frontend `tsc`/ESLint/Vitest/production-build, the full Playwright
+suite, and a live Docker smoke test — see `docs/RELEASE_CHECKLIST.md`. Merged to `main`
+after the complete verification suite passes, per this branch's own instruction.

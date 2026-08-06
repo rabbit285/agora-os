@@ -79,6 +79,13 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|_next/data|favicon.ico|icon|apple-icon|opengraph-image|sitemap.xml|robots.txt|api/).*)",
+    // The trailing `|.*\..*` excludes any path whose last segment contains
+    // a dot — every real Next.js *page* route is extensionless, so this
+    // catches static files generically (images, fonts, manifests, etc.
+    // under /public) without needing to name each one here. It's what
+    // caught out the homepage module carousel's images (docs/RELEASE_CHECKLIST.md):
+    // /images/modules/*.jpg fell through to "protected route" and 307'd to
+    // /login, since nothing in the old list named /images specifically.
+    "/((?!_next/static|_next/image|_next/data|favicon.ico|icon|apple-icon|opengraph-image|sitemap.xml|robots.txt|api/|.*\\..*).*)",
   ],
 };

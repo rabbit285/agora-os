@@ -25,8 +25,8 @@ dashboard.
 
 | Route | Status |
 |---|---|
-| `/` | [x] Homepage — hero with a real product preview (built from the app's own `MetricCard` component, persistently labeled "Demo data"), problem, platform (6 modules), how-it-works, AI Copilot, cross-module value, trust/governance, integrations (9 real adapters), ideal customers, pricing preview, final CTA |
-| `/features` | [x] module-by-module feature detail |
+| `/` | [x] Homepage — hero with a real product preview (built from the app's own `MetricCard` component, persistently labeled "Demo data"), problem, platform (6 modules), **product module carousel** (added `ui/homepage-module-carousel` — 6 real photos, one per module, each linking to `/features#<slug>`; see `docs/PUBLIC_SITE_DESIGN.md` §11), how-it-works, AI Copilot, cross-module value, trust/governance, integrations (9 real adapters), ideal customers, pricing preview, final CTA |
+| `/features` | [x] module-by-module feature detail — each section now has a real `id` anchor (`#compliance`, `#security`, `#sales`, `#support`, `#automation`, `#ai-governance`), added so the homepage carousel's CTAs have genuine destinations rather than all landing on the same undifferentiated page |
 | `/solutions` | [x] audience-oriented positioning |
 | `/trust` | [x] public security & governance page — deliberately not at `/security`, which is the real authenticated Security Operations module (see `docs/PUBLIC_SITE_DESIGN.md` §2) |
 | `/pricing` | [x] real plan names/entitlements from `GET /api/v1/billing/plans`; Starter "Free", Growth/Business/Enterprise "Contact sales" — no euro figure exists anywhere in the system to display |

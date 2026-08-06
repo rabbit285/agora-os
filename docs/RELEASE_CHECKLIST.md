@@ -348,8 +348,67 @@ for the full audit/design/plan trail.
       all 7 compose services healthy, Alembic at head, homepage/login/
       dashboard/sitemap/robots/API health all return 200 through the
       live stack.
-- [ ] Not merged to `main` — per this effort's own instruction, held
-      pending the complete verification suite
+- [x] Merged to `main` via PR #10, 2026-08-06, after the complete
+      verification suite above passed
+
+## Homepage product-module carousel (branch `ui/homepage-module-carousel`, 2026-08-06)
+
+Follow-on to the public site above — see `docs/PUBLIC_SITE_DESIGN.md` §11
+for the full design and `docs/PUBLIC_SITE_IMPLEMENTATION_PLAN.md` Phase 8.
+
+- [x] Six real photographs (Compliance, Security, Sales, Customer Support,
+      Automation, AI Governance), converted from ~1.5MB PNGs to mozjpeg
+      quality-82 JPEGs (~80-100KB each, no visible quality loss) — no
+      generated/stock replacement images, no text baked into the images
+- [x] Responsive carousel on `embla-carousel-react` (this codebase's first
+      carousel dependency) — centered-active/partial-peek layout on
+      tablet/desktop, full-width single-slide with a taller crop and a
+      subject-preserving `object-position` bias on mobile; prev/next,
+      pagination dots, live counter, keyboard (arrow-key) navigation,
+      touch swipe
+- [x] Optional autoplay (~7s), pausing on hover/focus/the visible
+      play/pause control, never offered under `prefers-reduced-motion`
+      (this codebase's first `matchMedia` check in application code —
+      previously only a blanket CSS rule existed)
+- [x] Real, working CTA per module into a newly-anchored `/features#<slug>`
+      section (no decorative links — `/features`'s six sections had no
+      `id` anchors before this branch)
+- [x] Two real bugs found and fixed during implementation (neither
+      pre-existing): `middleware.ts`'s matcher redirecting the new
+      `/images/*` assets to `/login` (fixed generically for any
+      extensioned path, not just images); Embla's own pointerdown
+      handling silently swallowing clicks on in-slide CTA links before
+      Next's `<Link>` ever saw them (fixed via Embla's `watchDrag`
+      callback) — see `docs/PUBLIC_SITE_DESIGN.md` §11 for the full
+      mechanism of each
+- [x] 18 Vitest component tests (all 6 slides, content, next/prev,
+      wraparound, pagination, keyboard nav, alt text, CTA hrefs, reduced
+      motion, autoplay timer-wiring contract — see
+      `docs/KNOWN_LIMITATIONS.md` for why full autoplay timing isn't
+      asserted under jsdom)
+- [x] 9 Playwright functional journeys + 2 additional axe/keyboard tests
+      on top of the existing public-site accessibility suite — 0
+      violations in both the default state and after navigating to a
+      non-initial slide
+- [x] `tsc --noEmit` clean, ESLint 0 errors (a real `react-hooks/
+      set-state-in-effect` lint error was found and fixed properly —
+      the reduced-motion check moved from `useState`+`useEffect` to
+      `useSyncExternalStore` — not suppressed), Vitest 93/93 (whole
+      frontend suite), production build succeeds for every route
+- [x] Full monorepo Playwright suite: 77/82 passed on the first full
+      sequential run; the 5 failures (one pre-existing big journey test,
+      3 unrelated Sales Lead Finder tests, and the org-deletion test
+      fixed earlier this session) all passed cleanly when re-run in
+      isolation, confirming environmental flakes from the ~16-minute,
+      82-test sequential run on this dev machine — none touch code this
+      branch changed. All carousel-specific specs (9 functional + 2
+      accessibility/keyboard) were green on every run, including the
+      full-suite pass
+- [x] Docker smoke: all 7 compose services healthy, Alembic at head,
+      homepage/`/features`/carousel images/API health all return 200
+      through the live stack
+- [x] Merged to `main`, 2026-08-06, after the complete verification
+      suite passed
 
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 

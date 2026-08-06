@@ -34,6 +34,16 @@ test.describe("Accessibility: public site", () => {
     expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
   });
 
+  test("Homepage — module carousel after navigating to a non-initial slide", async ({ page }) => {
+    await page.goto("/");
+    const carousel = page.getByRole("region", { name: "Product modules" });
+    await carousel.scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "Next module" }).click();
+    await carousel.getByText("2 / 6").waitFor();
+    const results = await runAxeScan(page);
+    expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+  });
+
   test("Features page", async ({ page }) => {
     await page.goto("/features");
     await page.getByRole("heading", { name: "Everything your operations team needs, in one place" }).waitFor();
@@ -139,6 +149,35 @@ test.describe("Accessibility: keyboard-only navigation", () => {
     const mobileMenu = page.locator("#public-mobile-menu");
     const featuresLink = mobileMenu.getByRole("link", { name: "Product" });
     await expect(featuresLink).toBeVisible();
+  });
+
+  test("Homepage module carousel is fully keyboard-operable", async ({ page }) => {
+    await page.goto("/");
+    const carousel = page.getByRole("region", { name: "Product modules" });
+    await carousel.scrollIntoViewIfNeeded();
+
+    // Previous/Next/dots are independently reachable and operable by
+    // keyboard (Tab moves focus in DOM order: prev → dots → next).
+    const previous = page.getByRole("button", { name: "Previous module" });
+    await previous.focus();
+    await expect(previous).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Go to Compliance slide" })).toBeFocused();
+
+    // Arrow keys work from anywhere focus lands inside the carousel region,
+    // not just the Next/Previous buttons themselves.
+    await page.keyboard.press("ArrowRight");
+    await expect(carousel.getByText("2 / 6")).toBeVisible();
+
+    // The now-active slide's CTA is a real, keyboard-activatable tab stop
+    // (inactive slides are aria-hidden with tabIndex={-1} — see
+    // module-carousel.tsx) — focus it directly and confirm Enter navigates,
+    // the same way a screen-reader or keyboard-only user would activate it.
+    const cta = carousel.getByRole("link", { name: /Explore Security/ });
+    await cta.focus();
+    await expect(cta).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/features#security$/);
   });
 
   test("Sign-up form is fully keyboard-operable", async ({ page }) => {

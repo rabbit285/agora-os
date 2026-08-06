@@ -618,6 +618,29 @@ implied to work.
   bug was catchable by the SQLite-backed unit suite (no Postgres-only
   check, no real middleware in that test harness) — only a real
   Docker+Postgres+browser run surfaced them.
+- **The homepage module carousel's Vitest suite can't verify real autoplay
+  timing under jsdom, 2026-08-06**: `embla-carousel-react`'s scroll/settle
+  animation runs on `requestAnimationFrame`, which this library appears to
+  capture in a way `vi.useFakeTimers` (even with rAF included in the faked
+  set) can't intercept — advancing fake time makes the component's own
+  `setInterval` fire and call `scrollNext()`, but the resulting slide
+  change never completes. The unit tests verify this component's own
+  timer-wiring contract instead (a `setInterval` spy: scheduled on mount,
+  not scheduled while hovering/paused/under reduced-motion); real
+  end-to-end autoplay behavior (does the carousel actually advance after
+  ~7s, does hovering pause it) is verified by Playwright instead
+  (`e2e/homepage-module-carousel.spec.ts`), which runs in a real browser
+  where rAF genuinely works. Also two real, non-carousel bugs this same
+  branch's Playwright pass caught: `middleware.ts`'s route matcher
+  redirected any newly-added `/public` static asset (e.g. the carousel's
+  own `/images/modules/*.jpg`) to `/login`, since its exclusion list named
+  specific known static routes rather than static assets generically —
+  fixed by excluding any path whose last segment contains a dot; and
+  Embla's own pointerdown/click handling silently prevented real mouse
+  clicks on in-slide CTA links (keyboard `Enter` activation worked fine,
+  isolating it as an Embla-specific interaction issue, not a Next.js or
+  React one) — fixed via Embla's documented `watchDrag` callback. See
+  `docs/PUBLIC_SITE_DESIGN.md` §11 for the full detail on both.
 - **The full-stack smoke test was API-level (curl), not a real browser
   click-through.** Verified: signup → session cookie → `/me` → create task
   → list tasks → AI gateway demo response, all through the live API
