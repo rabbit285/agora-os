@@ -56,35 +56,53 @@ export async function logout(page: Page): Promise<void> {
 }
 
 /** No real email provider is configured in this environment (spec —
- * see docs/KNOWN_LIMITATIONS.md), so invitations are logged rather than
- * emailed (`app.core.invitations._dispatch_invitation_email`) — the
- * same real docker-compose stack the whole E2E suite already runs
- * against (project name "agora-origin", infra/docker/docker-compose.yml)
- * is where that log line actually lands, both locally and in CI. This
- * reads it back rather than mocking the email step. */
-export async function getLatestInvitationUrl(email: string): Promise<string> {
+ * see docs/KNOWN_LIMITATIONS.md), so every transactional link
+ * (invitation, email verification, password reset) is logged rather
+ * than emailed — the same real docker-compose stack the whole E2E suite
+ * already runs against (project name "agora-origin",
+ * infra/docker/docker-compose.yml) is where that log line actually
+ * lands, both locally and in CI. This reads it back rather than mocking
+ * the email step. Shared by getLatestInvitationUrl/VerificationUrl/
+ * PasswordResetUrl below. */
+async function getLatestLoggedUrl(
+  logMarker: string,
+  urlPathPrefix: string,
+  identifyingText: string,
+): Promise<string> {
   // The container's log driver can lag a moment behind the HTTP response
   // that triggered it — poll briefly rather than assuming the line is
-  // already flushed the instant the invite request resolves.
+  // already flushed the instant the request resolves.
   for (let attempt = 0; attempt < 20; attempt++) {
     // uvicorn/Python's logging module writes to stderr, not stdout —
     // execSync only captures stdout by default, so merge streams at the
-    // shell level or the invitation log line (and everything else) is
-    // silently invisible to this process despite `docker logs` showing
-    // it fine in an interactive terminal (which displays both).
+    // shell level or the log line (and everything else) is silently
+    // invisible to this process despite `docker logs` showing it fine in
+    // an interactive terminal (which displays both).
     const logs = execSync("docker logs agora-origin-api-1 --tail 3000 2>&1", { encoding: "utf-8" });
     const matchingLines = logs
       .split("\n")
-      .filter((line) => line.includes("Invitation to join") && line.includes(email));
+      .filter((line) => line.includes(logMarker) && line.includes(identifyingText));
     const lastLine = matchingLines[matchingLines.length - 1];
     if (lastLine) {
-      const match = lastLine.match(/(https?:\/\/\S+\/invite\/\S+)/);
+      const match = lastLine.match(new RegExp(`(https?://\\S+${urlPathPrefix}\\S+)`));
       if (!match) {
-        throw new Error(`Could not parse an invite URL out of log line: ${lastLine}`);
+        throw new Error(`Could not parse a ${urlPathPrefix} URL out of log line: ${lastLine}`);
       }
       return match[1];
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`No invitation log line found for ${email} in the api container's logs`);
+  throw new Error(`No "${logMarker}" log line found for ${identifyingText} in the api container's logs`);
+}
+
+export async function getLatestInvitationUrl(email: string): Promise<string> {
+  return getLatestLoggedUrl("Invitation to join", "/invite/", email);
+}
+
+export async function getLatestVerificationUrl(email: string): Promise<string> {
+  return getLatestLoggedUrl("Email verification requested for", "/verify-email/", email);
+}
+
+export async function getLatestPasswordResetUrl(email: string): Promise<string> {
+  return getLatestLoggedUrl("Password reset requested for", "/reset-password/", email);
 }
