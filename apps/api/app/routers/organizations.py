@@ -3,11 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.config import settings
 from app.core.invitations import create_invitation
 from app.core.models import (
     Invitation,
@@ -145,6 +146,7 @@ async def cancel_current_organization_deletion(
 @router.post("/current/deletion-request/execute", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def execute_current_organization_deletion(
     payload: OrganizationDeletionConfirm,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("org.settings.manage")),
 ) -> None:
@@ -167,6 +169,13 @@ async def execute_current_organization_deletion(
     await execute_organization_deletion(
         db, organization_id=context.organization_id, executed_by=context.user.id
     )
+    # The caller's own `sessions` row was just deleted along with every
+    # other organization-scoped table above, but the browser's cookie
+    # itself survives that server-side purge — without clearing it here,
+    # `middleware.ts`'s cookie-presence check treats the browser as still
+    # authenticated and bounces it away from /login right back toward the
+    # now-nonexistent org.
+    response.delete_cookie(settings.session_cookie_name, path="/")
 
 
 @router.get("/current/data-export", response_model=ReportDownloadOut)
