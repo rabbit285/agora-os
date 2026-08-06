@@ -14,6 +14,13 @@ Completion).
   roles, permissions
 - Auth: signup, login, session, password reset (MFA schema present,
   enforcement flow deferred — see `KNOWN_LIMITATIONS.md`)
+  [Update 2026-08-05: substantially extended by the
+  `ui/public-site-and-auth-modernization` branch — real public
+  marketing site at `/`, email verification, invitation
+  accept/decline with a preview endpoint, redirect-back-after-login,
+  and a full auth UX rebuild. See `docs/RELEASE_CHECKLIST.md`'s
+  "Public site & auth modernization" section for the complete list.
+  MFA enforcement remains deferred.]
 - Tenant-context middleware, RBAC dependency
 - Audit log (append-only) wired into auth + org mutations
 - Tasks, Approvals (shared primitives, generic UI)

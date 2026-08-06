@@ -131,7 +131,7 @@ export function ContactForm() {
         <Textarea id="message" rows={4} {...register("message")} />
       </div>
       {serverError && <AuthAlert variant="error">{serverError}</AuthAlert>}
-      <p className="text-xs text-[var(--fg-subtle)]">
+      <p className="text-xs text-[var(--fg-muted)]">
         By submitting, you agree to be contacted about Agora Origin. See our{" "}
         <Link href="/privacy" className="underline hover:text-[var(--fg-muted)]">
           Privacy Policy

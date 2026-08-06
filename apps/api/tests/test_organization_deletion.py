@@ -99,6 +99,27 @@ async def test_execute_actually_deletes_the_organization_and_its_data(client: As
     assert after.status_code == 401
 
 
+async def test_execute_clears_the_now_stale_session_cookie(client: AsyncClient) -> None:
+    """The `sessions` row is deleted server-side as part of the purge
+    (see test_execute_actually_deletes_the_organization_and_its_data),
+    but the browser's own cookie survives that unless the response
+    explicitly clears it — left stale, a client that still checks
+    cookie presence rather than validity (e.g. apps/web/middleware.ts)
+    would keep treating the browser as authenticated."""
+    await _signup(client, "del7@example.com", "Deletion Org 7")
+    await client.post(
+        "/api/v1/organizations/current/deletion-request", json={"confirm_name": "Deletion Org 7"}
+    )
+    executed = await client.post(
+        "/api/v1/organizations/current/deletion-request/execute",
+        json={"confirm_name": "Deletion Org 7"},
+    )
+    assert executed.status_code == 204
+    set_cookie = executed.headers.get("set-cookie", "")
+    assert "agora_session=" in set_cookie
+    assert 'Max-Age=0' in set_cookie or "01 Jan 1970" in set_cookie
+
+
 async def test_data_export_returns_a_real_download_link(client: AsyncClient) -> None:
     await _signup(client, "export1@example.com", "Export Org 1")
     await client.post("/api/v1/compliance/controls", json={"title": "Exported control"})

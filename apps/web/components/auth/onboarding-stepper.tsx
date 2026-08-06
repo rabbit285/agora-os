@@ -25,7 +25,7 @@ export function OnboardingStepper({ steps, currentIndex }: { steps: OnboardingSt
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium",
                   state === "complete" && "bg-[var(--success-600)] text-white",
                   state === "current" && "bg-[var(--brand-primary)] text-white",
-                  state === "upcoming" && "bg-[var(--gray-200)] text-[var(--fg-subtle)]",
+                  state === "upcoming" && "bg-[var(--gray-200)] text-[var(--fg-muted)]",
                 )}
                 aria-current={state === "current" ? "step" : undefined}
               >

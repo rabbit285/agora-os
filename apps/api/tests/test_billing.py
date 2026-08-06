@@ -115,7 +115,7 @@ async def test_growth_plan_permits_sso_login_for_an_existing_org(
         params={"code": "fake-code", "state": state},
         follow_redirects=False,
     )
-    assert callback.headers["location"] == f"{settings.app_url}/"
+    assert callback.headers["location"] == f"{settings.app_url}/dashboard"
 
 
 async def test_starter_plan_blocks_sso_login_for_an_existing_org(

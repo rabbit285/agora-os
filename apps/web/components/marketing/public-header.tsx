@@ -62,7 +62,7 @@ export function PublicHeader() {
       >
         <Logo size="md" />
 
-        <nav aria-label="Product" className="hidden items-center gap-1 md:flex">
+        <nav aria-label="Site" className="hidden items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}

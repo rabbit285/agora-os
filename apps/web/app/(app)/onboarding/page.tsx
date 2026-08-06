@@ -65,8 +65,9 @@ function CompanyStep({ onDone }: { onDone: () => void }) {
           <Input id="industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Employee count</Label>
+          <Label htmlFor="employee_count">Employee count</Label>
           <select
+            id="employee_count"
             className="flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
             value={employeeCountRange}
             onChange={(e) => setEmployeeCountRange(e.target.value)}
@@ -206,6 +207,7 @@ function SecurityProfileStep({ onDone }: { onDone: () => void }) {
           What&apos;s your primary cloud provider?
         </p>
         <select
+          aria-label="Primary cloud provider"
           className="flex h-9 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
           value={provider}
           onChange={(e) => setProvider(e.target.value)}

@@ -44,7 +44,7 @@ export function OAuthButtons() {
           Continue with {SSO_LABELS[p.provider] ?? p.provider}
         </Button>
       ))}
-      <div className="flex items-center gap-2 text-xs text-[var(--fg-subtle)]">
+      <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
         <div className="h-px flex-1 bg-[var(--border-default)]" />
         or
         <div className="h-px flex-1 bg-[var(--border-default)]" />

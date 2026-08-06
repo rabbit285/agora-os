@@ -39,7 +39,7 @@ export function InvitationSummary({
           <span>{invitedEmail}</span>
           <Badge variant="secondary">{roleLabel}</Badge>
         </div>
-        <p className="text-xs text-[var(--fg-subtle)]">Expires {expiresAt}</p>
+        <p className="text-xs text-[var(--fg-muted)]">Expires {expiresAt}</p>
       </CardContent>
     </Card>
   );
