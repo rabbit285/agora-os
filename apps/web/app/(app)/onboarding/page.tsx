@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { isSafeRedirectTarget } from "@/lib/auth-redirect";
 import {
   ONBOARDING_GOALS,
   type Framework,
@@ -349,6 +350,7 @@ function PassThroughStep({
 
 function ReadinessStep() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: readiness, isLoading } = useQuery<Readiness>({
     queryKey: ["onboarding", "readiness"],
     queryFn: () => apiFetch<Readiness>("/api/v1/onboarding/readiness"),
@@ -356,7 +358,14 @@ function ReadinessStep() {
 
   const complete = useMutation({
     mutationFn: () => apiFetch<OnboardingProfile>("/api/v1/onboarding/complete", { method: "POST" }),
-    onSuccess: () => router.push("/dashboard"),
+    onSuccess: () => {
+      // Honors a redirect carried through from signup (a visitor who hit
+      // a protected route while unauthenticated, then created a new
+      // account instead of logging in) — falls back to the dashboard for
+      // the overwhelmingly common case of no pending redirect.
+      const requestedRedirect = searchParams.get("redirect");
+      router.push(isSafeRedirectTarget(requestedRedirect) ? requestedRedirect : "/dashboard");
+    },
   });
 
   const dimensions = readiness

@@ -29,11 +29,13 @@ export async function signup(page: Page, label: string): Promise<SignedUpOrg> {
   };
 
   await page.goto("/signup");
-  await page.getByLabel("Your name").fill(org.fullName);
-  await page.getByLabel("Organization name").fill(org.organizationName);
+  await page.getByLabel("Full name").fill(org.fullName);
   await page.getByLabel("Work email").fill(org.email);
-  await page.getByLabel("Password").fill(org.password);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("Organization name").fill(org.organizationName);
+  await page.getByLabel("Password", { exact: true }).fill(org.password);
+  await page.getByLabel("Confirm password").fill(org.password);
+  await page.getByRole("checkbox", { name: /Terms of Service/ }).check();
+  await page.getByRole("button", { name: "Start free" }).click();
   await expect(page).toHaveURL(/\/onboarding/);
   return org;
 }
@@ -41,8 +43,8 @@ export async function signup(page: Page, label: string): Promise<SignedUpOrg> {
 export async function login(page: Page, org: Pick<SignedUpOrg, "email" | "password">): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Email").fill(org.email);
-  await page.getByLabel("Password").fill(org.password);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(org.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/dashboard");
 }
 

@@ -11,6 +11,7 @@ class SignupRequest(BaseModel):
     password: str = Field(min_length=12, max_length=200)
     full_name: str = Field(min_length=1, max_length=200)
     organization_name: str = Field(min_length=1, max_length=200)
+    marketing_consent: bool = False
 
 
 class LoginRequest(BaseModel):

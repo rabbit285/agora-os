@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import uuid
+
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.identity.models import PasswordResetToken
+from app.identity.models import PasswordResetToken, User
 
 
 async def _signup(client: AsyncClient, email: str = "founder@example.com") -> None:
@@ -34,6 +36,41 @@ async def test_signup_sets_session_cookie_and_creates_org(client: AsyncClient) -
     body = response.json()
     assert body["organization"]["name"] == "Test Org"
     assert "agora_session" in response.cookies
+
+
+async def test_signup_marketing_consent_defaults_false_and_persists_when_opted_in(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    default_response = await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "no-consent@example.com",
+            "password": "correct-horse-battery",
+            "full_name": "No Consent",
+            "organization_name": "No Consent Org",
+        },
+    )
+    assert default_response.status_code == 200, default_response.text
+    default_user_id = default_response.json()["user"]["id"]
+    default_user = await db_session.get(User, uuid.UUID(default_user_id))
+    assert default_user is not None
+    assert default_user.marketing_consent is False
+
+    opted_in_response = await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": "opted-in@example.com",
+            "password": "correct-horse-battery",
+            "full_name": "Opted In",
+            "organization_name": "Opted In Org",
+            "marketing_consent": True,
+        },
+    )
+    assert opted_in_response.status_code == 200, opted_in_response.text
+    opted_in_user_id = opted_in_response.json()["user"]["id"]
+    opted_in_user = await db_session.get(User, uuid.UUID(opted_in_user_id))
+    assert opted_in_user is not None
+    assert opted_in_user.marketing_consent is True
 
 
 async def test_signup_duplicate_email_rejected(client: AsyncClient) -> None:

@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 import { apiFetch } from "@/lib/api";
