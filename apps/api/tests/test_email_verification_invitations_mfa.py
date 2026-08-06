@@ -173,6 +173,140 @@ async def test_accept_invitation_with_invalid_token_rejected(client: AsyncClient
     assert response.status_code == 400
 
 
+async def test_preview_invitation_for_a_new_email_reports_pending_and_no_account(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _signup(client, "invite-preview1@example.com", "Invite Preview Org 1")
+
+    with caplog.at_level("INFO", logger="agora.invitations"):
+        created = await client.post(
+            "/api/v1/organizations/current/invitations",
+            json={"email": "brand-new-invitee@example.com", "role_key": "employee"},
+        )
+    assert created.status_code == 201
+    token = _extract_token_from_log(caplog, "/invite/")
+
+    await client.post("/api/v1/auth/logout")
+
+    preview = await client.get(f"/api/v1/auth/invitations/{token}")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["organization_name"] == "Invite Preview Org 1"
+    assert body["email"] == "brand-new-invitee@example.com"
+    assert body["role_key"] == "employee"
+    assert body["inviter_name"] == "Auth Tester"
+    assert body["status"] == "pending"
+    assert body["account_exists"] is False
+
+
+async def test_preview_invitation_reports_an_existing_account(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _signup(client, "existing-invitee@example.com", "Existing Invitee Org")
+    await client.post("/api/v1/auth/logout")
+    await _signup(client, "invite-preview2@example.com", "Invite Preview Org 2")
+
+    with caplog.at_level("INFO", logger="agora.invitations"):
+        created = await client.post(
+            "/api/v1/organizations/current/invitations",
+            json={"email": "existing-invitee@example.com", "role_key": "employee"},
+        )
+    assert created.status_code == 201
+    token = _extract_token_from_log(caplog, "/invite/")
+    await client.post("/api/v1/auth/logout")
+
+    preview = await client.get(f"/api/v1/auth/invitations/{token}")
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["account_exists"] is True
+
+
+async def test_preview_invitation_for_unknown_token_is_404(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/auth/invitations/not-a-real-token")
+    assert response.status_code == 404
+
+
+async def test_preview_invitation_reports_revoked_status(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _signup(client, "invite-preview3@example.com", "Invite Preview Org 3")
+
+    with caplog.at_level("INFO", logger="agora.invitations"):
+        created = await client.post(
+            "/api/v1/organizations/current/invitations",
+            json={"email": "to-be-revoked@example.com", "role_key": "employee"},
+        )
+    invitation_id = created.json()["id"]
+    token = _extract_token_from_log(caplog, "/invite/")
+
+    revoke = await client.post(f"/api/v1/organizations/current/invitations/{invitation_id}/revoke")
+    assert revoke.status_code == 200
+    await client.post("/api/v1/auth/logout")
+
+    preview = await client.get(f"/api/v1/auth/invitations/{token}")
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["status"] == "revoked"
+
+
+async def test_decline_invitation_marks_it_revoked_and_unacceptable(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _signup(client, "invite-decline1@example.com", "Invite Decline Org 1")
+
+    with caplog.at_level("INFO", logger="agora.invitations"):
+        created = await client.post(
+            "/api/v1/organizations/current/invitations",
+            json={"email": "declines-it@example.com", "role_key": "employee"},
+        )
+    assert created.status_code == 201
+    token = _extract_token_from_log(caplog, "/invite/")
+    await client.post("/api/v1/auth/logout")
+
+    decline = await client.post(f"/api/v1/auth/invitations/{token}/decline")
+    assert decline.status_code == 204
+
+    preview = await client.get(f"/api/v1/auth/invitations/{token}")
+    assert preview.json()["status"] == "revoked"
+
+    accept = await client.post(
+        "/api/v1/auth/accept-invitation",
+        json={"token": token, "full_name": "Too Late", "password": "irrelevant-12345"},
+    )
+    assert accept.status_code == 400
+
+
+async def test_decline_invitation_with_invalid_token_rejected(client: AsyncClient) -> None:
+    response = await client.post("/api/v1/auth/invitations/not-a-real-token/decline")
+    assert response.status_code == 400
+
+
+async def test_preview_invitation_reports_expired_status(
+    client: AsyncClient, db_session: AsyncSession, caplog: pytest.LogCaptureFixture
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.models import Invitation
+
+    await _signup(client, "invite-preview4@example.com", "Invite Preview Org 4")
+
+    with caplog.at_level("INFO", logger="agora.invitations"):
+        created = await client.post(
+            "/api/v1/organizations/current/invitations",
+            json={"email": "will-expire@example.com", "role_key": "employee"},
+        )
+    invitation_id = created.json()["id"]
+    token = _extract_token_from_log(caplog, "/invite/")
+    await client.post("/api/v1/auth/logout")
+
+    invitation = await db_session.get(Invitation, uuid.UUID(invitation_id))
+    assert invitation is not None
+    invitation.expires_at = datetime.now(UTC) - timedelta(days=1)
+    await db_session.commit()
+
+    preview = await client.get(f"/api/v1/auth/invitations/{token}")
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["status"] == "expired"
+
+
 async def test_revoked_invitation_cannot_be_accepted(
     client: AsyncClient, db_session: AsyncSession, caplog: pytest.LogCaptureFixture
 ) -> None:

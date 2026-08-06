@@ -46,7 +46,7 @@ export function AppSidebar() {
         )}
       >
         <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--border-default)] px-3">
-          <Logo size="sm" markOnly={collapsed} href="/" />
+          <Logo size="sm" markOnly={collapsed} href="/dashboard" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}

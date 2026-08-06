@@ -54,7 +54,7 @@ describe("LoginPage — SSO", () => {
     renderPage();
 
     await waitFor(() => expect(mockedApiFetch).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: /Sign in with/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Continue with/ })).not.toBeInTheDocument();
   });
 
   it("shows a button only for the configured provider and starts the real flow", async () => {
@@ -73,10 +73,10 @@ describe("LoginPage — SSO", () => {
     renderPage();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole("button", { name: "Sign in with Google" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue with Microsoft" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Sign in with Google" }));
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
 
     await waitFor(() =>
       expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/auth/sso/google/start"),

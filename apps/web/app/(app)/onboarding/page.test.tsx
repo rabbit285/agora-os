@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 import { apiFetch } from "@/lib/api";
@@ -134,6 +135,6 @@ describe("OnboardingPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Open Business Command Center" }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard"));
   });
 });

@@ -66,6 +66,7 @@ async def signup(
         email=email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
+        marketing_consent=payload.marketing_consent,
     )
     db.add(user)
     await db.flush()

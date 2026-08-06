@@ -28,8 +28,8 @@ test.describe("Signup and login", () => {
 
     await page.goto("/login");
     await page.getByLabel("Email").fill(org.email);
-    await page.getByLabel("Password").fill("definitely-the-wrong-password");
-    await page.getByRole("button", { name: "Log in" }).click();
+    await page.getByLabel("Password", { exact: true }).fill("definitely-the-wrong-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/login/);
     await expect(page.getByText("Invalid email or password")).toBeVisible();

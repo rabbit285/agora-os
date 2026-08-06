@@ -25,6 +25,7 @@ from app.core.rbac import SYSTEM_ROLE_KEYS, get_system_role
 from app.db.base import as_aware_utc
 from app.identity.models import Session as SessionModel
 from app.identity.models import User
+from app.identity.schemas import InvitationPreviewOut
 from app.identity.service import create_session
 from app.security import generate_token, hash_password, hash_token
 
@@ -117,6 +118,78 @@ async def create_invitation(
 
     _dispatch_invitation_email(normalized_email, organization.name, token)
     return invitation
+
+
+async def get_invitation_preview(db: AsyncSession, *, token: str) -> InvitationPreviewOut | None:
+    """Lets the /invite/[token] page show who's inviting whom, into what
+    role, before the visitor commits to filling out a form — and lets it
+    branch to a real "sign in instead" state when the invited email
+    already has an account, which the frontend previously had no way to
+    detect (docs/AUTH_UX_AUDIT.md §8 item 5)."""
+    token_hash = hash_token(token)
+    invitation = (
+        await db.execute(select(Invitation).where(Invitation.token_hash == token_hash))
+    ).scalar_one_or_none()
+    if invitation is None:
+        return None
+
+    if invitation.revoked_at is not None:
+        preview_status = "revoked"
+    elif invitation.accepted_at is not None:
+        preview_status = "accepted"
+    elif as_aware_utc(invitation.expires_at) < datetime.now(UTC):
+        preview_status = "expired"
+    else:
+        preview_status = "pending"
+
+    organization = await db.get(Organization, invitation.organization_id)
+    assert organization is not None  # FK guarantees existence
+    inviter = await db.get(User, invitation.invited_by)
+    account_exists = (
+        await db.execute(select(User.id).where(User.email == invitation.email))
+    ).scalar_one_or_none() is not None
+
+    return InvitationPreviewOut(
+        organization_name=organization.name,
+        email=invitation.email,
+        role_key=invitation.role_key,
+        inviter_name=inviter.full_name if inviter is not None else None,
+        expires_at=invitation.expires_at,
+        status=preview_status,
+        account_exists=account_exists,
+    )
+
+
+async def decline_invitation(db: AsyncSession, *, token: str) -> None:
+    """The invited person's own choice not to join — uses the same
+    `revoked_at` field an admin's revoke already sets, since both mean the
+    identical thing to the rest of the system: this invitation is no
+    longer valid, and re-inviting the same email requires a fresh one.
+    Public/unauthenticated, matching accept_invitation's own access model
+    — the token itself is the only credential needed."""
+    token_hash = hash_token(token)
+    invitation = (
+        await db.execute(select(Invitation).where(Invitation.token_hash == token_hash))
+    ).scalar_one_or_none()
+
+    invalid = ValueError("Invalid or expired invitation")
+    if (
+        invitation is None
+        or invitation.revoked_at is not None
+        or invitation.accepted_at is not None
+    ):
+        raise invalid
+
+    invitation.revoked_at = datetime.now(UTC)
+    await record_event(
+        db,
+        organization_id=invitation.organization_id,
+        actor_user_id=None,
+        action="org.invitation.declined",
+        object_type="invitation",
+        object_id=str(invitation.id),
+    )
+    await db.commit()
 
 
 async def accept_invitation(

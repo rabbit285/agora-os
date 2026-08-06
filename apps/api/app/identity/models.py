@@ -28,6 +28,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # Optional, unchecked-by-default opt-in captured on signup — kept
+    # separate from Terms/Privacy acceptance (which is a plain UI gate, not
+    # persisted, since it isn't a GDPR-relevant processing consent the way
+    # marketing contact is; see docs/PUBLIC_SITE_DESIGN.md).
+    marketing_consent: Mapped[bool] = mapped_column(default=False)
     mfa_enabled: Mapped[bool] = mapped_column(default=False)
     mfa_secret_encrypted: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(

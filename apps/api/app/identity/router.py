@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.invitations import accept_invitation
+from app.core.invitations import accept_invitation, decline_invitation, get_invitation_preview
 from app.db.session import get_db
 from app.dependencies import get_current_user
 from app.identity import service, sso
@@ -17,6 +17,7 @@ from app.identity.schemas import (
     AcceptInvitationRequest,
     AcceptInvitationResponse,
     ForgotPasswordRequest,
+    InvitationPreviewOut,
     LoginRequest,
     LoginResponse,
     MfaCodeRequest,
@@ -136,7 +137,7 @@ async def sso_callback_endpoint(
     elif is_new_user:
         redirect = RedirectResponse(url=f"{settings.app_url}/onboarding")
     else:
-        redirect = RedirectResponse(url=f"{settings.app_url}/")
+        redirect = RedirectResponse(url=f"{settings.app_url}/dashboard")
     _set_session_cookie(redirect, session.raw_token)  # type: ignore[attr-defined]
     return redirect
 
@@ -255,6 +256,16 @@ async def mfa_verify_endpoint(
     return {"ok": True}
 
 
+@router.get("/invitations/{token}", response_model=InvitationPreviewOut)
+async def preview_invitation_endpoint(
+    token: str, db: AsyncSession = Depends(get_db)
+) -> InvitationPreviewOut:
+    preview = await get_invitation_preview(db, token=token)
+    if preview is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    return preview
+
+
 @router.post("/accept-invitation", response_model=AcceptInvitationResponse)
 async def accept_invitation_endpoint(
     payload: AcceptInvitationRequest,
@@ -277,3 +288,11 @@ async def accept_invitation_endpoint(
     return AcceptInvitationResponse(
         user=UserOut.model_validate(user), organization=OrganizationOut.model_validate(organization)
     )
+
+
+@router.post("/invitations/{token}/decline", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def decline_invitation_endpoint(token: str, db: AsyncSession = Depends(get_db)) -> None:
+    try:
+        await decline_invitation(db, token=token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

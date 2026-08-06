@@ -179,12 +179,19 @@ input:
   events) so the submission is durably, auditably recorded even with no real email provider
   to notify anyone (`docs/PUBLIC_SITE_AUDIT.md` §4's email-sending finding). Returns
   `{ok: true}`.
-- `GET /api/v1/marketing/demo-requests` — `org_admin`-only (reuses the existing permission
-  rather than minting a new key, matching the RBAC-reuse discipline already established for
-  this codebase — see `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md` §14 for the precedent),
-  lets a real person at Agora actually see and follow up on submissions without needing a
-  working email provider. A minimal list view only — no dedicated UI page in this pass
-  (documented as a follow-up in `docs/KNOWN_LIMITATIONS.md`, not silently dropped).
+- **Correction made during implementation**: this section originally specified a
+  `GET /api/v1/marketing/demo-requests` endpoint gated by `org_admin`. That's wrong —
+  `require_permission`/`get_org_context` check membership in *the caller's own*
+  organization, not a platform-level role (this codebase has no "platform admin"/
+  superuser concept at all — every `SYSTEM_ROLE_KEYS` entry is an org-scoped role). Gating
+  a list of `DemoRequest` rows (which have no `organization_id` — they belong to Agora
+  itself, not to any customer org) that way would mean *any* customer's own org_admin,
+  including one who just self-signed-up, could see every other prospect's inbound demo
+  request. No list endpoint is built in this pass. Follow-up on submissions relies on the
+  durable DB row plus the `marketing.demo_request.created` audit event (queryable directly,
+  the same way any other platform-level operational data in this deployment is), documented
+  as a real, disclosed follow-up in `docs/KNOWN_LIMITATIONS.md` rather than solved with a
+  cross-tenant data leak.
 
 The contact form and the "Request a demo" CTA share this same endpoint — there is no
 separate, second "contact us" backend path, since the brief's own field lists for both are

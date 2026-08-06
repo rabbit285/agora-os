@@ -217,7 +217,7 @@ test("18. Restricted-role denial", async ({ page, browser }) => {
   await employeePage.getByLabel("Your name").fill("LF18 Employee");
   await employeePage.getByLabel("Set a password").fill("CorrectHorseBattery9!");
   await employeePage.getByRole("button", { name: "Accept and join" }).click();
-  await expect(employeePage).toHaveURL("/");
+  await expect(employeePage).toHaveURL("/dashboard");
 
   await employeePage.goto("/sales/lead-finder");
   await expect(employeePage.getByText(/don't have permission/)).toBeVisible();
