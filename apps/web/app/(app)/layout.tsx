@@ -11,7 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <AppSidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopNavigation />
-            <main className="flex-1 overflow-y-auto bg-[var(--bg-app)] p-4 sm:p-6">
+            <main id="main-content" className="flex-1 overflow-y-auto bg-[var(--bg-app)] p-4 sm:p-6">
               <div className="mx-auto max-w-[var(--content-max-width)]">{children}</div>
             </main>
           </div>

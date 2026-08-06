@@ -1,24 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AuthAlert } from "@/components/auth/auth-alert";
+import { AuthCard } from "@/components/auth/auth-card";
+import { AuthField } from "@/components/auth/auth-field";
+import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ApiError, apiFetch } from "@/lib/api";
+import { isSafeRedirectTarget } from "@/lib/auth-redirect";
 
 const schema = z.object({
   code: z.string().min(6, "Enter the 6-digit code").max(8),
 });
 type FormValues = z.infer<typeof schema>;
 
-export default function MfaChallengePage() {
+function MfaChallengeForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
@@ -30,39 +33,43 @@ export default function MfaChallengePage() {
     setServerError(null);
     try {
       await apiFetch("/api/v1/auth/mfa/verify", { method: "POST", body: values });
-      router.push("/dashboard");
+      const requestedRedirect = searchParams.get("redirect");
+      router.push(isSafeRedirectTarget(requestedRedirect) ? requestedRedirect : "/dashboard");
     } catch (error) {
-      setServerError(error instanceof ApiError ? error.message : "Invalid code");
+      if (error instanceof ApiError && error.status === 429) {
+        setServerError("Too many attempts. Please wait a moment and try again.");
+      } else {
+        setServerError(error instanceof ApiError ? error.message : "Invalid code");
+      }
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Two-factor verification</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4 text-sm text-[var(--fg-muted)]">
-          Enter the 6-digit code from your authenticator app.
-        </p>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="code">Code</Label>
-            <Input
-              id="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              {...register("code")}
-            />
-            {errors.code && <p className="text-xs text-[var(--critical-600)]">{errors.code.message}</p>}
-          </div>
-          {serverError && <p className="text-sm text-[var(--critical-600)]">{serverError}</p>}
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Verifying…" : "Verify"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <AuthCard title="Two-factor verification" description="Enter the 6-digit code from your authenticator app.">
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        <AuthField
+          label="Code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          autoFocus
+          error={errors.code?.message}
+          {...register("code")}
+        />
+        {serverError && <AuthAlert variant="error">{serverError}</AuthAlert>}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Verifying…" : "Verify"}
+        </Button>
+      </form>
+    </AuthCard>
+  );
+}
+
+export default function MfaChallengePage() {
+  return (
+    <AuthLayout>
+      <Suspense fallback={null}>
+        <MfaChallengeForm />
+      </Suspense>
+    </AuthLayout>
   );
 }
