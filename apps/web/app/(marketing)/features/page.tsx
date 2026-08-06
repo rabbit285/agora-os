@@ -19,8 +19,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/features" },
 };
 
-const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] = [
+const SECTIONS: { id: string; title: string; description: string; items: FeatureItem[] }[] = [
   {
+    id: "compliance",
     title: "Compliance",
     description: "RoPA, DPIA, DSAR, controls, policies, vendor risk, and audits in one place.",
     items: [
@@ -32,6 +33,7 @@ const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] =
     ],
   },
   {
+    id: "security",
     title: "Security",
     description: "Assets, findings, alerts, and incidents — with a real path to remediation.",
     items: [
@@ -42,6 +44,7 @@ const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] =
     ],
   },
   {
+    id: "sales",
     title: "Sales",
     description: "Company and people discovery through to pipeline and meetings.",
     items: [
@@ -51,6 +54,7 @@ const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] =
     ],
   },
   {
+    id: "support",
     title: "Customer Support",
     description: "Conversations, ticketing, and SLA tracking with AI assistance.",
     items: [
@@ -61,6 +65,7 @@ const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] =
     ],
   },
   {
+    id: "automation",
     title: "Automation",
     description: "A workflow builder with triggers, approvals, and AI actions.",
     items: [
@@ -70,6 +75,7 @@ const SECTIONS: { title: string; description: string; items: FeatureItem[] }[] =
     ],
   },
   {
+    id: "ai-governance",
     title: "AI Governance",
     description: "Inventory, risk assessment, and evidence for every AI system you use.",
     items: [
@@ -97,7 +103,7 @@ export default function FeaturesPage() {
 
       <div className="mt-16 flex flex-col gap-16">
         {SECTIONS.map((section) => (
-          <div key={section.title}>
+          <div key={section.id} id={section.id} className="scroll-mt-24">
             <h2 className="text-xl font-semibold text-[var(--fg-default)]">{section.title}</h2>
             <p className="mt-1 max-w-xl text-sm text-[var(--fg-muted)]">{section.description}</p>
             <div className="mt-6">
