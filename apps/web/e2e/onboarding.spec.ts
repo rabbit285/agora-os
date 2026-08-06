@@ -31,11 +31,11 @@ test("a new organization can walk the full 9-screen onboarding wizard end to end
   await page.getByLabel("email").check();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // Screen 7 — Connect tools (pass-through)
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Screen 7 — Connect tools (pass-through, skippable)
+  await page.getByRole("button", { name: "Configure later" }).click();
 
-  // Screen 8 — Upload knowledge (pass-through)
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Screen 8 — Upload knowledge (pass-through, skippable)
+  await page.getByRole("button", { name: "Configure later" }).click();
 
   // Screen 9 — real, live-computed Business AI Readiness (spec §68 step 10)
   await expect(page.getByText("Your Business AI Readiness")).toBeVisible();

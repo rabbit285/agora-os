@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { OnboardingStepper } from "@/components/auth/onboarding-stepper";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,17 +39,7 @@ const SCREEN_LABELS = [
 
 const EMPLOYEE_RANGES = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
 
-function StepIndicator({ current }: { current: number }) {
-  return (
-    <div className="mb-6 flex flex-wrap gap-1.5">
-      {SCREEN_LABELS.map((label, index) => (
-        <Badge key={label} variant={index === current ? "default" : index < current ? "success" : "outline"}>
-          {index + 1}. {label}
-        </Badge>
-      ))}
-    </div>
-  );
-}
+const ONBOARDING_STEPS = SCREEN_LABELS.map((label) => ({ label }));
 
 function CompanyStep({ onDone }: { onDone: () => void }) {
   const [industry, setIndustry] = useState("");
@@ -68,7 +58,7 @@ function CompanyStep({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <p className="text-sm text-[var(--fg-muted)]">
-          Tell us about your company — spec §68 steps 1-2 (Company / Business profile).
+          Tell us about your company.
         </p>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="industry">Industry</Label>
@@ -120,7 +110,7 @@ function GoalsStep({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <p className="text-sm text-[var(--fg-muted)]">
-          What do you want to improve? (spec §68 step 3 — choose any that apply)
+          What do you want to improve? Choose any that apply.
         </p>
         <div className="flex flex-col gap-2">
           {ONBOARDING_GOALS.map((goal) => (
@@ -170,7 +160,7 @@ function ComplianceProfileStep({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <p className="text-sm text-[var(--fg-muted)]">
-          Which compliance frameworks matter to you? (spec §68 step 4)
+          Which compliance frameworks matter to you?
         </p>
         <div className="flex flex-col gap-2">
           {frameworks?.map((framework) => (
@@ -213,7 +203,7 @@ function SecurityProfileStep({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <p className="text-sm text-[var(--fg-muted)]">
-          What&apos;s your primary cloud provider? (spec §68 step 5)
+          What&apos;s your primary cloud provider?
         </p>
         <select
           className="flex h-9 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
@@ -248,7 +238,7 @@ function SalesProfileStep({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">What&apos;s your sales focus? (spec §68 step 6)</p>
+        <p className="text-sm text-[var(--fg-muted)]">What&apos;s your sales focus?</p>
         <Input
           placeholder="e.g. Enterprise SaaS accounts in Europe"
           value={focus}
@@ -290,7 +280,7 @@ function SupportProfileStep({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="flex flex-col gap-4 pt-6">
         <p className="text-sm text-[var(--fg-muted)]">
-          Which support channels do you use? (spec §68 step 7)
+          Which support channels do you use?
         </p>
         <div className="flex flex-col gap-2">
           {SUPPORT_CHANNEL_OPTIONS.map((channel) => (
@@ -341,7 +331,7 @@ function PassThroughStep({
           <Button variant="outline">{linkLabel}</Button>
         </Link>
         <Button className="self-start" disabled={advance.isPending} onClick={() => advance.mutate()}>
-          Continue
+          Configure later
         </Button>
       </CardContent>
     </Card>
@@ -438,17 +428,19 @@ export default function OnboardingPage() {
 
   if (effectiveScreen === null) {
     return (
-      <div>
-        <PageHeader title="Onboarding" description="spec §68 — a guided setup for your organization." />
+      <div className="mx-auto max-w-2xl">
+        <PageHeader title="Onboarding" description="A guided setup for your organization." />
         <p className="text-sm text-[var(--fg-muted)]">{isLoading ? "Loading…" : ""}</p>
       </div>
     );
   }
 
   return (
-    <div>
-      <PageHeader title="Onboarding" description="spec §68 — a guided setup for your organization." />
-      <StepIndicator current={effectiveScreen} />
+    <div className="mx-auto max-w-2xl">
+      <PageHeader title="Onboarding" description="A guided setup for your organization — skip anything you'd rather configure later." />
+      <div className="mb-8">
+        <OnboardingStepper steps={ONBOARDING_STEPS} currentIndex={effectiveScreen} />
+      </div>
       {effectiveScreen === 0 && <CompanyStep onDone={advanceScreen} />}
       {effectiveScreen === 1 && <GoalsStep onDone={advanceScreen} />}
       {effectiveScreen === 2 && <ComplianceProfileStep onDone={advanceScreen} />}
@@ -458,7 +450,7 @@ export default function OnboardingPage() {
       {effectiveScreen === 6 && (
         <PassThroughStep
           title="Connect tools"
-          description="spec §68 step 8 — connect a real integration now, or come back later."
+          description="Connect a real integration now, or configure it later from Settings."
           linkHref="/settings/integrations"
           linkLabel="Open Integrations"
           onDone={advanceScreen}
@@ -467,7 +459,7 @@ export default function OnboardingPage() {
       {effectiveScreen === 7 && (
         <PassThroughStep
           title="Upload knowledge"
-          description="spec §68 step 9 — upload a document now, or come back later."
+          description="Upload a document now, or add it later from Knowledge."
           linkHref="/knowledge"
           linkLabel="Open Knowledge"
           onDone={advanceScreen}
