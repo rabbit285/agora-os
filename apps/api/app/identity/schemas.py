@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -81,6 +82,20 @@ class InvitationOut(BaseModel):
     expires_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class InvitationPreviewOut(BaseModel):
+    """Public — no auth, since the holder of the token is exactly who this
+    is for. Deliberately never includes the raw token or anything about
+    the organization beyond its name."""
+
+    organization_name: str
+    email: str
+    role_key: str
+    inviter_name: str | None
+    expires_at: datetime
+    status: Literal["pending", "expired", "revoked", "accepted"]
+    account_exists: bool
 
 
 class AcceptInvitationRequest(BaseModel):

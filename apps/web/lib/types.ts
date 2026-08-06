@@ -106,6 +106,16 @@ export type Invitation = {
   expires_at: string;
 };
 
+export type InvitationPreview = {
+  organization_name: string;
+  email: string;
+  role_key: string;
+  inviter_name: string | null;
+  expires_at: string;
+  status: "pending" | "expired" | "revoked" | "accepted";
+  account_exists: boolean;
+};
+
 // Mirrors app.core.rbac.SYSTEM_ROLE_KEYS.
 export const SYSTEM_ROLES: { key: string; name: string }[] = [
   { key: "org_admin", name: "Organization Admin" },
