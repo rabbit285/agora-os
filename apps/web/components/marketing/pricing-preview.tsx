@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 
+import { InteractiveCard } from "@/components/marketing/interactive-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { PRICING_PLAN_COPY } from "@/lib/pricing-config";
 import { ENTITLEMENT_LABELS, type Plan } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 function formatEntitlement(value: number | boolean | null): string {
   if (typeof value === "boolean") return value ? "Included" : "—";
@@ -33,13 +33,7 @@ export function PricingPreview() {
       {PRICING_PLAN_COPY.map((copy) => {
         const plan = plans?.find((p) => p.key === copy.key);
         return (
-          <Card
-            key={copy.key}
-            className={cn(
-              "flex flex-col",
-              copy.featured && "border-[var(--brand-primary)] shadow-[var(--shadow-token-md)]",
-            )}
-          >
+          <InteractiveCard key={copy.key} selected={copy.featured} className="flex flex-col">
             <CardHeader>
               <span className="text-sm font-semibold text-[var(--fg-default)]">
                 {plan?.name ?? copy.key}
@@ -67,7 +61,7 @@ export function PricingPreview() {
                 <Link href={copy.ctaHref}>{copy.ctaLabel}</Link>
               </Button>
             </CardFooter>
-          </Card>
+          </InteractiveCard>
         );
       })}
     </div>
