@@ -410,6 +410,67 @@ for the full design and `docs/PUBLIC_SITE_IMPLEMENTATION_PLAN.md` Phase 8.
 - [x] Merged to `main`, 2026-08-06, after the complete verification
       suite passed
 
+## Shared interactive-card hover/focus/press system (branch `ui/interactive-card-system`, 2026-08-06)
+
+Follow-on to the carousel above — see `docs/PUBLIC_SITE_DESIGN.md` §12
+for the full design and `docs/PUBLIC_SITE_IMPLEMENTATION_PLAN.md`
+Phase 9. No branch name or merge-to-main instruction was given for this
+task (unlike the two above) — committed and pushed to its own branch,
+left for review rather than self-merged.
+
+- [x] Card audit completed first, before any code — of every public-
+      site card-like component, only three had (or could honestly gain)
+      a real per-card destination; the rest deliberately excluded
+- [x] Shared tokens (`--shadow-glow`, `--transition-card`/`--ease-card`,
+      `--transition-card-media`) and `InteractiveCard`/`CardMedia`/
+      `CardActionArrow` primitives
+- [x] Applied to the module carousel (neighboring slides are now real,
+      click-to-select `<button>`s — a new capability, not just a visual
+      restyle), `ModuleOverview` (gained real links into
+      `/features#<slug>`, previously static), and `PricingPreview`
+      (hover/focus-within only, no redundant interactive wrapper around
+      its existing CTA button)
+- [x] Confirmed `components/ui/card.tsx` and all 68 of its call sites
+      (authenticated dashboard, auth card, shared panels) untouched — a
+      new, separate component, not a change to the shared one
+- [x] Two real, non-cosmetic bugs found and fixed: a CSS Cascade Layers
+      bug in `globals.css` (an unlayered `border-color` reset was
+      silently beating every `hover:border-*`/`focus-visible:border-*`
+      utility app-wide, not just the new ones — fixed by moving it into
+      `@layer base`), and a Tailwind v4 test-methodology trap
+      (`scale`/`translate` utilities compile to those standalone CSS
+      properties, not a composed `transform` string)
+- [x] 32 new/updated Vitest tests (11 for the primitives, 3 for
+      `ModuleOverview`, 3 added to the carousel suite, plus existing
+      carousel tests re-verified passing), 9 new Playwright journeys
+      (hover, keyboard focus, Enter-activation, neighbor-select,
+      arrow-key nav, reduced motion, mobile tap, axe, non-clickable-card
+      exclusion) — all green, including after fixing the two real bugs
+      above and several test-methodology mistakes of its own (Tailwind
+      v4's `scale`/`translate`, `:focus-visible` requiring genuine
+      keyboard-driven focus not a bare scripted `.focus()`, and
+      Playwright's `includeHidden` needed to reach the intentionally
+      `aria-hidden` neighboring carousel slides)
+- [x] Responsive verification across all 6 required breakpoints — zero
+      horizontal overflow at any of them, including while the
+      hover-grown active card visually overlaps its neighbors' peek
+      area (expected at this scale, not a bug)
+- [x] Full check suite: `tsc --noEmit` clean, ESLint 0 errors, Vitest
+      109/109 (whole frontend suite — 2 separate runs each surfaced a
+      different, unrelated set of pre-existing test flakes under load;
+      all confirmed passing cleanly in isolation, none touch this
+      branch's files), production build succeeds, full Playwright suite
+      91/91 clean on the final run (the same environmental-timing class
+      of issue this whole project has repeatedly documented — a keypress
+      immediately after a confirmed-focused element occasionally landing
+      before React's listeners settle post-hydration — hit two arrow-key
+      tests, including one pre-existing; fixed both with a short settle
+      delay after confirming the root cause via direct debugging, not by
+      loosening the assertions), Docker smoke confirmed (all 7 services
+      healthy, Alembic at head, homepage/`/features`/`/pricing`/API all
+      return 200 through the live stack)
+- [x] Committed and pushed to `origin/ui/interactive-card-system`
+
 ## Not started (tracked in docs/IMPLEMENTATION_PLAN.md)
 
 - [ ] Phase 10 — Enterprise (SSO/SAML/SCIM)
