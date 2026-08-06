@@ -47,7 +47,7 @@ export function PublicFooter() {
           </div>
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--fg-subtle)]">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                 {column.title}
               </h3>
               <ul className="mt-3 flex flex-col gap-2">
@@ -67,7 +67,7 @@ export function PublicFooter() {
         </div>
 
         <div className="mt-10 flex flex-col gap-4 border-t border-[var(--border-default)] pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-[var(--fg-subtle)]">
+          <p className="text-xs text-[var(--fg-muted)]">
             © {year} Agora Origin. All rights reserved.
           </p>
           <Link

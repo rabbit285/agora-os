@@ -25,7 +25,7 @@ export function PasswordStrength({ password }: { password: string }) {
           />
         ))}
       </div>
-      <p className={cn("text-xs", meetsLength ? "text-[var(--success-600)]" : "text-[var(--fg-subtle)]")}>
+      <p className={cn("text-xs", meetsLength ? "text-[var(--success-600)]" : "text-[var(--fg-muted)]")}>
         At least 12 characters {meetsLength ? "✓" : `(${password.length}/12)`}
       </p>
     </div>

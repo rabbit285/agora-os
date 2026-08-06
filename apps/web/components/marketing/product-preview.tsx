@@ -19,39 +19,21 @@ export function ProductPreview() {
             <CardTitle className="text-sm">Command Center</CardTitle>
             <Badge variant="outline">Demo data</Badge>
           </div>
-          <span className="text-xs text-[var(--fg-subtle)]">Acme AI Technologies</span>
+          <span className="text-xs text-[var(--fg-muted)]">Acme AI Technologies</span>
         </CardHeader>
+        {/* Neither `description`/`comparisonLabel` nor `trend` is passed to
+            any card here: both render with MetricCard's own --fg-subtle /
+            --success-600-on-white styling, real but pre-existing contrast
+            shortfalls (2.56:1 and 3.76:1 respectively) in a component
+            shared across the entire authenticated app — out of scope to
+            change for this effort (see docs/PUBLIC_SITE_DESIGN.md). This
+            preview reads perfectly well as label + value + status dot
+            without either. */}
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
-          <MetricCard
-            label="Compliance readiness"
-            value="86%"
-            status="success"
-            trend={4}
-            icon={ShieldCheck}
-            description="3 frameworks tracked"
-          />
-          <MetricCard
-            label="Security posture"
-            value="12 open"
-            status="warning"
-            trend={-2}
-            description="2 critical findings"
-          />
-          <MetricCard
-            label="Sales pipeline"
-            value="€184k"
-            status="success"
-            trend={9}
-            icon={TrendingUp}
-            description="14 qualified leads"
-          />
-          <MetricCard
-            label="Automation runs"
-            value="342"
-            status="neutral"
-            icon={Workflow}
-            description="7-day rolling total"
-          />
+          <MetricCard label="Compliance readiness" value="86%" status="success" icon={ShieldCheck} />
+          <MetricCard label="Security posture" value="12 open" status="warning" />
+          <MetricCard label="Sales pipeline" value="€184k" status="success" icon={TrendingUp} />
+          <MetricCard label="Automation runs" value="342" status="neutral" icon={Workflow} />
         </CardContent>
         <div className="border-t border-[var(--border-default)] bg-[var(--bg-sunken)] p-4">
           <div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">

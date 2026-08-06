@@ -20,7 +20,7 @@ export default function PricingPage() {
       <div className="mt-14">
         <PricingPreview />
       </div>
-      <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-[var(--fg-subtle)]">
+      <p className="mx-auto mt-10 max-w-2xl text-center text-xs text-[var(--fg-muted)]">
         Prices for Growth, Business, and Enterprise are set per organization based on scale and
         requirements — contact sales for a quote. No payment details are required to start on the
         Starter plan.

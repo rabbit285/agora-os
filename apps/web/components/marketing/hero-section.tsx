@@ -28,7 +28,7 @@ export function HeroSection() {
               <Link href="/contact">Request a demo</Link>
             </Button>
           </div>
-          <p className="mt-6 text-sm text-[var(--fg-subtle)]">
+          <p className="mt-6 text-sm text-[var(--fg-muted)]">
             Designed for growing European businesses that need practical AI with governance,
             visibility, and control.
           </p>
