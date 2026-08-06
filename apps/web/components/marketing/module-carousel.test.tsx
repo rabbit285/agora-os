@@ -171,6 +171,34 @@ describe("ModuleCarousel", () => {
     expect(screen.getByText(/Showing slide 1 of 6: Compliance/)).toBeInTheDocument();
   });
 
+  it("selects a neighboring slide when it is clicked", async () => {
+    const user = userEvent.setup();
+    render(<ModuleCarousel />);
+    // Non-active slides render as a real <button> covering the whole card
+    // (see module-carousel.tsx) rather than exposing their own CTA link,
+    // since the whole card IS the click target while inactive. They sit
+    // under an aria-hidden ancestor (correctly excluded from the a11y
+    // tree — screen-reader users navigate via the arrow keys instead, not
+    // by reaching individual off-screen peek slides), so `{ hidden: true }`
+    // is needed here to find it the way a sighted mouse user still can.
+    const securityCard = screen.getByRole("button", { name: "Show the Security module", hidden: true });
+    await user.click(securityCard);
+    expect(await screen.findByText("2 / 6")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Explore Security/ })).toBeInTheDocument();
+  });
+
+  it("keeps neighboring slide buttons out of the natural Tab order", () => {
+    render(<ModuleCarousel />);
+    const securityCard = screen.getByRole("button", { name: "Show the Security module", hidden: true });
+    expect(securityCard).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("does not render a neighbor-select button for the active slide (its CTA link is the interactive element instead)", () => {
+    render(<ModuleCarousel />);
+    expect(screen.queryByRole("button", { name: "Show the Compliance module" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Explore Compliance/ })).toBeInTheDocument();
+  });
+
   describe("autoplay", () => {
     beforeEach(() => {
       // Embla's scroll animation runs on requestAnimationFrame — without
