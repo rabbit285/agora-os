@@ -84,6 +84,12 @@ test.describe("Homepage module carousel", () => {
     // playwright.config.ts's own comment on timing variance), a keypress
     // sent immediately after a programmatic .focus() has occasionally been
     // observed to land before the browser's focus change fully settles.
+    // Confirmed via direct debugging (see ui/interactive-card-system's
+    // near-identical test) — DOM focus can be genuinely confirmed
+    // (toBeFocused() above passes) while React's event listeners haven't
+    // fully settled post-hydration yet on a page with zero prior
+    // interaction; a short settle delay avoids the race.
+    await page.waitForTimeout(500);
     await page.keyboard.press("ArrowRight");
     await expect(carousel.getByText("2 / 6")).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press("ArrowRight");

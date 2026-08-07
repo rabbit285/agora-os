@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Image from "next/image";
 import Link from "next/link";
 import useEmblaCarousel from "embla-carousel-react";
-import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
+import { CardActionArrow, CardMedia, InteractiveCard } from "@/components/marketing/interactive-card";
 import { SectionHeader } from "@/components/marketing/section-header";
 import { cn } from "@/lib/utils";
 
@@ -200,20 +201,9 @@ export function ModuleCarousel() {
           <div className="-mx-2 flex sm:-mx-3">
             {SLIDES.map((slide, index) => {
               const isActive = index === selectedIndex;
-              return (
-                <div
-                  key={slide.id}
-                  className="min-w-0 flex-[0_0_100%] px-2 sm:flex-[0_0_84%] sm:px-3 lg:flex-[0_0_68%]"
-                  aria-roledescription="slide"
-                  aria-label={`${index + 1} of ${total}: ${slide.label}`}
-                  aria-hidden={!isActive}
-                >
-                  <div
-                    className={cn(
-                      "relative aspect-[3/4] w-full overflow-hidden rounded-[var(--radius-lg)] shadow-[var(--shadow-token-md)] transition-opacity duration-300 sm:aspect-[16/9]",
-                      isActive ? "opacity-100" : "opacity-60",
-                    )}
-                  >
+              const media = (
+                <>
+                  <CardMedia className="absolute inset-0">
                     <Image
                       src={slide.image}
                       alt={slide.alt}
@@ -222,31 +212,70 @@ export function ModuleCarousel() {
                       className="object-cover object-[68%_center]"
                       priority={index === 0}
                     />
-                    <div
-                      className="pointer-events-none absolute inset-0"
-                      style={{
-                        background:
-                          "linear-gradient(0deg, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.45) 32%, rgba(15,23,42,0.05) 58%, rgba(15,23,42,0) 75%)",
-                      }}
-                    />
+                  </CardMedia>
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(0deg, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.45) 32%, rgba(15,23,42,0.05) 58%, rgba(15,23,42,0) 75%)",
+                    }}
+                  />
 
-                    <span className="absolute left-4 top-4 inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[var(--fg-default)] sm:left-6 sm:top-6">
-                      {slide.label}
-                    </span>
+                  <span className="absolute left-4 top-4 inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[var(--fg-default)] sm:left-6 sm:top-6">
+                    {slide.label}
+                  </span>
 
-                    <div className="absolute inset-x-4 bottom-4 sm:inset-x-6 sm:bottom-6 lg:max-w-md">
-                      <h3 className="text-base font-semibold text-white sm:text-lg lg:text-xl">{slide.headline}</h3>
-                      <p className="mt-2 text-xs leading-relaxed text-white/85 sm:text-sm">{slide.description}</p>
+                  <div className="absolute inset-x-4 bottom-4 sm:inset-x-6 sm:bottom-6 lg:max-w-md">
+                    <h3 className="text-base font-semibold text-white transition-colors duration-[var(--transition-card)] ease-[var(--ease-card)] group-hover:text-white sm:text-lg lg:text-xl">
+                      {slide.headline}
+                    </h3>
+                    <p className="mt-2 text-xs leading-relaxed text-white/85 sm:text-sm">{slide.description}</p>
+                    {isActive ? (
                       <Link
                         href={slide.href}
-                        tabIndex={isActive ? 0 : -1}
                         className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--gray-900)]"
                       >
                         {slide.cta}
-                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                        <CardActionArrow className="text-white" />
                       </Link>
-                    </div>
+                    ) : (
+                      <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-white/70">
+                        {slide.cta}
+                        <CardActionArrow className="text-white/70" />
+                      </span>
+                    )}
                   </div>
+                </>
+              );
+
+              const cardClassName = cn(
+                "block aspect-[3/4] w-full overflow-hidden p-0 text-left sm:aspect-[16/9]",
+                !isActive &&
+                  "scale-[0.95] opacity-[0.85] motion-reduce:scale-100 motion-reduce:opacity-100",
+              );
+
+              return (
+                <div
+                  key={slide.id}
+                  className="min-w-0 flex-[0_0_100%] px-2 sm:flex-[0_0_84%] sm:px-3 lg:flex-[0_0_68%]"
+                  aria-roledescription="slide"
+                  aria-label={`${index + 1} of ${total}: ${slide.label}`}
+                  aria-hidden={!isActive}
+                >
+                  {isActive ? (
+                    <InteractiveCard selected className={cardClassName}>
+                      {media}
+                    </InteractiveCard>
+                  ) : (
+                    <InteractiveCard
+                      onClick={() => scrollTo(index)}
+                      tabIndex={-1}
+                      aria-label={`Show the ${slide.label} module`}
+                      className={cardClassName}
+                    >
+                      {media}
+                    </InteractiveCard>
+                  )}
                 </div>
               );
             })}

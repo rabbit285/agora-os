@@ -98,10 +98,32 @@
   /* Shadow */
   --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+  /* Soft cyan/blue accent for interactive-card hover/focus/selected glow —
+     deliberately its own token, not --brand-primary (indigo, used site-wide
+     for buttons/links/icons): only the card hover/focus glow itself uses
+     this color, so changing it doesn't ripple into the rest of the brand
+     palette. cyan-400 (#22d3ee) at a low, restrained alpha for a soft glow,
+     not a saturated neon one. */
+  --card-glow: #22d3ee;
+  --shadow-glow: 0 12px 28px -6px rgba(34, 211, 238, 0.28), 0 4px 10px -4px rgba(34, 211, 238, 0.16);
 
   /* Transitions */
   --transition-fast: 120ms ease-out;
   --transition-base: 180ms ease-out;
+  /* Shared interaction-card motion (hover/focus/press scale, border, and
+     shadow) — a refined ease-out, not the plain ease-out above, and
+     deliberately its own token rather than overloading --transition-base
+     since card interactions want a slightly longer, more premium feel.
+     Kept as two separate values (not one bundled "260ms cubic-bezier(...)"
+     string like --transition-fast/--transition-base above) since
+     transition-duration and transition-timing-function are two distinct
+     CSS properties — Tailwind's duration-[...] and ease-[...] utilities
+     each need their own single value to stay valid CSS. */
+  --transition-card: 260ms;
+  --ease-card: cubic-bezier(0.16, 1, 0.3, 1);
+  /* The image inside CardMedia zooms slightly slower than the card itself
+     moves, for a subtle parallax/depth feel. */
+  --transition-card-media: 380ms;
 
   --background: var(--bg-app);
   --foreground: var(--fg-default);
@@ -188,10 +210,21 @@
 
   --shadow-token-sm: var(--shadow-sm);
   --shadow-token-md: var(--shadow-md);
+  --shadow-token-glow: var(--shadow-glow);
 }
 
-* {
-  border-color: var(--border-default);
+/* Wrapped in @layer base (not left unlayered) — CSS Cascade Layers give
+   ANY unlayered rule priority over ANY layered rule regardless of
+   selector specificity, so an unlayered version of this rule would
+   silently beat every hover:border-*/focus-visible:border-* utility
+   anywhere in the app (discovered while building the interactive-card
+   hover system — see docs/PUBLIC_SITE_DESIGN.md §12): those utilities'
+   generated CSS lives inside Tailwind's own utilities layer, which is
+   powerless against something outside the layer system entirely. */
+@layer base {
+  * {
+    border-color: var(--border-default);
+  }
 }
 
 body {

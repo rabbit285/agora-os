@@ -319,3 +319,91 @@ it on the homepage (`apps/web/components/marketing/module-carousel.tsx`).
      callback, which skips drag-engagement entirely when a gesture starts on an
      `<a>`/`<button>` — the sanctioned way Embla supports interactive content inside
      slides, not a propagation-order workaround.
+
+## 12. Shared interactive-card system (`ui/interactive-card-system`)
+
+A polished hover/focus/press/selected treatment (AWS-style inspiration, not a copy —
+own colors, own dimensions), built as reusable primitives rather than duplicated
+per-page CSS: `apps/web/components/marketing/interactive-card.tsx` exports
+`InteractiveCard` (the card wrapper itself), `CardMedia` (the image-zoom wrapper), and
+`CardActionArrow` (the nudge-on-hover arrow), all built on new shared tokens in
+`globals.css` — `--card-glow` (a soft cyan/blue, `#22d3ee`) and `--shadow-glow` (a
+restrained shadow tinted with that same color), `--transition-card`/`--ease-card`
+(260ms, a refined ease-out — kept as two separate values, not one bundled string like
+the pre-existing `--transition-fast`/`--transition-base`, since `transition-duration`
+and `transition-timing-function` are different CSS properties), and
+`--transition-card-media` (380ms, slower than the card itself for a layered depth feel
+on the image zoom). `--card-glow` is deliberately its own token, not `--brand-primary`
+(the site's indigo, used for buttons/links/every other accent) — changing the card
+hover/focus/selected glow's color was a later, explicit request, and keeping it
+separate from day one meant that change touched exactly one token plus the two
+hover-triggered text-color accents in `ModuleOverview` (its title and action arrow),
+not a color used everywhere else on the site.
+
+**Audit before building (per this task's own required process)**: of every card-like
+component on the public site, only three had (or gained) a real destination:
+`ModuleCarousel` (already had a nested CTA link), `PricingPreview` (already had a
+nested CTA button), and `ModuleOverview` (previously static — see below). `FeatureGrid`,
+`IntegrationGrid`, `WorkflowExample`, `TrustSection`, and `CustomerTypeSection` were
+deliberately left untouched: none has, or could honestly gain, a real per-card
+destination (no public per-feature, per-integration, or per-solution page exists), and
+this task's own rule against implying interactivity where none exists
+("non-clickable cards... little or no hover movement") ruled out adding the treatment
+just for visual consistency. No `customer-story`, `resource`, or `blog/article` cards
+exist anywhere in this codebase to apply it to either.
+
+**`ModuleOverview` gained real links**: previously six static `Card`s describing the
+same six modules the carousel now also shows — each now links to the same
+`/features#<slug>` anchor the carousel's CTA uses, making the whole card a real
+`InteractiveCard`, not just decoration duplicating the carousel one section up.
+
+**`ModuleCarousel`**: the active slide is a plain, non-interactive `<div>`
+(`selected` prop — persistent border/glow regardless of hover) wrapping its own real
+CTA `<a>`; neighboring/inactive slides render as a real `<button onClick={() =>
+scrollTo(index)}>` covering the *whole* card (no separate CTA link while inactive —
+one interactive element per state, never a button nested around/inside a link) with
+`tabIndex={-1}` — clicking anywhere on a neighbor selects it, but it stays out of the
+Tab sequence (unchanged from before this task: screen-reader/keyboard users navigate
+via the arrow keys, not by tabbing to individual off-screen peek slides, since the
+whole slide is `aria-hidden` while inactive). `CardMedia` handles the image zoom via
+`group-hover`/`group-focus-visible`, and `--brand-primary` styling on the active/hovered
+slide is the exact same `InteractiveCard` used everywhere else — no per-component
+reimplementation.
+
+**`PricingPreview`**: does *not* wrap its cards in `InteractiveCard`'s href/onClick
+modes — the plan's own real CTA is a nested `Button`, and wrapping the whole card in a
+second, redundant interactive element (or a fake `cursor-pointer` div) would create
+exactly the "nested interactive content" problem this task's own accessibility section
+warns against. Instead `InteractiveCard` renders a plain, non-interactive `<div>` with
+only `:hover`/`:focus-within`-driven border/shadow classes (no scale/translate — this
+card was never going to move, only glow) — `:focus-within` reacts when the nested
+Button gains focus, extending the same visual feedback without a second interactive
+target. The featured/recommended plan uses the `selected` prop for its permanent
+highlight, replacing what used to be a bespoke, one-off `className` conditional.
+
+**Two real, non-cosmetic bugs found and fixed while building this**, neither
+pre-existing to this branch's own carousel work:
+1. **A genuine CSS Cascade Layers bug** in `globals.css`: `* { border-color:
+   var(--border-default); }` sat *outside* any `@layer` block. Per the CSS Cascade
+   Layers spec, an unlayered rule always beats a layered rule regardless of selector
+   specificity — so this one rule silently overrode *every* `hover:border-*` /
+   `focus-visible:border-*` Tailwind utility anywhere in the app, not just the new
+   ones this task added (Tailwind's own generated utilities live inside its own
+   `utilities` layer). Fixed by wrapping the rule in `@layer base` so it participates
+   in the layer order normally, letting more-specific *and* layer-correct utility
+   classes override it as expected — a strict fix, not a visual change to the
+   already-correct default state.
+2. **A test-methodology trap, not a product bug**: Tailwind v4 compiles
+   `scale-[...]`/`-translate-y-*` utilities to the standalone CSS `scale`/`translate`
+   properties (the modern individual-transform-property spec), not a composed legacy
+   `transform: scale(...) translate(...)` string the way earlier tooling did — so any
+   test reading `getComputedStyle(el).transform` never observes a change even when the
+   effect is visibly, correctly working. Both the Playwright and any future test in
+   this codebase should read `.scale`/`.translate` directly.
+
+**Accessibility**: every interactive card is a real `<a>` or `<button>` (never a
+clickable `<div>`), `:focus-visible` drives the same visual feedback `:hover` does,
+`motion-reduce:` variants remove scale/translate while keeping the border/shadow state
+change (border/shadow are real information, not motion), and the carousel's
+`selected`/inactive-neighbor states use the same `aria-hidden`/`aria-current`/live-region
+mechanics already built for it — extended, not replaced.

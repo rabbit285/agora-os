@@ -194,3 +194,41 @@ Commit strategy (this branch's own brief, followed literally):
 Verification: full frontend `tsc`/ESLint/Vitest/production-build, the full Playwright
 suite, and a live Docker smoke test — see `docs/RELEASE_CHECKLIST.md`. Merged to `main`
 after the complete verification suite passes, per this branch's own instruction.
+
+## Phase 9 — Shared interactive-card hover/focus/press system (`ui/interactive-card-system`, follow-on branch)
+
+A separate branch on top of the merged carousel, adding a shared, reusable
+hover/focus/press/selected card system rather than one-off page CSS. See
+`docs/PUBLIC_SITE_DESIGN.md` §12 for the full design (the audit of which cards
+genuinely qualify, the two real bugs found and fixed — a CSS Cascade Layers bug and a
+Tailwind v4 `scale`/`translate` test-methodology trap — and the accessibility model).
+
+Process (this branch's own required order, followed literally):
+
+1. Audited every public-site card-like component first, before writing any code —
+   only three had, or could honestly gain, a real per-card destination.
+2. Shared motion/elevation/glow tokens added to `globals.css`.
+3. `InteractiveCard`/`CardMedia`/`CardActionArrow` primitives built.
+4. Applied to the homepage module carousel (including a new capability: clicking a
+   neighboring slide now selects it, not just the prev/next/dot controls).
+5. Applied to `ModuleOverview` (which gained real links as part of this) and
+   `PricingPreview` (hover/focus-within only — its real CTA stays the nested button).
+6. Confirmed no duplicated per-page hover CSS remained to remove (there wasn't any to
+   begin with — no public card had its own bespoke hover treatment before this).
+7. Confirmed the authenticated app's own `components/ui/card.tsx` and every one of its
+   68 call sites (dashboard, auth, shared panels) are untouched — a new, separate
+   component was built specifically so nothing there had to change.
+8. Tests: 11 new Vitest tests for the primitives, 3 new for `ModuleOverview`, 3 added
+   to the existing carousel suite (neighbor-select, tab-order, active-slide-has-no-
+   redundant-button) — 32 new/updated frontend unit tests total; 9 new Playwright
+   journeys (hover, keyboard focus, Enter-activation, neighbor-select, arrow-key nav,
+   reduced motion, mobile tap, axe, non-clickable-card exclusion).
+9. Responsive verification across all 6 required breakpoints, confirming zero
+   horizontal overflow even while the hover-grown card visually overlaps its
+   neighbors' peek area (an intentional, expected effect at this scale — not a bug).
+10. Documentation (this entry + `docs/PUBLIC_SITE_DESIGN.md` §12 +
+    `docs/ROUTES_AND_SCREENS.md` + `docs/RELEASE_CHECKLIST.md` +
+    `docs/IMPLEMENTATION_STATUS.md`).
+
+Verification: full frontend `tsc`/ESLint/Vitest/production-build, the full Playwright
+suite, and a live Docker smoke test — see `docs/RELEASE_CHECKLIST.md`.
