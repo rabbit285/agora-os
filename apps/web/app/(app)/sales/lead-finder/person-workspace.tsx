@@ -17,6 +17,7 @@ import type {
 
 import { ActiveFilterChips, FilterSidebarShell, PersonFilterFields } from "./filter-sidebar";
 import { PersonResultsTable } from "./results-table";
+import { describeProviderSearchError } from "./provider-error";
 import { BulkToolbar } from "./bulk-toolbar";
 import { ListPickerDialog } from "./list-picker-dialog";
 import { EnrichConfirmDialog } from "./enrich-confirm-dialog";
@@ -265,7 +266,7 @@ export function PersonWorkspace() {
             <PersonResultsTable
               people={searchResult.data?.people}
               isLoading={searchResult.isLoading}
-              error={searchResult.error}
+              error={describeProviderSearchError(searchResult.error, "People Search") ?? searchResult.error}
               onRetry={() => searchResult.refetch()}
               density={density}
               selected={selected}

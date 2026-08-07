@@ -20,6 +20,14 @@ from app.core.rbac import ensure_system_roles
 from app.core.storage import ensure_bucket
 from app.db.session import AsyncSessionLocal
 from app.identity.router import router as auth_router
+from app.sales.providers.exceptions import (
+    ProviderAuthError,
+    ProviderInvalidRequest,
+    ProviderNotConfigured,
+    ProviderRateLimited,
+    ProviderUnavailable,
+    SalesProviderError,
+)
 from app.routers import (
     ai,
     approvals,
@@ -132,6 +140,56 @@ async def validation_exception_handler(
         "Validation error",
         jsonable_encoder(exc.errors()),
     )
+
+
+@app.exception_handler(SalesProviderError)
+async def sales_provider_error_handler(request: Request, exc: SalesProviderError) -> JSONResponse:
+    # Every Sales data-provider adapter (app.sales.providers.*) raises only
+    # these normalized exceptions (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md
+    # §3) — without this handler they were propagating past CORSMiddleware
+    # as raw 500s, which strips CORS headers and surfaces to the browser as
+    # an opaque "Failed to fetch" instead of an honest, actionable message.
+    # Real provider status/response bodies are never echoed to the client
+    # (only sanitized, generic text below) — this handler intercepts the
+    # exception before FastAPI's default unhandled-exception logging would
+    # run, so the technical detail is logged explicitly here instead.
+    logging.getLogger(__name__).warning("Sales provider error: %s", exc)
+
+    if isinstance(exc, ProviderRateLimited):
+        response = _error_envelope(
+            request,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Apollo rate limit reached. Please try again later.",
+        )
+        if exc.retry_after_seconds is not None:
+            response.headers["Retry-After"] = str(exc.retry_after_seconds)
+        return response
+    if isinstance(exc, ProviderAuthError):
+        message = (
+            "Your Apollo account or API key does not have access to this feature."
+            if exc.status_code == 403
+            else "Apollo authentication failed. Check the connected credential."
+        )
+        return _error_envelope(request, exc.status_code, message)
+    if isinstance(exc, ProviderInvalidRequest):
+        return _error_envelope(
+            request,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "One or more search filters are not supported by Apollo.",
+        )
+    if isinstance(exc, ProviderNotConfigured):
+        return _error_envelope(request, status.HTTP_409_CONFLICT, "This data provider is not configured.")
+    if isinstance(exc, ProviderUnavailable):
+        return _error_envelope(
+            request,
+            status.HTTP_502_BAD_GATEWAY,
+            "Apollo is temporarily unavailable. Please try again shortly.",
+        )
+    # ProviderCapabilityUnsupported and any future subclass: a caller bug
+    # (the exception's own docstring says so), not a client-facing
+    # provider condition — surface as an opaque 500 like any other
+    # unhandled server error rather than inventing a fake honest message.
+    return _error_envelope(request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.")
 
 
 app.include_router(health.router)

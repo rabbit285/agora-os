@@ -22,6 +22,7 @@ import httpx
 
 from app.sales.providers.exceptions import (
     ProviderAuthError,
+    ProviderInvalidRequest,
     ProviderRateLimited,
     ProviderUnavailable,
 )
@@ -43,7 +44,7 @@ from app.sales.providers.schemas import (
     ProviderHealth,
 )
 
-BASE_URL = "https://api.apollo.io/v1"
+BASE_URL = "https://api.apollo.io/api/v1"
 REQUEST_TIMEOUT_SECONDS = 20.0
 
 # Apollo's own per-call credit cost varies by record type/enrichment depth
@@ -97,10 +98,21 @@ class ApolloDataProvider:
                 retry_after_seconds=int(retry_after) if retry_after and retry_after.isdigit() else None,
             )
         if response.status_code in (401, 403):
-            raise ProviderAuthError(f"Apollo rejected the configured API key (HTTP {response.status_code})")
+            raise ProviderAuthError(
+                f"Apollo rejected the configured API key (HTTP {response.status_code})",
+                status_code=response.status_code,
+            )
+        if response.status_code == 422:
+            raise ProviderInvalidRequest(f"Apollo rejected the request as invalid (HTTP 422) for {path}")
         if response.status_code >= 500:
             raise ProviderUnavailable(f"Apollo returned HTTP {response.status_code}")
-        response.raise_for_status()
+        if response.status_code >= 400:
+            # Any other 4xx this adapter doesn't specifically interpret —
+            # still routed through the same normalized-error path instead
+            # of falling through to a raw, unmapped httpx.HTTPStatusError
+            # (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §3: callers
+            # must only ever see SalesProviderError subclasses).
+            raise ProviderUnavailable(f"Apollo returned HTTP {response.status_code} for {path}")
         result: dict[str, Any] = response.json()
         return result
 
