@@ -15,8 +15,8 @@ const INTERACTIVE_CARD_BASE =
   "group relative rounded-[var(--radius-lg)] border bg-[var(--bg-surface)] transition-[transform,opacity,box-shadow,border-color] duration-[var(--transition-card)] ease-[var(--ease-card)]";
 
 const INTERACTIVE_CARD_HOVER =
-  "hover:-translate-y-1 hover:scale-[1.02] hover:border-[var(--brand-primary)] hover:shadow-[var(--shadow-token-glow)] " +
-  "focus-visible:-translate-y-1 focus-visible:scale-[1.02] focus-visible:border-[var(--brand-primary)] focus-visible:shadow-[var(--shadow-token-glow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-app)] " +
+  "hover:-translate-y-1 hover:scale-[1.02] hover:border-[var(--card-glow)] hover:shadow-[var(--shadow-token-glow)] " +
+  "focus-visible:-translate-y-1 focus-visible:scale-[1.02] focus-visible:border-[var(--card-glow)] focus-visible:shadow-[var(--shadow-token-glow)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-app)] " +
   "active:translate-y-0 active:scale-[0.99] active:shadow-[var(--shadow-token-sm)] " +
   "motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100 motion-reduce:focus-visible:translate-y-0 motion-reduce:focus-visible:scale-100 motion-reduce:active:scale-100";
 
@@ -25,9 +25,9 @@ const INTERACTIVE_CARD_HOVER =
  * the card and :focus-within when the nested control gains focus, with no
  * cursor/role/tabIndex implying the card itself is clickable. */
 const INTERACTIVE_CARD_PASSIVE_HOVER =
-  "hover:border-[var(--brand-primary)] hover:shadow-[var(--shadow-token-glow)] focus-within:border-[var(--brand-primary)] focus-within:shadow-[var(--shadow-token-glow)]";
+  "hover:border-[var(--card-glow)] hover:shadow-[var(--shadow-token-glow)] focus-within:border-[var(--card-glow)] focus-within:shadow-[var(--shadow-token-glow)]";
 
-const INTERACTIVE_CARD_SELECTED = "border-[var(--brand-primary)] shadow-[var(--shadow-token-glow)]";
+const INTERACTIVE_CARD_SELECTED = "border-[var(--card-glow)] shadow-[var(--shadow-token-glow)]";
 const INTERACTIVE_CARD_DEFAULT = "border-[var(--border-default)] shadow-[var(--shadow-token-sm)]";
 const INTERACTIVE_CARD_DISABLED = "opacity-60 cursor-not-allowed";
 

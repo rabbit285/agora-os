@@ -327,13 +327,18 @@ own colors, own dimensions), built as reusable primitives rather than duplicated
 per-page CSS: `apps/web/components/marketing/interactive-card.tsx` exports
 `InteractiveCard` (the card wrapper itself), `CardMedia` (the image-zoom wrapper), and
 `CardActionArrow` (the nudge-on-hover arrow), all built on new shared tokens in
-`globals.css` — `--shadow-glow` (a restrained blue-indigo tinted shadow, derived from
-`--brand-primary`'s own hex so it always matches the brand accent), `--transition-card`
-/ `--ease-card` (260ms, a refined ease-out — kept as two separate values, not one
-bundled string like the pre-existing `--transition-fast`/`--transition-base`, since
-`transition-duration` and `transition-timing-function` are different CSS properties),
-and `--transition-card-media` (380ms, slower than the card itself for a layered depth
-feel on the image zoom).
+`globals.css` — `--card-glow` (a soft cyan/blue, `#22d3ee`) and `--shadow-glow` (a
+restrained shadow tinted with that same color), `--transition-card`/`--ease-card`
+(260ms, a refined ease-out — kept as two separate values, not one bundled string like
+the pre-existing `--transition-fast`/`--transition-base`, since `transition-duration`
+and `transition-timing-function` are different CSS properties), and
+`--transition-card-media` (380ms, slower than the card itself for a layered depth feel
+on the image zoom). `--card-glow` is deliberately its own token, not `--brand-primary`
+(the site's indigo, used for buttons/links/every other accent) — changing the card
+hover/focus/selected glow's color was a later, explicit request, and keeping it
+separate from day one meant that change touched exactly one token plus the two
+hover-triggered text-color accents in `ModuleOverview` (its title and action arrow),
+not a color used everywhere else on the site.
 
 **Audit before building (per this task's own required process)**: of every card-like
 component on the public site, only three had (or gained) a real destination:

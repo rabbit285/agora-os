@@ -98,11 +98,14 @@
   /* Shadow */
   --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
-  /* Restrained blue-indigo elevation for interactive cards (hover/focus/
-     selected) — rgba(79,70,229,*) is --primary-600/--brand-primary's own
-     hex (#4f46e5) as rgba, so the glow always matches the brand accent
-     rather than a generic neutral shadow or an unrelated color. */
-  --shadow-glow: 0 12px 28px -6px rgba(79, 70, 229, 0.28), 0 4px 10px -4px rgba(79, 70, 229, 0.16);
+  /* Soft cyan/blue accent for interactive-card hover/focus/selected glow —
+     deliberately its own token, not --brand-primary (indigo, used site-wide
+     for buttons/links/icons): only the card hover/focus glow itself uses
+     this color, so changing it doesn't ripple into the rest of the brand
+     palette. cyan-400 (#22d3ee) at a low, restrained alpha for a soft glow,
+     not a saturated neon one. */
+  --card-glow: #22d3ee;
+  --shadow-glow: 0 12px 28px -6px rgba(34, 211, 238, 0.28), 0 4px 10px -4px rgba(34, 211, 238, 0.16);
 
   /* Transitions */
   --transition-fast: 120ms ease-out;

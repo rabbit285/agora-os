@@ -82,10 +82,10 @@ export function ModuleOverview() {
               <div className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-[var(--brand-primary-subtle)]">
                 <module.icon className="h-4 w-4 text-[var(--brand-primary)]" aria-hidden="true" />
               </div>
-              <h3 className="text-sm font-semibold text-[var(--fg-default)] transition-colors duration-[var(--transition-card)] ease-[var(--ease-card)] group-hover:text-[var(--brand-primary)]">
+              <h3 className="text-sm font-semibold text-[var(--fg-default)] transition-colors duration-[var(--transition-card)] ease-[var(--ease-card)] group-hover:text-[var(--card-glow)]">
                 {module.name}
               </h3>
-              <CardActionArrow className="ml-auto text-[var(--fg-subtle)] group-hover:text-[var(--brand-primary)]" />
+              <CardActionArrow className="ml-auto text-[var(--fg-subtle)] group-hover:text-[var(--card-glow)]" />
             </div>
             <p className="mt-3 text-sm leading-relaxed text-[var(--fg-muted)]">
               {module.description}

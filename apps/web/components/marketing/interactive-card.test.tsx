@@ -49,19 +49,19 @@ describe("InteractiveCard", () => {
       </InteractiveCard>,
     );
     const link = screen.getByRole("link", { name: "Featured plan" });
-    expect(link.className).toContain("border-[var(--brand-primary)]");
+    expect(link.className).toContain("border-[var(--card-glow)]");
     expect(link.className).toContain("shadow-[var(--shadow-token-glow)]");
   });
 
   it("uses the default (unselected) border/shadow when not selected, not the persistent selected treatment", () => {
     render(<InteractiveCard href="/pricing">Regular plan</InteractiveCard>);
     const link = screen.getByRole("link", { name: "Regular plan" });
-    // hover:/focus-visible: variants of the brand-primary border are
-    // expected (that's the hover feedback) — only the *unconditional*
-    // border-[var(--brand-primary)] (the selected/persistent state) is
+    // hover:/focus-visible: variants of the card-glow border are expected
+    // (that's the hover feedback) — only the *unconditional*
+    // border-[var(--card-glow)] (the selected/persistent state) is
     // asserted absent here.
     expect(link.className).toContain("border-[var(--border-default)]");
-    expect(link.className.split(" ")).not.toContain("border-[var(--brand-primary)]");
+    expect(link.className.split(" ")).not.toContain("border-[var(--card-glow)]");
   });
 
   it("renders a disabled card as inert, with no href/onClick behavior", () => {
