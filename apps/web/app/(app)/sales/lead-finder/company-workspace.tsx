@@ -22,6 +22,7 @@ import {
   FilterSidebarShell,
 } from "./filter-sidebar";
 import { CompanyResultsTable } from "./results-table";
+import { describeProviderSearchError } from "./provider-error";
 import { BulkToolbar } from "./bulk-toolbar";
 import { ListPickerDialog } from "./list-picker-dialog";
 import { EnrichConfirmDialog } from "./enrich-confirm-dialog";
@@ -281,7 +282,7 @@ export function CompanyWorkspace() {
             <CompanyResultsTable
               companies={searchResult.data?.companies}
               isLoading={searchResult.isLoading}
-              error={searchResult.error}
+              error={describeProviderSearchError(searchResult.error, "Company Search") ?? searchResult.error}
               onRetry={() => searchResult.refetch()}
               density={density}
               selected={selected}

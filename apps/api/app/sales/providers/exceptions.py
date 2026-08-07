@@ -24,7 +24,22 @@ class ProviderRateLimited(SalesProviderError):
 class ProviderAuthError(SalesProviderError):
     """Credentials are configured but were rejected — must never look
     identical to "never configured" (an authored, once-working key that's
-    since been revoked is a `Failed` state, not `Not configured`)."""
+    since been revoked is a `Failed` state, not `Not configured`).
+
+    Carries the provider's real status code (401 vs. 403) so callers can
+    distinguish "bad credential" from "credential valid but lacks access
+    to this capability/plan" rather than collapsing both into one message.
+    """
+
+    def __init__(self, detail: str, status_code: int = 401) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+
+
+class ProviderInvalidRequest(SalesProviderError):
+    """The provider rejected the request itself as malformed/unsupported
+    (HTTP 422) — a filter or field this adapter's normalization sent that
+    the provider's API doesn't accept, not a credential problem."""
 
 
 class ProviderUnavailable(SalesProviderError):

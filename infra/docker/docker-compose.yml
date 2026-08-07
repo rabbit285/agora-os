@@ -25,6 +25,7 @@ x-api-env: &api-env
   AI_PROVIDER: ${AI_PROVIDER:-demo}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  APOLLO_API_KEY: ${APOLLO_API_KEY:-}
 
 services:
   postgres:

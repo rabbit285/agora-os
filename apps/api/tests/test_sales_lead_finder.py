@@ -11,8 +11,10 @@ from app.core.rbac import get_system_role
 from app.core.storage import upload_object
 from app.identity.models import User
 from app.identity.service import create_session
+from app.sales import lead_finder_service
 from app.sales.models import Account, Contact
 from app.sales.provider_models import SalesProviderRecord
+from app.sales.providers.exceptions import ProviderAuthError, ProviderInvalidRequest, ProviderRateLimited
 from app.security import hash_password
 
 
@@ -298,6 +300,77 @@ async def test_lead_finder_view_requires_permission(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 10}
     )
     assert response.status_code == 403
+
+
+async def test_company_search_maps_apollo_auth_error_to_clean_403(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """Regression: an unhandled ProviderAuthError previously propagated
+    past CORSMiddleware as a raw 500 (browsers report that as a CORS
+    failure and the frontend sees a generic "Failed to fetch") instead of
+    the honest, sanitized 403 app.main's SalesProviderError handler now
+    returns — see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §3."""
+    await _signup(client, "provider-403@example.com", "Provider 403 Org")
+
+    class _FailingProvider:
+        provider_key = "apollo"
+
+        async def search_companies(self, request):  # noqa: ANN001
+            raise ProviderAuthError("Apollo rejected the configured API key (HTTP 403)", status_code=403)
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _FailingProvider())
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}
+    )
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"]["message"] == "Your Apollo account or API key does not have access to this feature."
+    # Never echoes the raw provider error code/response back to the client.
+    assert "API_INACCESSIBLE" not in response.text
+
+
+async def test_people_search_maps_apollo_rate_limit_to_clean_429(
+    client: AsyncClient, monkeypatch
+) -> None:
+    await _signup(client, "provider-429@example.com", "Provider 429 Org")
+
+    class _RateLimitedProvider:
+        provider_key = "apollo"
+
+        async def search_people(self, request):  # noqa: ANN001
+            raise ProviderRateLimited("Apollo rate limit exceeded", retry_after_seconds=30)
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _RateLimitedProvider())
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/people/search", json={"filters": {}, "page": 1, "page_size": 1}
+    )
+    assert response.status_code == 429
+    assert response.json()["error"]["message"] == "Apollo rate limit reached. Please try again later."
+    assert response.headers.get("Retry-After") == "30"
+
+
+async def test_company_search_maps_apollo_invalid_request_to_clean_422(
+    client: AsyncClient, monkeypatch
+) -> None:
+    await _signup(client, "provider-422@example.com", "Provider 422 Org")
+
+    class _InvalidRequestProvider:
+        provider_key = "apollo"
+
+        async def search_companies(self, request):  # noqa: ANN001
+            raise ProviderInvalidRequest("Apollo rejected the request as invalid (HTTP 422)")
+
+    monkeypatch.setattr(
+        lead_finder_service, "get_provider", lambda provider_key="apollo": _InvalidRequestProvider()
+    )
+
+    response = await client.post(
+        "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "One or more search filters are not supported by Apollo."
 
 
 async def test_enrich_estimate_reports_zero_for_demo(client: AsyncClient) -> None:
