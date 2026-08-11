@@ -69,7 +69,7 @@ export function HeroSection() {
           />
           <div className="relative">
             <Image
-              src="/images/hero-workspace.jpg"
+              src="/images/hero-workspace.png"
               alt="Teams across compliance, security, sales, and customer support working from shared dashboards"
               width={1536}
               height={1024}
@@ -77,7 +77,10 @@ export function HeroSection() {
               // candidate — eager rather than lazy.
               priority
               sizes="(max-width: 1024px) 100vw, 46vw"
-              className="h-auto w-full rounded-[var(--radius-lg)]"
+              // No corner radius and no frame: roughly half the artwork is
+              // transparent, so it blends into the hero on its own and a
+              // rounded edge would have nothing to round.
+              className="h-auto w-full"
             />
           </div>
         </div>
