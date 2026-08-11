@@ -135,6 +135,13 @@
   --sidebar-width: 15.5rem;
   --sidebar-width-collapsed: 3.5rem;
   --header-height: 3.75rem;
+  /* The public marketing header. Taller than the app's dense chrome, and
+     deliberately a single value: it used to shrink on scroll, which moved
+     every following element by that difference the moment the page was
+     touched. A sticky header that changes size fights the content behind
+     it — the scroll state is expressed with a shadow instead, which costs
+     no layout. */
+  --header-height-marketing: 4.5rem;
   --content-max-width: 88rem;
 
   /* Radius — documented in docs/DESIGN_SYSTEM.md but never actually defined
