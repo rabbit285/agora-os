@@ -1,7 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ShieldCheck, Sparkles } from "lucide-react";
 
-import { HeroVisual } from "@/components/marketing/hero-visual";
 import { Button } from "@/components/ui/button";
 
 /** The brand's own composition, used as the page's opening statement: two
@@ -23,11 +23,7 @@ export function HeroSection() {
         className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-60"
       />
 
-      {/* The visual gets the larger share and a negative right margin so it
-          runs to the viewport edge: its own left-hand fade is what joins it
-          to the copy, and boxing it inside the content gutter would put a
-          hard stop where that fade is meant to continue. */}
-      <div className="relative mx-auto grid max-w-[var(--content-max-width)] items-center gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.2fr] lg:gap-6 lg:py-28 lg:pl-8 lg:pr-0">
+      <div className="relative mx-auto grid max-w-[var(--content-max-width)] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:py-28 lg:px-8">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-[var(--brand-spark)]" aria-hidden="true" />
@@ -64,7 +60,27 @@ export function HeroSection() {
           </p>
         </div>
 
-        <HeroVisual />
+        <div className="relative">
+          {/* A soft echo of the mark behind the product shot, so the preview
+              sits in the same light the headline does. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-8 rounded-[2rem] bg-[radial-gradient(60%_60%_at_50%_40%,var(--aurora-blue),transparent_70%)] blur-2xl"
+          />
+          <div className="relative">
+            <Image
+              src="/images/hero-workspace.jpg"
+              alt="Teams across compliance, security, sales, and customer support working from shared dashboards"
+              width={1536}
+              height={1024}
+              // Largest element above the fold, so it is the likely LCP
+              // candidate — eager rather than lazy.
+              priority
+              sizes="(max-width: 1024px) 100vw, 46vw"
+              className="h-auto w-full rounded-[var(--radius-lg)]"
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
