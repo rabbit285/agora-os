@@ -12,11 +12,23 @@ export function SectionHeader({ eyebrow, title, description, align = "center", c
   return (
     <div className={cn("max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {eyebrow && (
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-primary)]">
+        <p
+          className={cn(
+            "flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--fg-muted)]",
+            align === "center" && "justify-center",
+          )}
+        >
+          {/* A two-tone tick standing in for the mark's two arcs — enough
+              brand presence to tie every section back to the logo without
+              repeating the full mark down the page. */}
+          <span
+            aria-hidden="true"
+            className="h-3 w-1 rounded-full bg-[image:var(--gradient-arc-teal)]"
+          />
           {eyebrow}
         </p>
       )}
-      <h2 className="mt-2 text-[var(--text-3xl)] font-semibold tracking-tight text-[var(--fg-default)]">
+      <h2 className="mt-2 text-[length:var(--text-3xl)] font-semibold tracking-tight text-[var(--fg-default)]">
         {title}
       </h2>
       {description && (

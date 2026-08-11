@@ -39,11 +39,21 @@ export function MetricCard({
   const body = (
     <Card
       className={cn(
-        "transition-colors duration-[var(--transition-fast)]",
-        href && "hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)]",
+        "group relative overflow-hidden transition-[border-color,background-color,box-shadow] duration-[var(--transition-base)]",
+        href &&
+          "hover:border-[var(--card-glow)] hover:bg-[var(--bg-surface-hover)] hover:shadow-[var(--shadow-glow)]",
         className,
       )}
     >
+      {/* Brand sweep along the top edge, revealed on hover for cards that
+          navigate. Only linked cards get it — a static metric shouldn't
+          advertise an interaction it doesn't have. */}
+      {href && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-0.5 bg-[image:var(--gradient-brand)] opacity-0 transition-opacity duration-[var(--transition-base)] group-hover:opacity-100 motion-reduce:transition-none"
+        />
+      )}
       <CardContent className="pt-5">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
@@ -52,7 +62,12 @@ export function MetricCard({
               {label}
             </span>
           </div>
-          {Icon && <Icon className="h-4 w-4 text-[var(--fg-subtle)]" aria-hidden="true" />}
+          {Icon && (
+            <Icon
+              className="h-4 w-4 text-[var(--fg-subtle)] transition-colors duration-[var(--transition-base)] group-hover:text-[var(--brand-cyan)]"
+              aria-hidden="true"
+            />
+          )}
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-semibold text-[var(--fg-default)]">{value}</span>
