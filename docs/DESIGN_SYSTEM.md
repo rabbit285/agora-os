@@ -52,6 +52,23 @@ becomes illegible through the middle. Use `--gradient-brand-text` (or the
 ≥7.9:1 in dark. `components/logo.test.tsx` pins both gradients so the two
 cannot be swapped by accident.
 
+### Dark navigation chrome
+
+The marketing header, the app sidebar, and the app top bar are dark in
+**both** themes (`--nav-*` tokens). Two reasons: the mark's arcs read as
+light against a dark ground, and a persistently dark chrome frames the
+working canvas the way enterprise consoles do instead of chrome and content
+melting into one white sheet.
+
+These are fixed values, not theme-swapped surface tokens — reaching for
+`--bg-surface` inside the chrome would turn it white in light mode and
+defeat the point. Contrast against `--nav-bg`: `--nav-fg` 15.8:1,
+`--nav-fg-muted` 6.1:1.
+
+Components rendered inside the chrome need chrome-specific colors, not the
+content-surface defaults: `<Logo tone="nav">` for the wordmark, and an
+explicit `bg`/`text`/`placeholder` on the shared `Input` and `Button`.
+
 ### Helpers
 
 - `.brand-gradient-text` — gradient headline text, with a solid-color
@@ -156,6 +173,13 @@ identifiable at a glance, distinct from the primary brand color used for ordinar
 Geist Sans (already loaded via `next/font/google`, previously overridden by a stray
 `font-family: Arial` in `globals.css` — fixed as part of this modernization). Geist Mono
 for anything tabular/technical (audit event payloads, API keys, correlation IDs).
+
+The scale sits one step above Tailwind's defaults (`text-sm` = 15px, not
+14px; `text-xs` = 13px, not 12px), overridden in `@theme`. The app was
+originally drawn at a 12/13/14px operational density that reads as cramped
+on a large display and is tiring over a long session. Set via the type
+tokens rather than by scaling the root font size, so `rem`-based spacing
+everywhere else stays exactly where it was.
 
 > **Applying a size token in Tailwind needs the `length:` hint.**
 > `text-[var(--text-display-1)]` is ambiguous — Tailwind resolves it as a

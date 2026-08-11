@@ -39,19 +39,19 @@ export function AppSidebar() {
       <nav
         aria-label="Primary"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)] transition-transform duration-[var(--transition-base)] md:static md:z-auto md:translate-x-0 md:transition-[width]",
+          "fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-transform duration-[var(--transition-base)] md:static md:z-auto md:translate-x-0 md:transition-[width]",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "w-[var(--sidebar-width)]",
           collapsed ? "md:w-[var(--sidebar-width-collapsed)]" : "md:w-[var(--sidebar-width)]",
         )}
       >
-        <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--border-default)] px-3">
-          <Logo size="sm" markOnly={collapsed} href="/dashboard" />
+        <div className="flex h-[var(--header-height)] shrink-0 items-center justify-between border-b border-[var(--nav-border)] px-3">
+          <Logo size="sm" tone="nav" markOnly={collapsed} href="/dashboard" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:hidden"
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -59,7 +59,7 @@ export function AppSidebar() {
             type="button"
             onClick={() => setCollapsed((v) => !v)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="ml-auto hidden h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:flex"
+            className="ml-auto hidden h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:flex"
           >
             {collapsed ? (
               <ChevronsRight className="h-4 w-4" aria-hidden="true" />
@@ -76,7 +76,7 @@ export function AppSidebar() {
           return (
             <div key={group.label} className="flex flex-col gap-0.5">
               {!collapsed && (
-                <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--fg-subtle)]">
+                <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--nav-fg-muted)]/70">
                   {group.label}
                 </div>
               )}
@@ -101,8 +101,8 @@ export function AppSidebar() {
                         className={cn(
                           "flex flex-1 items-center gap-2.5 rounded-[var(--radius-md)] px-2 py-1.5 text-sm transition-colors duration-[var(--transition-fast)]",
                           active
-                            ? "bg-[var(--brand-primary-subtle)] font-medium text-[var(--brand-primary)]"
-                            : "text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)]",
+                            ? "bg-[var(--nav-active)] font-medium text-[var(--nav-fg)]"
+                            : "text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]",
                           !item.implemented && "opacity-60",
                         )}
                       >
@@ -111,7 +111,7 @@ export function AppSidebar() {
                           <span className="truncate">
                             {item.label}
                             {!item.implemented && (
-                              <span className="ml-2 text-[10px] uppercase text-[var(--fg-subtle)]">
+                              <span className="ml-2 text-[10px] uppercase text-[var(--nav-fg-muted)]/70">
                                 soon
                               </span>
                             )}
@@ -126,7 +126,7 @@ export function AppSidebar() {
                           }
                           aria-label={groupOpen ? `Collapse ${item.label}` : `Expand ${item.label}`}
                           aria-expanded={groupOpen}
-                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-subtle)] hover:bg-[var(--bg-surface-hover)]"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)]"
                         >
                           <ChevronDown
                             className={cn(
@@ -139,7 +139,7 @@ export function AppSidebar() {
                       )}
                     </div>
                     {!collapsed && hasChildren && groupOpen && (
-                      <div className="ml-6 mt-0.5 flex flex-col gap-0.5 border-l border-[var(--border-default)] pl-2.5">
+                      <div className="ml-6 mt-0.5 flex flex-col gap-0.5 border-l border-[var(--nav-border)] pl-2.5">
                         {item.children!.map((child) => {
                           const childActive = pathname === child.href;
                           return (
@@ -151,7 +151,7 @@ export function AppSidebar() {
                                 "truncate rounded-[var(--radius-sm)] px-2 py-1 text-[13px] transition-colors duration-[var(--transition-fast)]",
                                 childActive
                                   ? "font-medium text-[var(--brand-primary)]"
-                                  : "text-[var(--fg-muted)] hover:text-[var(--fg-default)]",
+                                  : "text-[var(--nav-fg-muted)] hover:text-[var(--nav-fg)]",
                               )}
                             >
                               {child.label}

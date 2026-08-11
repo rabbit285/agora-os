@@ -38,7 +38,7 @@ function NavIconLink({
     <Link
       href={href}
       aria-label={count ? `${label} (${count} unread)` : label}
-      className="relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--fg-muted)] transition-colors duration-[var(--transition-fast)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)]"
+      className="relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] transition-colors duration-[var(--transition-fast)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
       {count !== undefined && count > 0 && (
@@ -92,12 +92,12 @@ export function TopNavigation() {
     .toUpperCase();
 
   return (
-    <header className="flex h-[var(--header-height)] shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-4">
+    <header className="flex h-[var(--header-height)] shrink-0 items-center justify-between gap-4 border-b border-[var(--nav-border)] bg-[var(--nav-bg)] px-4">
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Open menu"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)] md:hidden"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
       >
         <Menu className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -108,7 +108,7 @@ export function TopNavigation() {
         <GlobalCreateButton />
         <div className="relative hidden w-56 lg:block">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--fg-subtle)]"
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--nav-fg-muted)]"
             aria-hidden="true"
           />
           <Input
@@ -116,7 +116,9 @@ export function TopNavigation() {
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             onKeyDown={handleSearchKeyDown}
-            className="pl-8"
+            // The shared Input is built for light content surfaces; inside
+            // the dark bar it needs its own ground and text color.
+            className="border-[var(--nav-border)] bg-[var(--nav-bg-elevated)] pl-8 text-[var(--nav-fg)] placeholder:text-[var(--nav-fg-muted)]"
           />
         </div>
         <NavIconLink href="/approvals" label="Approvals" icon={ClipboardCheck} count={pendingApprovalsCount} />
@@ -127,7 +129,7 @@ export function TopNavigation() {
             <button
               type="button"
               aria-label="User menu"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-primary-subtle)] text-xs font-semibold text-[var(--brand-primary)] transition-opacity duration-[var(--transition-fast)] hover:opacity-80"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--nav-active)] text-xs font-semibold text-[var(--nav-fg)] transition-opacity duration-[var(--transition-fast)] hover:opacity-80"
             >
               {initials}
             </button>
@@ -137,7 +139,7 @@ export function TopNavigation() {
               <div className="flex flex-col">
                 <span className="text-[var(--fg-default)]">{user?.full_name ?? user?.email}</span>
                 {organization && (
-                  <span className="font-normal text-[var(--fg-subtle)]">{organization.name}</span>
+                  <span className="font-normal text-[var(--nav-fg-muted)]">{organization.name}</span>
                 )}
               </div>
             </DropdownMenuLabel>
