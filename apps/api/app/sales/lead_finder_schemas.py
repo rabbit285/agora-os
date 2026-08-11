@@ -270,7 +270,18 @@ class ProviderStatusOut(BaseModel):
     provider_key: str
     status: str
     capabilities: ProviderCapabilitiesOut
+    # True only when *this organization* has an active connection of its
+    # own — never because the deployment holds a shared credential.
     configured: bool
+    # Customer-connection detail (Apollo). Never includes token material.
+    connection_id: uuid.UUID | None = None
+    connected_user_email: str | None = None
+    connected_workspace_name: str | None = None
+    granted_scopes: list[str] = Field(default_factory=list)
+    # Lets the UI show "Connect Apollo" to authorized users and "contact
+    # your administrator" to everyone else, without the frontend having to
+    # re-derive RBAC itself.
+    can_manage_connection: bool = False
 
 
 class CreditUsageSummaryOut(BaseModel):
@@ -280,6 +291,7 @@ class CreditUsageSummaryOut(BaseModel):
     estimated_credits: int
     actual_credits: int | None
     requested_by_user_id: uuid.UUID | None
+    connection_id: uuid.UUID | None = None
     succeeded: bool
     created_at: datetime
 
@@ -354,6 +366,10 @@ class CreditEstimatePreviewOut(BaseModel):
     operation: str
     estimated_credits: int
     record_count: int
+    # The customer's own Apollo workspace/user that will be charged. None
+    # in demo mode — the UI must not imply a real workspace is billed then.
+    connected_workspace_name: str | None = None
+    connected_user_email: str | None = None
 
 
 class ImportPreviewIn(BaseModel):

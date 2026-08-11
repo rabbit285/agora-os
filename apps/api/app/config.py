@@ -98,12 +98,34 @@ class Settings(BaseSettings):
     clearbit_api_key: str | None = Field(default=None, alias="CLEARBIT_API_KEY")
 
     # Sales Lead Finder's external company/people discovery provider (see
-    # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md) — optional, same honesty
-    # shape as every other key here: absent, the SalesDataProvider registry
-    # falls back to the deterministic demo adapter (identical to how
-    # ANTHROPIC_API_KEY/OPENAI_API_KEY absence falls back to the AI
-    # Gateway's DemoAdapter) rather than crashing or faking live results.
+    # docs/SALES_DATA_PROVIDER_ARCHITECTURE.md and
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).
+    #
+    # Production uses per-customer OAuth connections, never this key: each
+    # organization connects its own Apollo workspace and Agora Origin calls
+    # Apollo with that customer's Bearer token, permissions, limits, and
+    # credits. `APOLLO_API_KEY` survives only for the isolated
+    # `APOLLO_AUTH_MODE=api_key` local-development/test mode below, and
+    # `_diagnose` refuses to start a production process that enables it.
     apollo_api_key: str | None = Field(default=None, alias="APOLLO_API_KEY")
+    # "oauth" (default, and the only value permitted in production) |
+    # "api_key" (development/test only — a single shared credential must
+    # never serve multi-tenant production traffic).
+    apollo_auth_mode: str = Field(default="oauth", alias="APOLLO_AUTH_MODE")
+    apollo_oauth_client_id: str | None = Field(default=None, alias="APOLLO_OAUTH_CLIENT_ID")
+    apollo_oauth_client_secret: str | None = Field(default=None, alias="APOLLO_OAUTH_CLIENT_SECRET")
+    apollo_oauth_redirect_uri: str | None = Field(default=None, alias="APOLLO_OAUTH_REDIRECT_URI")
+    # Non-secret provider endpoints, centralized so a future Apollo change
+    # is a config edit rather than a code change.
+    apollo_oauth_authorize_url: str = Field(
+        default="https://app.apollo.io/#/oauth/authorize", alias="APOLLO_OAUTH_AUTHORIZE_URL"
+    )
+    apollo_oauth_token_url: str = Field(
+        default="https://app.apollo.io/api/v1/oauth/token", alias="APOLLO_OAUTH_TOKEN_URL"
+    )
+    apollo_api_base_url: str = Field(
+        default="https://api.apollo.io/api/v1", alias="APOLLO_API_BASE_URL"
+    )
 
     # Billing — optional
     stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
@@ -182,7 +204,7 @@ def _diagnose(settings: Settings) -> None:
         "INTERCOM_CLIENT_ID": settings.intercom_client_id,
         "AWS_SECURITY_SCAN_ACCESS_KEY_ID": settings.aws_security_scan_access_key_id,
         "CLEARBIT_API_KEY": settings.clearbit_api_key,
-        "APOLLO_API_KEY": settings.apollo_api_key,
+        "APOLLO_OAUTH_CLIENT_ID": settings.apollo_oauth_client_id,
     }
     missing = [name for name, value in optional_flags.items() if not value]
     if missing:
@@ -192,6 +214,24 @@ def _diagnose(settings: Settings) -> None:
         )
     if settings.is_production and settings.secret_key == "dev-insecure-secret-change-me":
         logger.error("SECRET_KEY is unset in a production environment. Refusing to start.")
+        sys.exit(1)
+    # A single shared Apollo key must never supply data to multiple
+    # customers (docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §7): in
+    # production every organization uses its own OAuth connection, spending
+    # its own Apollo credits under its own permissions.
+    if settings.is_production and settings.apollo_auth_mode != "oauth":
+        logger.error(
+            "APOLLO_AUTH_MODE=%s is not permitted in production — customer-connected "
+            "OAuth is required so each organization uses its own Apollo account. "
+            "Refusing to start.",
+            settings.apollo_auth_mode,
+        )
+        sys.exit(1)
+    if settings.apollo_auth_mode not in ("oauth", "api_key"):
+        logger.error(
+            "APOLLO_AUTH_MODE must be 'oauth' or 'api_key' (got '%s'). Refusing to start.",
+            settings.apollo_auth_mode,
+        )
         sys.exit(1)
 
 

@@ -35,7 +35,8 @@ export function EnrichConfirmDialog({
         <DialogHeader>
           <DialogTitle>Confirm enrichment</DialogTitle>
           <DialogDescription>
-            This will spend provider credits to fill in missing fields on the saved records.
+            This will spend your organization&rsquo;s own Apollo credits to fill in missing fields
+            on the saved records.
           </DialogDescription>
         </DialogHeader>
         {isEstimating ? (
@@ -47,13 +48,20 @@ export function EnrichConfirmDialog({
               {estimate.estimated_credits === 1 ? "" : "s"} for {estimate.record_count} record
               {estimate.record_count === 1 ? "" : "s"} via {estimate.provider}.
             </p>
+            {estimate.connected_workspace_name || estimate.connected_user_email ? (
+              <p className="mt-1 text-xs text-[var(--fg-muted)]">
+                Charged to your connected Apollo workspace
+                {estimate.connected_workspace_name ? ` (${estimate.connected_workspace_name})` : ""}
+                {estimate.connected_user_email ? ` · ${estimate.connected_user_email}` : ""}.
+              </p>
+            ) : null}
             <p className="mt-1 text-xs text-[var(--fg-muted)]">
-              This is an estimate — the actual amount charged may differ and is recorded after the
-              job completes.
+              This is an estimate — Apollo determines the final cost from the data actually
+              returned, and the real amount is recorded after the job completes.
             </p>
           </div>
         ) : (
-          <p className="text-sm text-[var(--fg-muted)]">Unable to load a credit estimate.</p>
+          <p className="text-sm text-[var(--fg-muted)]">Estimate unavailable.</p>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

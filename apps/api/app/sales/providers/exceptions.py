@@ -42,6 +42,18 @@ class ProviderInvalidRequest(SalesProviderError):
     the provider's API doesn't accept, not a credential problem."""
 
 
+class ProviderScopeMissing(SalesProviderError):
+    """The customer's connection is valid but was never granted the scope
+    this capability needs. Raised *before* the call is attempted so a
+    missing permission never costs the customer credits, and names the
+    scope so the UI can say which capability is unavailable and offer
+    reconnection (see docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §4)."""
+
+    def __init__(self, detail: str, *, required_scope: str) -> None:
+        super().__init__(detail)
+        self.required_scope = required_scope
+
+
 class ProviderUnavailable(SalesProviderError):
     """Transient failure: 5xx, timeout, or connection error."""
 

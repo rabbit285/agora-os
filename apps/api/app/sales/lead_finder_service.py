@@ -58,6 +58,7 @@ def _person_from_dict(payload: dict[str, Any]) -> NormalizedPerson:
 
 
 async def search_companies(
+    db: AsyncSession,
     *,
     organization_id: uuid.UUID,
     filters: CompanyFilters,
@@ -67,7 +68,7 @@ async def search_companies(
     provider_key: str = "apollo",
     refresh: bool = False,
 ) -> CompanySearchResponse:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     cache_key = cache.build_cache_key(
         organization_id=organization_id,
         provider=provider.provider_key,
@@ -108,6 +109,7 @@ async def search_companies(
 
 
 async def search_people(
+    db: AsyncSession,
     *,
     organization_id: uuid.UUID,
     filters: PersonFilters,
@@ -117,7 +119,7 @@ async def search_people(
     provider_key: str = "apollo",
     refresh: bool = False,
 ) -> PersonSearchResponse:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     cache_key = cache.build_cache_key(
         organization_id=organization_id,
         provider=provider.provider_key,
@@ -158,9 +160,9 @@ async def search_people(
 
 
 async def find_decision_makers(
-    *, organization_id: uuid.UUID, company_domain: str, provider_key: str = "apollo"
+    db: AsyncSession, *, organization_id: uuid.UUID, company_domain: str, provider_key: str = "apollo"
 ) -> PersonSearchResponse:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     request = DecisionMakerRequest(organization_id=organization_id, company_domain=company_domain)
     return await provider.find_decision_makers(request)
 

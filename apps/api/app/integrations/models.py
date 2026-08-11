@@ -76,6 +76,37 @@ class IntegrationConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # --- Customer-connected provider fields (Apollo; see
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §2) ---
+    # Populated only from what the provider's own profile endpoint returns —
+    # never inferred. A provider that doesn't expose a workspace/team
+    # identity leaves those columns NULL rather than guessing one.
+    provider_user_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    provider_workspace_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    provider_workspace_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    token_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Machine-readable and safe by construction (e.g. "invalid_grant",
+    # "missing_scope", "rate_limited") — `last_error` above carries the
+    # human-readable sanitized message. Neither ever holds a raw provider
+    # body or any credential material.
+    last_error_code: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    reauthorization_required_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    disconnected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optimistic-concurrency guard for token refresh: a refresh's UPDATE is
+    # conditioned on the version it read, so two concurrent refreshes for
+    # one connection can't both write a token (the loser re-reads the
+    # winner's). Portable across SQLite and Postgres, unlike SELECT FOR
+    # UPDATE — see docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §10.
+    version: Mapped[int] = mapped_column(default=0, nullable=False)
+
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(

@@ -77,6 +77,8 @@ PERMISSIONS: dict[str, str] = {
     "automation.workflows.manage": "Create, edit, and publish automation workflows",
     "automation.runs.manage": "Trigger and resume workflow runs",
     "integrations.connections.manage": "Create, edit, and link integration connections",
+    "integrations.apollo.view": "View this organization's Apollo connection status and permissions",
+    "integrations.apollo.manage": "Connect, reconnect, and disconnect this organization's Apollo workspace",
     "knowledge.documents.manage": "Upload documents and manage knowledge bases",
     "ai.copilot.ask": "Ask the AI Copilot questions grounded in organizational knowledge",
     "reports.generate": "Generate and download reports",
@@ -156,6 +158,20 @@ AUTOMATION_PERMISSIONS = [
 
 INTEGRATIONS_PERMISSIONS = [
     "integrations.connections.manage",
+]
+
+# Apollo is a *Sales-owned* data connection, unlike the generic connectors
+# above (which are Ops/Automation-owned): connecting it spends the
+# customer's own Apollo credits through Lead Finder, so it follows the
+# Sales manager/representative split rather than the Ops grant. Viewing the
+# connection's status is granted to the whole Sales team so a rep sees
+# honestly why live search is or isn't available; only managers (and
+# org_admin, who holds everything) can connect or disconnect it.
+APOLLO_CONNECTION_VIEW_PERMISSIONS = [
+    "integrations.apollo.view",
+]
+APOLLO_CONNECTION_MANAGE_PERMISSIONS = [
+    "integrations.apollo.manage",
 ]
 
 # Knowledge, the AI Copilot, Reporting, and Business Intelligence
@@ -243,10 +259,15 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
         SALES_PERMISSIONS
         + SALES_LEAD_FINDER_VIEW_PERMISSIONS
         + SALES_LEAD_FINDER_MANAGE_PERMISSIONS
+        + APOLLO_CONNECTION_VIEW_PERMISSIONS
+        + APOLLO_CONNECTION_MANAGE_PERMISSIONS
         + _CROSS_CUTTING_PERMISSIONS
     ),
     "sales_representative": (
-        SALES_PERMISSIONS + SALES_LEAD_FINDER_VIEW_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
+        SALES_PERMISSIONS
+        + SALES_LEAD_FINDER_VIEW_PERMISSIONS
+        + APOLLO_CONNECTION_VIEW_PERMISSIONS
+        + _CROSS_CUTTING_PERMISSIONS
     ),
     "support_manager": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
     "support_agent": SUPPORT_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,

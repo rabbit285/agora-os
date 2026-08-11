@@ -363,6 +363,19 @@ function ProviderCatalogSection() {
                         </li>
                       ))}
                     </ul>
+                    {provider.connector_key === "apollo" && (
+                      <div className="mb-3 flex flex-col gap-1 text-xs text-[var(--fg-muted)]">
+                        <p>
+                          Agora Origin will use your organization&rsquo;s Apollo account,
+                          permissions, rate limits, and credits for company search and enrichment.
+                        </p>
+                        <p>
+                          Company search and enrichment consume your own Apollo credits. Imported
+                          records are visible to users in this organization with Lead Finder access
+                          and keep their Apollo provenance. You can disconnect at any time.
+                        </p>
+                      </div>
+                    )}
                     <Button
                       size="sm"
                       disabled={connect.isPending}

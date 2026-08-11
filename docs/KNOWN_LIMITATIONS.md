@@ -127,10 +127,31 @@ implied to work.
   Finder workspace (`/sales/lead-finder`, `app.sales.lead_finder_service`,
   `app.sales.providers.*` — see `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md`)
   is a real, provider-neutral external company/people discovery and
-  enrichment layer with Apollo as its adapter, honestly falling back to a
-  deterministic, clearly-labeled demo provider when `APOLLO_API_KEY` is
-  unset — the same credential-gated pattern as every other optional
-  provider in this build. Company Enrichment (`app.sales.enrichment`) is
+  enrichment layer with Apollo as its adapter. Apollo is
+  **customer-connected**: each organization authorizes its own Apollo
+  workspace via OAuth 2.0 and spends its own Apollo credits (see
+  `docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md`, ADR-0064). An
+  organization that hasn't connected gets a deterministic,
+  clearly-labeled demo provider rather than another tenant's data or a
+  shared platform key. Known limitations of that integration:
+  - **One active Apollo connection per organization.** Disconnected rows
+    are retained for provenance, so multi-workspace support later is an
+    index change plus a selection UI, not a destructive redesign.
+  - **No token revocation at Apollo.** Apollo publishes no revocation
+    endpoint, so disconnect clears Agora Origin's stored tokens but
+    cannot invalidate them at Apollo. This build does not invent a
+    revocation URL.
+  - **Apollo plan restrictions are the customer's own.** A connected
+    account on a plan that excludes an API (e.g. Company Search on
+    Apollo's trial tier) receives an honest 403 naming the limitation —
+    Agora Origin cannot and does not work around a customer's Apollo
+    plan.
+  - **Live verification is pending Apollo app approval.** Until Apollo
+    approves the registered OAuth application, the flow is exercised
+    against the mock adapter only, and nothing in the product claims
+    Apollo has approved the integration.
+
+  Company Enrichment (`app.sales.enrichment`) is
   a separate, narrower, pre-existing firmographic lookup, real when a
   `CLEARBIT_API_KEY` is configured, honestly `configured=false` otherwise;
   it is intentionally not merged into the newer provider-neutral layer

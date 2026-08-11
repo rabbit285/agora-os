@@ -68,6 +68,14 @@ class SalesProviderCreditUsage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
     provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    # The customer's own provider connection whose credits were spent (see
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §9). NULL for demo-mode
+    # usage and for rows written before the customer-OAuth migration —
+    # those are genuinely not attributable to any connection, and are left
+    # honestly unattributed rather than backfilled to a guess.
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("integration_connections.id"), nullable=True
+    )
     # search_companies | search_people | enrich_company | enrich_person | find_decision_makers
     operation: Mapped[str] = mapped_column(String(30), nullable=False)
     estimated_credits: Mapped[int] = mapped_column(nullable=False)

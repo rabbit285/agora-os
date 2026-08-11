@@ -84,6 +84,7 @@ from app.sales.provider_models import (
     SalesSavedSearch,
     SalesSuppressionEntry,
 )
+from app.sales.providers.credentials import get_active_apollo_connection
 from app.sales.providers.registry import (
     apollo_status,
     get_provider,
@@ -130,6 +131,7 @@ async def search_companies(
     context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
 ) -> CompanySearchOut:
     response = await lead_finder_service.search_companies(
+        db,
         organization_id=context.organization_id,
         filters=_to_domain_company_filters(payload.filters),
         page=payload.page,
@@ -161,6 +163,7 @@ async def search_people(
     context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
 ) -> PersonSearchOut:
     response = await lead_finder_service.search_people(
+        db,
         organization_id=context.organization_id,
         filters=_to_domain_person_filters(payload.filters),
         page=payload.page,
@@ -188,9 +191,11 @@ async def search_people(
 @router.post("/decision-makers", response_model=PersonSearchOut)
 async def find_decision_makers(
     payload: DecisionMakerIn,
+    db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
 ) -> PersonSearchOut:
     response = await lead_finder_service.find_decision_makers(
+        db,
         organization_id=context.organization_id,
         company_domain=payload.company_domain,
         provider_key=payload.provider,
@@ -219,24 +224,53 @@ async def parse_natural_language_query(
         company_filters=CompanyFiltersIn(**parsed.company_filters.model_dump()),
         person_filters=PersonFiltersIn(**parsed.person_filters.model_dump()),
         unsupported_criteria=parsed.unsupported_criteria,
-        provider="demo" if not is_apollo_configured() else "apollo",
+        provider=(
+            "apollo"
+            if await is_apollo_configured(db, organization_id=context.organization_id)
+            else "demo"
+        ),
     )
 
 
 @router.get("/providers", response_model=list[ProviderStatusOut])
 async def list_providers(
+    db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("sales.lead_finder.view")),
 ) -> list[ProviderStatusOut]:
+    """Per-organization provider status: "connected" means *this*
+    organization has authorized its own Apollo workspace, never that the
+    deployment holds a shared key (see
+    docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md)."""
     results = []
     for key in list_provider_keys():
-        provider = get_provider(key)
+        provider = await get_provider(db, organization_id=context.organization_id, provider_key=key)
         caps = provider.capabilities()
+        connection = (
+            await get_active_apollo_connection(db, organization_id=context.organization_id)
+            if key == "apollo"
+            else None
+        )
         results.append(
             ProviderStatusOut(
                 provider_key=key,
-                status=apollo_status().value if key == "apollo" else "not_configured",
+                status=(
+                    (await apollo_status(db, organization_id=context.organization_id)).value
+                    if key == "apollo"
+                    else "not_configured"
+                ),
                 capabilities=ProviderCapabilitiesOut(**caps.__dict__),
-                configured=is_apollo_configured() if key == "apollo" else False,
+                configured=(
+                    await is_apollo_configured(db, organization_id=context.organization_id)
+                    if key == "apollo"
+                    else False
+                ),
+                connection_id=connection.id if connection is not None else None,
+                connected_user_email=connection.provider_user_email if connection else None,
+                connected_workspace_name=(
+                    connection.provider_workspace_name if connection else None
+                ),
+                granted_scopes=list(connection.scopes or []) if connection else [],
+                can_manage_connection="integrations.apollo.manage" in context.permissions,
             )
         )
     return results
@@ -353,16 +387,31 @@ _SYNC_ENRICHMENT_MAX_RECORDS = 5
 @router.post("/enrich/estimate", response_model=CreditEstimatePreviewOut)
 async def estimate_enrichment(
     payload: EnrichIn,
+    db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("sales.lead_finder.enrich")),
 ) -> CreditEstimatePreviewOut:
     estimated = await enrichment_job_service.estimate_enrichment_credits(
-        provider_key=payload.provider, operation=payload.operation, record_count=len(payload.record_ids)
+        db,
+        organization_id=context.organization_id,
+        provider_key=payload.provider,
+        operation=payload.operation,
+        record_count=len(payload.record_ids),
     )
+    # Names the customer's own Apollo workspace that will be charged, so
+    # the confirmation dialog can never imply Agora Origin supplies the
+    # credits (docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §9).
+    connection = await get_active_apollo_connection(db, organization_id=context.organization_id)
     return CreditEstimatePreviewOut(
         provider=payload.provider,
         operation=payload.operation,
         estimated_credits=estimated,
         record_count=len(payload.record_ids),
+        connected_workspace_name=(
+            connection.provider_workspace_name if connection is not None else None
+        ),
+        connected_user_email=(
+            connection.provider_user_email if connection is not None else None
+        ),
     )
 
 
@@ -543,6 +592,7 @@ async def run_saved_search(
     saved_search = await _get_org_saved_search(db, saved_search_id, context.organization_id)
     if saved_search.search_type == "company":
         company_response = await lead_finder_service.search_companies(
+            db,
             organization_id=context.organization_id,
             filters=CompanyFilters(**saved_search.filters),
             provider_key=saved_search.provider,
@@ -567,6 +617,7 @@ async def run_saved_search(
         )
 
     person_response = await lead_finder_service.search_people(
+        db,
         organization_id=context.organization_id,
         filters=PersonFilters(**saved_search.filters),
         provider_key=saved_search.provider,

@@ -119,13 +119,24 @@ async def test_parse_query_returns_structured_filters_not_fabricated_records(cli
 
 
 async def test_providers_endpoint_reports_apollo_not_configured(client: AsyncClient) -> None:
+    """No Apollo OAuth application is configured in the test environment, so
+    no organization is even able to connect one — reported as
+    `not_configured` rather than the vaguer `demo` this returned when Apollo
+    was a single deployment-wide API key. `configured` stays False, which is
+    what the UI keys its demo-data banner off (see
+    docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §11)."""
     await _signup(client, "prov1@example.com", "Prov Org 1")
     response = await client.get("/api/v1/sales/lead-finder/providers")
     assert response.status_code == 200, response.text
     providers = response.json()
     apollo = next(p for p in providers if p["provider_key"] == "apollo")
     assert apollo["configured"] is False
-    assert apollo["status"] == "demo"
+    assert apollo["status"] == "not_configured"
+    # Never leaks another tenant's connection, and reports honestly that
+    # this organization has connected nothing.
+    assert apollo["connection_id"] is None
+    assert apollo["connected_user_email"] is None
+    assert apollo["granted_scopes"] == []
 
 
 async def test_save_company_creates_account_and_provenance_record(
@@ -318,7 +329,10 @@ async def test_company_search_maps_apollo_auth_error_to_clean_403(
         async def search_companies(self, request):  # noqa: ANN001
             raise ProviderAuthError("Apollo rejected the configured API key (HTTP 403)", status_code=403)
 
-    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _FailingProvider())
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _FailingProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}
@@ -341,7 +355,10 @@ async def test_people_search_maps_apollo_rate_limit_to_clean_429(
         async def search_people(self, request):  # noqa: ANN001
             raise ProviderRateLimited("Apollo rate limit exceeded", retry_after_seconds=30)
 
-    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _RateLimitedProvider())
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _RateLimitedProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/people/search", json={"filters": {}, "page": 1, "page_size": 1}
@@ -362,9 +379,10 @@ async def test_company_search_maps_apollo_invalid_request_to_clean_422(
         async def search_companies(self, request):  # noqa: ANN001
             raise ProviderInvalidRequest("Apollo rejected the request as invalid (HTTP 422)")
 
-    monkeypatch.setattr(
-        lead_finder_service, "get_provider", lambda provider_key="apollo": _InvalidRequestProvider()
-    )
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _InvalidRequestProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}

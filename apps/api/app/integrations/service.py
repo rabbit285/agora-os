@@ -44,7 +44,7 @@ import uuid
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
@@ -237,11 +237,32 @@ async def handle_oauth_callback(
     connection.oauth_state = None
     connection.oauth_state_created_at = None
     connection.status = "connected"
+    connection.connected_at = utcnow()
+    # A reconnect clears any prior terminal state so the connection doesn't
+    # keep presenting as "reauthorization required" after being re-authorized.
+    connection.reauthorization_required_at = None
+    connection.disconnected_at = None
+    connection.last_error = None
+    connection.last_error_code = None
 
     health = await adapter.test_connection(access_token=tokens.access_token)
     connection.health_status = "ok" if health.ok else "error"
     connection.last_health_check_at = utcnow()
     connection.external_account_id = health.external_account_id
+
+    # Providers that can identify the authorizing user expose
+    # `fetch_user_profile`; requests act as that user, so it's shown in the
+    # connection UI rather than left implicit (see
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §9). Only fields the
+    # provider actually returned are stored — never inferred.
+    profile_fetcher = getattr(adapter, "fetch_user_profile", None)
+    if profile_fetcher is not None:
+        profile = await profile_fetcher(access_token=tokens.access_token)
+        if profile.get("provider_user_id"):
+            connection.external_account_id = profile["provider_user_id"]
+        connection.provider_user_email = profile.get("provider_user_email")
+        connection.provider_workspace_id = profile.get("provider_workspace_id")
+        connection.provider_workspace_name = profile.get("provider_workspace_name")
 
     await record_event(
         db,
@@ -253,6 +274,7 @@ async def handle_oauth_callback(
         after_state={
             "connector_key": connection.connector_key,
             "external_account_id": connection.external_account_id,
+            "scopes": connection.scopes,
         },
     )
     return connection
@@ -276,6 +298,12 @@ async def ensure_fresh_access_token(db: AsyncSession, *, connection: Integration
     return decrypt_token(connection.encrypted_access_token)
 
 
+# OAuth error codes that mean the grant itself is dead — reconnection is
+# the only remedy, so refresh must not be retried (see
+# docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §10).
+_PERMANENT_REFRESH_FAILURE_CODES = frozenset({"invalid_grant", "invalid_request", "unauthorized_client"})
+
+
 async def refresh_connection_token(
     db: AsyncSession,
     *,
@@ -287,31 +315,71 @@ async def refresh_connection_token(
 
     adapter = get_oauth_adapter(connection.connector_key)
     refresh_token = decrypt_token(connection.encrypted_refresh_token)
+    # Optimistic-concurrency guard: two requests that both notice an
+    # expiring token would otherwise each run a refresh and each write a
+    # token, and whichever wrote first would have its (still valid) token
+    # replaced by a racing one. The UPDATE below is conditioned on the
+    # version read here, so exactly one writer wins and the loser adopts
+    # the winner's token instead of clobbering it.
+    observed_version = connection.version
+
     try:
         tokens = await adapter.refresh_access_token(refresh_token=refresh_token)
     except Exception as exc:  # noqa: BLE001 - normalized to ValueError + audited below
+        error_code = getattr(exc, "error_code", None)
         connection.last_error = str(exc)
+        connection.last_error_code = error_code
+        permanent = error_code in _PERMANENT_REFRESH_FAILURE_CODES
+        if permanent:
+            connection.status = "reauthorization_required"
+            connection.reauthorization_required_at = utcnow()
         await record_event(
             db,
             organization_id=connection.organization_id,
             actor_user_id=actor_user_id,
-            action="integrations.oauth.refresh_failed",
+            action=(
+                "integrations.oauth.reauthorization_required"
+                if permanent
+                else "integrations.oauth.refresh_failed"
+            ),
             object_type="integration_connection",
             object_id=str(connection.id),
             policy_decision="denied",
-            after_state={"error": str(exc)},
+            after_state={"error": str(exc), "error_code": error_code},
         )
         raise ValueError(f"Token refresh failed: {exc}") from exc
 
-    connection.encrypted_access_token = encrypt_token(tokens.access_token)
-    if tokens.refresh_token:
-        connection.encrypted_refresh_token = encrypt_token(tokens.refresh_token)
-    connection.token_expires_at = (
-        utcnow() + timedelta(seconds=tokens.expires_in_seconds)
-        if tokens.expires_in_seconds
-        else None
+    updated = await db.execute(
+        update(IntegrationConnection)
+        .where(
+            IntegrationConnection.id == connection.id,
+            IntegrationConnection.version == observed_version,
+        )
+        .values(
+            encrypted_access_token=encrypt_token(tokens.access_token),
+            encrypted_refresh_token=(
+                encrypt_token(tokens.refresh_token)
+                if tokens.refresh_token
+                else connection.encrypted_refresh_token
+            ),
+            token_expires_at=(
+                utcnow() + timedelta(seconds=tokens.expires_in_seconds)
+                if tokens.expires_in_seconds
+                else None
+            ),
+            refreshed_at=utcnow(),
+            last_error=None,
+            last_error_code=None,
+            version=observed_version + 1,
+        )
     )
-    connection.last_error = None
+    if updated.rowcount == 0:
+        # Another refresh for this same connection committed first. Its
+        # token is the live one — adopt it rather than overwriting.
+        await db.refresh(connection)
+        return connection
+
+    await db.refresh(connection)
     await record_event(
         db,
         organization_id=connection.organization_id,
@@ -371,6 +439,11 @@ async def disconnect_connection(
     connection.scopes = None
     connection.status = "disconnected"
     connection.health_status = None
+    connection.disconnected_at = utcnow()
+    # Historical provenance, credit-usage rows, and every saved Account/
+    # Contact this connection sourced are deliberately left intact —
+    # disconnecting a data provider must never delete customer records
+    # (docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §12).
     connection.last_error = (
         f"Revoke request failed (tokens cleared locally): {revoke_error}" if revoke_error else None
     )
