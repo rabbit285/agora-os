@@ -25,6 +25,7 @@ from app.sales.providers.exceptions import (
     ProviderInvalidRequest,
     ProviderNotConfigured,
     ProviderRateLimited,
+    ProviderScopeMissing,
     ProviderUnavailable,
     SalesProviderError,
 )
@@ -171,6 +172,17 @@ async def sales_provider_error_handler(request: Request, exc: SalesProviderError
             else "Apollo authentication failed. Check the connected credential."
         )
         return _error_envelope(request, exc.status_code, message)
+    if isinstance(exc, ProviderScopeMissing):
+        # The customer's connection is valid but was never granted this
+        # capability's scope. Names the capability honestly and points at
+        # reconnection rather than silently degrading or spending credits.
+        return _error_envelope(
+            request,
+            status.HTTP_403_FORBIDDEN,
+            "Your connected Apollo account did not grant this permission. "
+            "Reconnect Apollo to enable this capability.",
+            {"required_scope": exc.required_scope},
+        )
     if isinstance(exc, ProviderInvalidRequest):
         return _error_envelope(
             request,

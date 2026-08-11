@@ -329,7 +329,10 @@ async def test_company_search_maps_apollo_auth_error_to_clean_403(
         async def search_companies(self, request):  # noqa: ANN001
             raise ProviderAuthError("Apollo rejected the configured API key (HTTP 403)", status_code=403)
 
-    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _FailingProvider())
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _FailingProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}
@@ -352,7 +355,10 @@ async def test_people_search_maps_apollo_rate_limit_to_clean_429(
         async def search_people(self, request):  # noqa: ANN001
             raise ProviderRateLimited("Apollo rate limit exceeded", retry_after_seconds=30)
 
-    monkeypatch.setattr(lead_finder_service, "get_provider", lambda provider_key="apollo": _RateLimitedProvider())
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _RateLimitedProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/people/search", json={"filters": {}, "page": 1, "page_size": 1}
@@ -373,9 +379,10 @@ async def test_company_search_maps_apollo_invalid_request_to_clean_422(
         async def search_companies(self, request):  # noqa: ANN001
             raise ProviderInvalidRequest("Apollo rejected the request as invalid (HTTP 422)")
 
-    monkeypatch.setattr(
-        lead_finder_service, "get_provider", lambda provider_key="apollo": _InvalidRequestProvider()
-    )
+    async def _fake_get_provider(db, *, organization_id, provider_key="apollo"):  # noqa: ANN001
+        return _InvalidRequestProvider()
+
+    monkeypatch.setattr(lead_finder_service, "get_provider", _fake_get_provider)
 
     response = await client.post(
         "/api/v1/sales/lead-finder/companies/search", json={"filters": {}, "page": 1, "page_size": 1}
