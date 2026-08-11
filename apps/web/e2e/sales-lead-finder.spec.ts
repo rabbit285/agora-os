@@ -160,9 +160,16 @@ test("13. Credit preview shown before enrichment runs", async ({ page }) => {
 });
 
 test("14. Provider not-configured state", async ({ page }) => {
+  // Apollo is now a per-organization OAuth connection, so the status
+  // distinguishes "this deployment has no Apollo application"
+  // (not_configured) from "your organization hasn't connected one yet"
+  // (ready_to_connect) — both still return clearly-labeled demo data
+  // rather than fake live results (see
+  // docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §11).
   await signup(page, "lf14");
   await openLeadFinder(page);
-  await expect(page.getByText("demo", { exact: true })).toBeVisible();
+  // StatusBadge renders the status with underscores replaced by spaces.
+  await expect(page.getByText(/not configured|ready to connect/)).toBeVisible();
   await expect(page.getByText(/Showing labeled demo data/)).toBeVisible();
 });
 
