@@ -1,11 +1,16 @@
-"""Real Apollo.io adapter (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §3).
+"""Real Apollo.io adapter (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §3
+and docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).
 
-Only instantiated when `APOLLO_API_KEY` is configured (`app.sales.providers
-.registry.get_provider`) — this environment has no real Apollo account, so
-like `app.integrations.adapters.hubspot.HubSpotAdapter` and
-`pipedrive.PipedriveAdapter`, every method here is a real HTTP call against
-Apollo's documented REST API, not a stub, but is never exercised end to end
-in this build without real credentials supplied by whoever deploys it.
+**Customer-connected**: this adapter holds no credential of its own. It is
+constructed with a `credential_resolver` bound to one organization and asks
+it for that customer's Apollo access token immediately before each call, so
+every search and enrichment runs against the customer's own Apollo account,
+permissions, rate limits, and credits — never a shared platform key.
+
+Requests authenticate with `Authorization: Bearer <customer_access_token>`.
+The legacy `x-api-key` header is used only in the isolated
+`APOLLO_AUTH_MODE=api_key` development/test mode, which the startup guard in
+`app.config` refuses to run in production.
 
 Apollo has no single "decision makers" endpoint — `find_decision_makers`
 is an honest, documented composition of `search_people` scoped to a
@@ -16,10 +21,12 @@ architecture doc §3's endpoint-mapping table).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
+from app.config import settings
+from app.sales.providers.credentials import ApolloCredential
 from app.sales.providers.exceptions import (
     ProviderAuthError,
     ProviderInvalidRequest,
@@ -44,8 +51,22 @@ from app.sales.providers.schemas import (
     ProviderHealth,
 )
 
-BASE_URL = "https://api.apollo.io/api/v1"
 REQUEST_TIMEOUT_SECONDS = 20.0
+
+
+class ApolloCredentialResolver(Protocol):
+    """The organization-bound credential source this adapter reads from —
+    `app.sales.providers.credentials.OrganizationApolloCredentialResolver`
+    in production. A Protocol so tests can supply a stub without a database
+    or a real connection row."""
+
+    async def resolve(self, *, capability: str) -> ApolloCredential: ...
+
+    async def record_success(self) -> None: ...
+
+    async def refresh_after_unauthorized(self) -> ApolloCredential | None: ...
+
+    async def mark_reauthorization_required(self, *, detail: str) -> None: ...
 
 # Apollo's own per-call credit cost varies by record type/enrichment depth
 # and is only authoritative in Apollo's own response. These are
@@ -73,23 +94,61 @@ def _domain(website: str | None) -> str | None:
 class ApolloDataProvider:
     provider_key = "apollo"
 
-    def __init__(self, *, api_key: str) -> None:
-        self._api_key = api_key
+    def __init__(self, *, credential_resolver: ApolloCredentialResolver) -> None:
+        self._credentials = credential_resolver
 
-    def _headers(self) -> dict[str, str]:
-        # Apollo's current documented auth method: an `x-api-key` header
-        # (older integrations used a body-embedded `api_key` field; this
-        # adapter uses the header form).
-        return {"x-api-key": self._api_key, "Content-Type": "application/json"}
+    @staticmethod
+    def _headers(credential: ApolloCredential) -> dict[str, str]:
+        if credential.is_legacy_api_key:
+            # Development/test only (APOLLO_AUTH_MODE=api_key). Production
+            # is Bearer-only — see app.config's startup guard.
+            return {"x-api-key": credential.access_token, "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {credential.access_token}",
+            "Content-Type": "application/json",
+        }
 
-    async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def _send(
+        self, path: str, body: dict[str, Any], credential: ApolloCredential
+    ) -> httpx.Response:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
             try:
-                response = await client.post(f"{BASE_URL}{path}", json=body, headers=self._headers())
+                return await client.post(
+                    f"{settings.apollo_api_base_url}{path}",
+                    json=body,
+                    headers=self._headers(credential),
+                )
             except httpx.TimeoutException as exc:
                 raise ProviderUnavailable(f"Apollo request to {path} timed out") from exc
             except httpx.RequestError as exc:
                 raise ProviderUnavailable(f"Apollo request to {path} failed: {exc}") from exc
+
+    async def _post(self, path: str, body: dict[str, Any], *, capability: str) -> dict[str, Any]:
+        credential = await self._credentials.resolve(capability=capability)
+        response = await self._send(path, body, credential)
+
+        # Exactly one refresh-and-retry on 401 (architecture §10): an
+        # access token can expire between the freshness check and the call.
+        # A second 401 means the grant itself is no longer usable, so the
+        # connection is marked as needing reauthorization rather than
+        # retried again.
+        if response.status_code == 401 and not credential.is_legacy_api_key:
+            refreshed = await self._credentials.refresh_after_unauthorized()
+            if refreshed is None:
+                await self._credentials.mark_reauthorization_required(
+                    detail="Apollo rejected the stored credential and it could not be refreshed"
+                )
+                raise ProviderAuthError(
+                    "Apollo rejected the stored credential (HTTP 401)", status_code=401
+                )
+            response = await self._send(path, body, refreshed)
+            if response.status_code == 401:
+                await self._credentials.mark_reauthorization_required(
+                    detail="Apollo rejected the refreshed credential"
+                )
+                raise ProviderAuthError(
+                    "Apollo rejected the stored credential (HTTP 401)", status_code=401
+                )
 
         if response.status_code == 429:
             retry_after = response.headers.get("Retry-After")
@@ -99,7 +158,7 @@ class ApolloDataProvider:
             )
         if response.status_code in (401, 403):
             raise ProviderAuthError(
-                f"Apollo rejected the configured API key (HTTP {response.status_code})",
+                f"Apollo rejected the request (HTTP {response.status_code})",
                 status_code=response.status_code,
             )
         if response.status_code == 422:
@@ -113,6 +172,8 @@ class ApolloDataProvider:
             # (see docs/SALES_DATA_PROVIDER_ARCHITECTURE.md §3: callers
             # must only ever see SalesProviderError subclasses).
             raise ProviderUnavailable(f"Apollo returned HTTP {response.status_code} for {path}")
+
+        await self._credentials.record_success()
         result: dict[str, Any] = response.json()
         return result
 
@@ -130,9 +191,11 @@ class ApolloDataProvider:
         # Apollo has no dedicated zero-cost health endpoint. This build
         # uses a minimal `search_people` call (page_size=1, no filters) —
         # documented here rather than hidden — as the least-cost real call
-        # that proves the key is valid and the API is reachable.
+        # that proves the credential is valid and the API is reachable.
         try:
-            await self._post("/mixed_people/search", {"page": 1, "per_page": 1})
+            await self._post(
+                "/mixed_people/search", {"page": 1, "per_page": 1}, capability="search_people"
+            )
         except ProviderRateLimited as exc:
             return ProviderHealth(
                 status="rate_limited",
@@ -219,7 +282,9 @@ class ApolloDataProvider:
         if filters.technologies:
             body["technologies"] = filters.technologies
 
-        payload = await self._post("/mixed_companies/search", body)
+        payload = await self._post(
+            "/mixed_companies/search", body, capability="search_companies"
+        )
         organizations = payload.get("organizations", [])
         pagination = payload.get("pagination", {})
         return CompanySearchResponse(
@@ -247,7 +312,7 @@ class ApolloDataProvider:
         if filters.locations:
             body["person_locations"] = filters.locations
 
-        payload = await self._post("/mixed_people/search", body)
+        payload = await self._post("/mixed_people/search", body, capability="search_people")
         people = payload.get("people", [])
         if filters.require_verified_email:
             people = [p for p in people if p.get("email_status") == "verified"]
@@ -270,6 +335,7 @@ class ApolloDataProvider:
                 "page": 1,
                 "per_page": request.page_size,
             },
+            capability="find_decision_makers",
         )
         people = payload.get("people", [])
         pagination = payload.get("pagination", {})
@@ -286,7 +352,7 @@ class ApolloDataProvider:
         body: dict[str, Any] = {}
         if request.domain:
             body["domain"] = request.domain
-        payload = await self._post("/organizations/enrich", body)
+        payload = await self._post("/organizations/enrich", body, capability="enrich_company")
         org = payload.get("organization")
         return CompanyEnrichResponse(
             provider=self.provider_key,
@@ -302,7 +368,7 @@ class ApolloDataProvider:
             body["name"] = request.full_name
         if request.company_domain:
             body["domain"] = request.company_domain
-        payload = await self._post("/people/match", body)
+        payload = await self._post("/people/match", body, capability="enrich_person")
         person = payload.get("person")
         return PersonEnrichResponse(
             provider=self.provider_key,

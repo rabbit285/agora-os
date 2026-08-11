@@ -1204,7 +1204,13 @@ export type ProviderStatusOut = {
   provider_key: string;
   status: SalesProviderStatus;
   capabilities: ProviderCapabilitiesOut;
+  /** True only when this organization has connected its own workspace. */
   configured: boolean;
+  connection_id: string | null;
+  connected_user_email: string | null;
+  connected_workspace_name: string | null;
+  granted_scopes: string[];
+  can_manage_connection: boolean;
 };
 
 export type SavedSearchOut = {
@@ -1265,6 +1271,9 @@ export type CreditEstimatePreviewOut = {
   operation: string;
   estimated_credits: number;
   record_count: number;
+  /** The customer's own Apollo workspace that will be charged. */
+  connected_workspace_name: string | null;
+  connected_user_email: string | null;
 };
 
 export type CreditUsageSummaryOut = {

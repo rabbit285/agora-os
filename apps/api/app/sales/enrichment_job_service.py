@@ -28,6 +28,7 @@ from app.sales.provider_models import (
     SalesProviderCreditUsage,
     SalesProviderRecord,
 )
+from app.sales.providers.credentials import get_active_apollo_connection
 from app.sales.providers.registry import get_provider
 from app.sales.providers.schemas import (
     CompanyEnrichRequest,
@@ -46,9 +47,9 @@ def _domain_from_website(website: str) -> str:
 
 
 async def estimate_enrichment_credits(
-    *, provider_key: str, operation: str, record_count: int
+    db: AsyncSession, *, organization_id: uuid.UUID, provider_key: str, operation: str, record_count: int
 ) -> int:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     estimate = await provider.estimate_credit_usage(
         CreditEstimateRequest(operation=operation, record_count=record_count)  # type: ignore[arg-type]
     )
@@ -67,7 +68,11 @@ async def create_enrichment_job(
     user_agent: str | None,
 ) -> SalesEnrichmentJob:
     estimated_credits = await estimate_enrichment_credits(
-        provider_key=provider_key, operation=operation, record_count=len(target_record_ids)
+        db,
+        organization_id=organization_id,
+        provider_key=provider_key,
+        operation=operation,
+        record_count=len(target_record_ids),
     )
     job = SalesEnrichmentJob(
         organization_id=organization_id,
@@ -98,7 +103,7 @@ async def create_enrichment_job(
 async def _enrich_one_company(
     db: AsyncSession, *, organization_id: uuid.UUID, account_id: uuid.UUID, provider_key: str
 ) -> int | None:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     account = await db.get(Account, account_id)
     if account is None or account.organization_id != organization_id:
         raise LookupError(f"Account {account_id} not found")
@@ -148,7 +153,7 @@ async def _enrich_one_company(
 async def _enrich_one_person(
     db: AsyncSession, *, organization_id: uuid.UUID, contact_id: uuid.UUID, provider_key: str
 ) -> int | None:
-    provider = get_provider(provider_key)
+    provider = await get_provider(db, organization_id=organization_id, provider_key=provider_key)
     contact = await db.get(Contact, contact_id)
     if contact is None or contact.organization_id != organization_id:
         raise LookupError(f"Contact {contact_id} not found")
@@ -234,9 +239,15 @@ async def execute_enrichment_job(db: AsyncSession, *, job: SalesEnrichmentJob) -
     job.completed_at = datetime.now(UTC)
     job.status = "succeeded" if failed == 0 else ("partial" if succeeded > 0 else "failed")
 
+    # Attributes the spend to the customer's own Apollo connection, so the
+    # usage dashboard can show which connected workspace was charged (see
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §9). None in demo mode and
+    # in legacy api_key mode, where no customer connection exists.
+    connection = await get_active_apollo_connection(db, organization_id=job.organization_id)
     db.add(
         SalesProviderCreditUsage(
             organization_id=job.organization_id,
+            connection_id=connection.id if connection is not None else None,
             provider=job.provider,
             operation=job.operation,
             estimated_credits=job.estimated_credits,
