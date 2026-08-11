@@ -1,7 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ShieldCheck, Sparkles } from "lucide-react";
 
-import { ProductPreview } from "@/components/marketing/product-preview";
 import { Button } from "@/components/ui/button";
 
 /** The brand's own composition, used as the page's opening statement: two
@@ -68,7 +68,20 @@ export function HeroSection() {
             className="pointer-events-none absolute -inset-8 rounded-[2rem] bg-[radial-gradient(60%_60%_at_50%_40%,var(--aurora-blue),transparent_70%)] blur-2xl"
           />
           <div className="relative">
-            <ProductPreview />
+            <Image
+              src="/images/hero-workspace.png"
+              alt="Teams across compliance, security, sales, and customer support working from shared dashboards"
+              width={1536}
+              height={1024}
+              // Largest element above the fold, so it is the likely LCP
+              // candidate — eager rather than lazy.
+              priority
+              sizes="(max-width: 1024px) 100vw, 46vw"
+              // No corner radius and no frame: roughly half the artwork is
+              // transparent, so it blends into the hero on its own and a
+              // rounded edge would have nothing to round.
+              className="h-auto w-full"
+            />
           </div>
         </div>
       </div>

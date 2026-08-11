@@ -14,7 +14,10 @@ import "@testing-library/jest-dom/vitest";
 // helpers resolve as soon as the assertion succeeds, they don't wait out
 // the timeout), it only stops a busy machine from being reported as a
 // product failure.
-configure({ asyncUtilTimeout: 5000 });
+// Kept below the 20000ms testTimeout in vitest.config.mts so a genuinely
+// stuck query fails with Testing Library's useful "unable to find element"
+// dump rather than Vitest's bare test-timeout message.
+configure({ asyncUtilTimeout: 10000 });
 
 // Vitest doesn't auto-run RTL's cleanup the way Jest's global environment
 // does — without this, DOM from one test leaks into the next within the
