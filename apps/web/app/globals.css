@@ -135,6 +135,13 @@
   --sidebar-width: 15.5rem;
   --sidebar-width-collapsed: 3.5rem;
   --header-height: 3.75rem;
+  /* The public marketing header. Taller than the app's dense chrome, and
+     deliberately a single value: it used to shrink on scroll, which moved
+     every following element by that difference the moment the page was
+     touched. A sticky header that changes size fights the content behind
+     it — the scroll state is expressed with a shadow instead, which costs
+     no layout. */
+  --header-height-marketing: 4.5rem;
   --content-max-width: 88rem;
 
   /* Radius — documented in docs/DESIGN_SYSTEM.md but never actually defined
@@ -332,7 +339,7 @@
 /* Wrapped in @layer base (not left unlayered) — CSS Cascade Layers give
    ANY unlayered rule priority over ANY layered rule regardless of
    selector specificity, so an unlayered version of this rule would
-   silently beat every hover:border-*/focus-visible:border-* utility
+   silently beat every hover:border-… and focus-visible:border-… utility
    anywhere in the app (discovered while building the interactive-card
    hover system — see docs/PUBLIC_SITE_DESIGN.md §12): those utilities'
    generated CSS lives inside Tailwind's own utilities layer, which is

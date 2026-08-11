@@ -16,12 +16,13 @@ const NAV_LINKS = [
   { label: "Pricing", href: "/pricing" },
 ];
 
-/** The public marketing nav bar. Becomes slightly more compact/elevated on
- * scroll (a subtle shadow + tighter height, not a layout jump) and adapts
- * its CTA area to auth state — a signed-in visitor sees "Go to dashboard"
- * instead of "Sign in" / "Start free", the same client-side pattern the
- * rest of the app already uses for permission-gated UI (useCurrentUser is
- * the same hook AuthGuard relies on). */
+/** The public marketing nav bar. Height is constant
+ * (`--header-height-marketing`); scroll only lifts it with a shadow and
+ * border, which costs no layout. It adapts its CTA area to auth state — a
+ * signed-in visitor sees "Go to dashboard" instead of "Sign in" / "Start
+ * free", the same client-side pattern the rest of the app already uses for
+ * permission-gated UI (useCurrentUser is the same hook AuthGuard relies
+ * on). */
 export function PublicHeader() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -48,7 +49,7 @@ export function PublicHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 border-b bg-[var(--nav-bg)]/95 backdrop-blur transition-[padding,box-shadow] duration-[var(--transition-base)]",
+        "sticky top-0 z-40 border-b bg-[var(--nav-bg)]/95 backdrop-blur transition-[box-shadow,border-color] duration-[var(--transition-base)]",
         scrolled ? "border-[var(--nav-border)] shadow-lg shadow-black/20" : "border-transparent",
       )}
     >
@@ -59,12 +60,7 @@ export function PublicHeader() {
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-70"
       />
-      <div
-        className={cn(
-          "mx-auto flex max-w-[var(--content-max-width)] items-center justify-between px-4 transition-[height] duration-[var(--transition-base)] sm:px-6 lg:px-8",
-          scrolled ? "h-16" : "h-20",
-        )}
-      >
+      <div className="mx-auto flex h-[var(--header-height-marketing)] max-w-[var(--content-max-width)] items-center justify-between px-4 sm:px-6 lg:px-8">
         <Logo size="md" tone="nav" />
 
         <nav aria-label="Site" className="hidden items-center gap-1 md:flex">
