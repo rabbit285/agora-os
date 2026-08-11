@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.config import settings
+from app.integrations.adapters.apollo import ApolloOAuthAdapter
 from app.integrations.adapters.base import OAuthConnectorAdapter
 from app.integrations.adapters.github import GitHubAdapter
 from app.integrations.adapters.google import GoogleAdapter
@@ -110,6 +111,17 @@ def _provider_specs() -> dict[str, _ProviderSpec]:
             settings.intercom_client_id,
             settings.intercom_client_secret,
             settings.intercom_redirect_uri,
+        ),
+        # The Sales Lead Finder's customer-connected data provider: each
+        # organization authorizes its own Apollo workspace and Agora Origin
+        # uses that customer's own account, permissions, limits, and
+        # credits — never one shared platform key (see
+        # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).
+        "apollo": _ProviderSpec(
+            ApolloOAuthAdapter,
+            settings.apollo_oauth_client_id,
+            settings.apollo_oauth_client_secret,
+            settings.apollo_oauth_redirect_uri,
         ),
     }
 

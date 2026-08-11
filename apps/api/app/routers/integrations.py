@@ -51,6 +51,7 @@ PROVIDER_CATALOG: list[dict[str, str]] = [
     {"connector_key": "zendesk", "name": "Zendesk", "auth_type": "oauth2"},
     {"connector_key": "pipedrive", "name": "Pipedrive", "auth_type": "oauth2"},
     {"connector_key": "intercom", "name": "Intercom", "auth_type": "oauth2"},
+    {"connector_key": "apollo", "name": "Apollo", "auth_type": "oauth2"},
 ]
 
 
@@ -61,6 +62,24 @@ async def _get_org_connection(
     if connection is None or connection.organization_id != organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
     return connection
+
+
+# Apollo is Sales-owned rather than Ops-owned (see app.core.rbac's
+# APOLLO_CONNECTION_MANAGE_PERMISSIONS), so its connection is gated by its
+# own permission instead of the generic connector one. Checked in the
+# handler body rather than via `Depends(require_permission(...))` because
+# the connector isn't known until the request supplies it — the route's
+# dependency is fixed at registration time.
+_CONNECTOR_MANAGE_PERMISSIONS = {"apollo": "integrations.apollo.manage"}
+_DEFAULT_MANAGE_PERMISSION = "integrations.connections.manage"
+
+
+def _require_connector_permission(context: OrgContext, connector_key: str) -> None:
+    required = _CONNECTOR_MANAGE_PERMISSIONS.get(connector_key, _DEFAULT_MANAGE_PERMISSION)
+    if required not in context.permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"Missing permission: {required}"
+        )
 
 
 @router.get("/providers", response_model=list[ProviderCatalogEntry])
@@ -172,10 +191,11 @@ async def list_events(
 async def start_oauth(
     provider: str,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+    context: OrgContext = Depends(get_org_context),
 ) -> OAuthStartResponse:
     if provider not in OAUTH_PROVIDER_KEYS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
+    _require_connector_permission(context, provider)
     connection, authorization_url = await start_oauth_flow(
         db,
         organization_id=context.organization_id,
@@ -215,9 +235,10 @@ async def oauth_callback(
 async def refresh_connection(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+    context: OrgContext = Depends(get_org_context),
 ) -> IntegrationConnection:
     connection = await _get_org_connection(db, connection_id, context.organization_id)
+    _require_connector_permission(context, connection.connector_key)
     try:
         connection = await refresh_connection_token(
             db, connection=connection, actor_user_id=context.user.id
@@ -235,9 +256,10 @@ async def refresh_connection(
 async def check_health(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+    context: OrgContext = Depends(get_org_context),
 ) -> IntegrationConnection:
     connection = await _get_org_connection(db, connection_id, context.organization_id)
+    _require_connector_permission(context, connection.connector_key)
     connection = await check_connection_health(db, connection=connection)
     await db.commit()
     await db.refresh(connection)
@@ -248,9 +270,10 @@ async def check_health(
 async def disconnect(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("integrations.connections.manage")),
+    context: OrgContext = Depends(get_org_context),
 ) -> IntegrationConnection:
     connection = await _get_org_connection(db, connection_id, context.organization_id)
+    _require_connector_permission(context, connection.connector_key)
     connection = await disconnect_connection(
         db, connection=connection, actor_user_id=context.user.id
     )

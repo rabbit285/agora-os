@@ -18,6 +18,11 @@ class ConnectionUpdate(BaseModel):
 
 
 class ConnectionOut(BaseModel):
+    """Deliberately has no field for `encrypted_access_token` /
+    `encrypted_refresh_token`: token material must never be serializable
+    to the browser, so it is absent from the response model rather than
+    filtered out later (see docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §13)."""
+
     id: uuid.UUID
     connector_key: str
     name: str
@@ -31,6 +36,17 @@ class ConnectionOut(BaseModel):
     last_synced_at: datetime | None
     last_error: str | None
     created_at: datetime
+
+    # Customer-connected provider identity/lifecycle (Apollo).
+    provider_user_email: str | None = None
+    provider_workspace_id: str | None = None
+    provider_workspace_name: str | None = None
+    connected_at: datetime | None = None
+    refreshed_at: datetime | None = None
+    last_success_at: datetime | None = None
+    last_error_code: str | None = None
+    reauthorization_required_at: datetime | None = None
+    disconnected_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
