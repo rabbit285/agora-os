@@ -11,6 +11,7 @@ import { PricingPreview } from "@/components/marketing/pricing-preview";
 import { SectionHeader } from "@/components/marketing/section-header";
 import { TrustSection } from "@/components/marketing/trust-section";
 import { WorkflowExample } from "@/components/marketing/workflow-example";
+import { WorldMapBackdropLazy } from "@/components/marketing/world-map-backdrop-lazy";
 
 export const metadata: Metadata = {
   title: "Agora Origin — The secure AI operating system for European SMEs",
@@ -38,24 +39,45 @@ export default function HomePage() {
     <>
       <HeroSection />
 
-      <section className="mx-auto max-w-[var(--content-max-width)] px-4 py-20 sm:px-6 lg:px-8">
-        <SectionHeader
-          eyebrow="The problem"
-          title="Growing SMEs run on disconnected tools"
-          description="Compliance, security, sales, support, automation, and reporting usually live in five different systems that don't talk to each other."
+      {/* The problem this product solves is a global one, so the section
+          makes that literal: a dot-matrix world map lit by the brand
+          sweep, sitting behind the copy. Decorative and lazily loaded —
+          see WorldMapBackdropLazy. */}
+      <section className="relative isolate overflow-hidden">
+        <WorldMapBackdropLazy />
+        {/* Holds contrast for the copy, which sits directly over the
+            densest part of the map (Eurasia). Deliberately veils rather
+            than blanks: at full opacity it punched a hole in the middle of
+            the map and the graphic stopped reading as one. Inline style
+            because the stop uses color-mix, whose commas fight Tailwind's
+            arbitrary-value parser. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(58% 68% at 50% 52%, color-mix(in srgb, var(--bg-app) 88%, transparent) 30%, transparent 100%)",
+          }}
         />
-        <div className="mx-auto mt-10 grid max-w-3xl gap-6 sm:grid-cols-2">
-          {[
-            { icon: FileWarning, text: "Fragmented information across tools nobody fully trusts" },
-            { icon: Gauge, text: "Manual work that should have been automated months ago" },
-            { icon: ShieldCheck, text: "Slow decisions because nobody has the full picture" },
-            { icon: Bot, text: "Higher operational risk from gaps between systems" },
-          ].map((item) => (
-            <div key={item.text} className="flex items-start gap-3">
-              <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--critical-500)]" aria-hidden="true" />
-              <p className="text-sm text-[var(--fg-muted)]">{item.text}</p>
-            </div>
-          ))}
+        <div className="relative mx-auto max-w-[var(--content-max-width)] px-4 py-28 sm:px-6 lg:px-8">
+          <SectionHeader
+            eyebrow="The problem"
+            title="Growing SMEs run on disconnected tools"
+            description="Compliance, security, sales, support, automation, and reporting usually live in five different systems that don't talk to each other."
+          />
+          <div className="mx-auto mt-12 grid max-w-3xl gap-6 sm:grid-cols-2">
+            {[
+              { icon: FileWarning, text: "Fragmented information across tools nobody fully trusts" },
+              { icon: Gauge, text: "Manual work that should have been automated months ago" },
+              { icon: ShieldCheck, text: "Slow decisions because nobody has the full picture" },
+              { icon: Bot, text: "Higher operational risk from gaps between systems" },
+            ].map((item) => (
+              <div key={item.text} className="flex items-start gap-3">
+                <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--critical-500)]" aria-hidden="true" />
+                <p className="text-sm text-[var(--fg-muted)]">{item.text}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

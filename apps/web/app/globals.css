@@ -339,7 +339,7 @@
 /* Wrapped in @layer base (not left unlayered) — CSS Cascade Layers give
    ANY unlayered rule priority over ANY layered rule regardless of
    selector specificity, so an unlayered version of this rule would
-   silently beat every hover:border-*/focus-visible:border-* utility
+   silently beat every hover:border-… and focus-visible:border-… utility
    anywhere in the app (discovered while building the interactive-card
    hover system — see docs/PUBLIC_SITE_DESIGN.md §12): those utilities'
    generated CSS lives inside Tailwind's own utilities layer, which is
