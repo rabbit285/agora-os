@@ -42,10 +42,15 @@ ALL_PROVIDERS = {
     "zendesk",
     "pipedrive",
     "intercom",
+    # The Sales Lead Finder's customer-connected data provider: each
+    # organization authorizes its own Apollo workspace (ADR-0064, see
+    # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md). It rides the same
+    # provider-neutral OAuth framework as the connectors above.
+    "apollo",
 }
 
 
-def test_oauth_provider_keys_match_all_nine_expected_providers() -> None:
+def test_oauth_provider_keys_match_all_expected_providers() -> None:
     assert OAUTH_PROVIDER_KEYS == ALL_PROVIDERS
 
 
