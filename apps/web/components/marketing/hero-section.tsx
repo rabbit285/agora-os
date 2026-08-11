@@ -16,13 +16,6 @@ export function HeroSection() {
         aria-hidden="true"
         className="brand-aurora pointer-events-none absolute inset-x-0 -top-24 h-[46rem]"
       />
-      {/* A single hairline of the full brand sweep, closing the hero the way
-          the mark's arcs close around the spark. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-60"
-      />
-
       <div className="relative mx-auto grid max-w-[var(--content-max-width)] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:py-28 lg:px-8">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">

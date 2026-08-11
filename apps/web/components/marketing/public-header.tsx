@@ -53,13 +53,6 @@ export function PublicHeader() {
         scrolled ? "border-[var(--nav-border)] shadow-lg shadow-black/20" : "border-transparent",
       )}
     >
-      {/* The mark's own sweep as the header's bottom edge — the one place
-          every page shares, so the brand is present on all of them without
-          each page having to say so itself. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-70"
-      />
       <div className="mx-auto flex h-[var(--header-height-marketing)] max-w-[var(--content-max-width)] items-center justify-between px-4 sm:px-6 lg:px-8">
         <Logo size="md" tone="nav" />
 
