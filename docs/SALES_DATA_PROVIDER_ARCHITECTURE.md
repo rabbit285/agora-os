@@ -142,6 +142,18 @@ concept the brief didn't ask for and nothing else in the app has. The frontend r
 
 ## 5. Configuration
 
+> **Superseded for Apollo by customer-connected OAuth (ADR-0064).** Apollo is
+> no longer a single deployment-wide key: each organization connects its own
+> Apollo workspace and its OAuth tokens *are* stored per organization,
+> Fernet-encrypted via `TOKEN_ENCRYPTION_KEY`. See
+> [APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md](APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).
+> The deployment now configures an OAuth *application*
+> (`APOLLO_OAUTH_CLIENT_ID`/`APOLLO_OAUTH_CLIENT_SECRET`/
+> `APOLLO_OAUTH_REDIRECT_URI`) rather than a data credential;
+> `APOLLO_API_KEY` survives only for the isolated, non-production
+> `APOLLO_AUTH_MODE=api_key` development/test mode. The paragraph below
+> describes the original single-key design and is kept for history.
+
 `app/config.py` gains, next to `clearbit_api_key`:
 
 ```python

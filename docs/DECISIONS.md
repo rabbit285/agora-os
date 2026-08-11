@@ -2665,3 +2665,86 @@ response, so it calls the API directly and turns the response into a
 browser download via a `Blob` + object URL — the same shape a future
 non-JSON download endpoint elsewhere in the app should follow rather
 than reinventing.
+
+## ADR-0064 — Apollo becomes a customer-connected OAuth 2.0 connection: every organization uses its own Apollo account, permissions, limits, and credits (supersedes ADR-0062's shared-key decision)
+
+**Decision**: Apollo is no longer a single deployment-wide `APOLLO_API_KEY`
+shared by every tenant. Each customer organization connects **its own**
+Apollo workspace through Apollo's OAuth 2.0 authorization-code flow, and
+every Apollo search and enrichment request runs against that customer's own
+account. This supersedes the "single deployment-wide key" half of ADR-0062;
+the rest of that ADR (the separate `/api/v1/sales/lead-finder/*` surface,
+the `SalesDataProvider` Protocol as a sibling of `OAuthConnectorAdapter`,
+demo-mode honesty) stands unchanged.
+
+**Why not a shared key.** A single platform credential makes every
+customer's searches share one account's rate limits, one plan's
+capabilities, and one credit pool — so one tenant's usage degrades every
+other tenant's, Agora Origin silently funds all prospecting, and Apollo's
+own per-account permissions can't be honored per customer. It also gives
+Agora Origin's key visibility into which companies every customer is
+researching. Customer-connected OAuth removes all four problems at once,
+and is the only model under which "Apollo credits" honestly belong to the
+customer being charged.
+
+**Why not ask for an API key instead.** Pasting a personal Apollo API key
+into a third-party product trains exactly the credential-sharing habit
+security programs try to eliminate, gives Agora Origin a long-lived secret
+with no scoping and no revocation story, and cannot express least-privilege
+capability grants. OAuth gives per-capability scopes, an explicit user-facing
+consent step, a refresh/expiry lifecycle, and a real disconnect.
+
+**Registration.** Agora Origin registers one OAuth application per
+deployment in Apollo (Settings → Integrations → API/OAuth) with the
+approved logo and the exact HTTPS callback URL; separate URLs for
+development, staging, and production. Apollo requires HTTPS, so local
+development uses an HTTPS tunnel rather than a weakened callback check. The
+integration is **not** described anywhere in the product as Apollo-approved
+until Apollo actually approves the registration.
+
+**Scopes** are least-privilege and match only implemented capabilities:
+`read_user_profile`, `mixed_companies_search`, `mixed_people_api_search`,
+`organizations_enrich`, `people_match`, `api_usage_stats_read`. No write
+scopes are requested — this build never creates Apollo sequences, contacts,
+accounts, or tasks. Granted scopes are stored per connection and checked
+*before* each operation, so a missing permission disables exactly that
+capability (with a 403 naming the required scope) instead of failing
+mid-flight or silently spending credits.
+
+**Token lifecycle.** Access and refresh tokens are Fernet-encrypted at rest
+(`app.core.crypto`) on the existing per-organization `IntegrationConnection`
+row, reusing the OAuth framework nine other connectors already share rather
+than building a parallel one. Refresh happens proactively within five
+minutes of expiry and reactively exactly once on a 401; a permanent failure
+(`invalid_grant`) moves the connection to `reauthorization_required` and
+stops retrying. Concurrent refreshes are prevented by an optimistic
+`version` check rather than `SELECT ... FOR UPDATE` — portable across the
+SQLite test database and Postgres, and sufficient for a single-row
+invariant without adding a distributed lock.
+
+**Tenant isolation.** `organization_id` is resolved server-side from the
+session and membership table, never from client input; connection lookups
+are scoped by organization in the query itself; search caches were already
+organization-keyed. The Sales provider is constructed per request bound to
+one organization — there is deliberately no shared, long-lived Apollo
+client holding a mutable customer token.
+
+**Temporal.** Workflow input remains just `job_id`. The activity loads the
+job, reads its `organization_id`, and resolves that organization's
+connection inside the worker, decrypting a token only at the moment of use.
+No token ever enters a workflow argument or workflow history.
+
+**Disconnect** clears both tokens and stops new Apollo operations, but
+preserves saved Accounts, Contacts, lists, provenance, and credit-usage
+history — disconnecting a data provider must never delete customer records.
+Apollo publishes no token-revocation endpoint, so `revoke()` is an honest
+no-op that clears local tokens; this build does not invent a revocation URL.
+
+**Legacy mode.** `APOLLO_AUTH_MODE=api_key` remains for local development
+and tests only, disabled by default, and the process refuses to start with
+it enabled while `APP_ENV=production`.
+
+**Known limitation**: one active Apollo connection per organization. The
+model retains disconnected rows rather than deleting them, so supporting
+multiple simultaneous workspaces later is an index change plus a selection
+UI, not a destructive redesign.

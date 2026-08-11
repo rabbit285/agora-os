@@ -87,11 +87,41 @@ responses are just clearly labeled demo output until a key is added.
 |---|---|
 | `CLEARBIT_API_KEY` | Company enrichment (`POST /api/v1/sales/accounts/{id}/enrich`) reports `configured: false` and changes nothing — see `docs/KNOWN_LIMITATIONS.md`. |
 
-## Sales Lead Finder data provider — optional
+## Sales Lead Finder data provider (Apollo) — optional
+
+Apollo is **customer-connected**: each organization authorizes its own
+Apollo workspace through OAuth 2.0, and every Apollo search/enrichment runs
+against that customer's own account, permissions, rate limits, and credits.
+There is deliberately no shared platform key serving multiple customers —
+see `docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md`.
+
+These three variables configure the *Agora Origin OAuth application* (one
+per deployment), not any customer's credential:
 
 | Variable | Behavior when unset |
 |---|---|
-| `APOLLO_API_KEY` | The Lead Finder's company/people search, enrichment, and decision-maker discovery (`/api/v1/sales/lead-finder/*`) fall back to a deterministic, clearly-labeled demo provider (`provider: "demo"` on every returned record) instead of failing — identical fallback shape to `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` falling back to the AI Gateway's `DemoAdapter`. See `docs/SALES_DATA_PROVIDER_ARCHITECTURE.md`. Never logged, never sent to the frontend, never hard-coded, never baked into a Docker image layer — read once at process start via `pydantic-settings` from the environment, compatible with AWS Secrets Manager and Render secret environment variables since both inject standard process env vars. |
+| `APOLLO_OAUTH_CLIENT_ID` | No organization can start an Apollo connection; the Lead Finder reports `not_configured` and returns clearly-labeled demo data. |
+| `APOLLO_OAUTH_CLIENT_SECRET` | Same as above. **Backend-only** — never a `NEXT_PUBLIC_*` variable, never returned to the frontend, never logged, never committed. Use a Render *secret* environment variable in production; compatible with AWS Secrets Manager since both inject standard process env vars. |
+| `APOLLO_OAUTH_REDIRECT_URI` | Falls back to `{API_URL}/api/v1/integrations/connections/oauth/apollo/callback`. Must exactly match a callback URL registered in Apollo. Apollo requires **HTTPS**, so local development needs an HTTPS tunnel rather than a weakened callback check. Register separate URLs for development, staging, and production. |
+
+Non-secret endpoint overrides (defaults are correct for Apollo today):
+
+| Variable | Default |
+|---|---|
+| `APOLLO_OAUTH_AUTHORIZE_URL` | `https://app.apollo.io/#/oauth/authorize` |
+| `APOLLO_OAUTH_TOKEN_URL` | `https://app.apollo.io/api/v1/oauth/token` |
+| `APOLLO_API_BASE_URL` | `https://api.apollo.io/api/v1` |
+
+Auth mode:
+
+| Variable | Behavior |
+|---|---|
+| `APOLLO_AUTH_MODE` | `oauth` (default) — customer-connected Bearer tokens, the only value permitted in production. `api_key` — legacy local-development/test mode using the deployment-wide `APOLLO_API_KEY` with an `x-api-key` header. **The process refuses to start** if `api_key` is set while `APP_ENV=production`: a shared key must never serve multi-tenant traffic. |
+| `APOLLO_API_KEY` | Used **only** in `APOLLO_AUTH_MODE=api_key`. Unset (or in the default `oauth` mode), organizations without a connection get the deterministic, clearly-labeled demo provider (`provider: "demo"` on every record) rather than failing. Never logged, never sent to the frontend, never baked into a Docker image layer. |
+
+Customer OAuth **tokens** are stored per organization, encrypted at rest via
+`TOKEN_ENCRYPTION_KEY` (see below), and never appear in API responses, audit
+metadata, Temporal workflow input, browser state, or logs.
 
 ## Integrations — optional
 
