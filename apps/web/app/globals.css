@@ -51,6 +51,66 @@
   --ai-600: #7c3aed;
   --ai-700: #6d28d9;
 
+  /* ---- Brand identity, derived from the Agora Origin mark ----
+     The logo is two interlocking arcs around a warm spark: a teal->cyan
+     arc and a violet->blue arc, meeting at an amber four-point star. Those
+     three families are the whole brand vocabulary, defined once here so
+     the mark, the marketing site, and the app all draw from the same
+     source rather than each hard-coding its own approximation.
+
+     `--brand-primary` deliberately stays indigo: it is the site-wide
+     action color on hundreds of existing buttons/links, and the arc
+     colors read as *brand atmosphere* (gradients, glows, the mark), not
+     as "this is clickable". Recoloring every control was not the ask. */
+  --brand-teal: #0d9488;
+  --brand-teal-bright: #2dd4bf;
+  --brand-cyan: #22d3ee;
+  --brand-violet: #818cf8;
+  --brand-blue: #3b82f6;
+  --brand-blue-deep: #1d4ed8;
+  /* The spark at the center of the mark — the single warm note in an
+     otherwise cool palette, so it stays rare and meaningful (AI moments,
+     one hero accent) instead of becoming a fourth general-purpose color. */
+  --brand-spark: #fbbf24;
+  --brand-spark-soft: #fde68a;
+
+  /* The mark's own two sweeps, reusable anywhere a brand gradient is
+     wanted (headline accents, rules, icon fills). */
+  --gradient-arc-teal: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-cyan) 100%);
+  --gradient-arc-blue: linear-gradient(135deg, var(--brand-violet) 0%, var(--brand-blue-deep) 100%);
+  /* The full left-to-right sweep across both arcs — the signature
+     gradient, for decorative fills: rules, hairlines, icon washes. */
+  --gradient-brand: linear-gradient(
+    100deg,
+    var(--brand-teal) 0%,
+    var(--brand-cyan) 34%,
+    var(--brand-violet) 66%,
+    var(--brand-blue-deep) 100%
+  );
+
+  /* A separate, darker sweep for gradient *text*. The decorative stops
+     above are not safe to read against: --brand-cyan is 1.81:1 on white
+     and --brand-violet 2.98:1, both under the 3:1 WCAG AA floor for large
+     text, so a headline painted with them would be illegible mid-sweep
+     even though it looks right at the ends. These stops trace the same
+     teal -> cyan -> indigo -> blue journey with every stop at 3.68:1 or
+     better. Never swap one for the other. */
+  --gradient-brand-text: linear-gradient(
+    100deg,
+    #0f766e 0%,
+    #0891b2 34%,
+    #6366f1 66%,
+    var(--brand-blue-deep) 100%
+  );
+  --brand-text-fallback: var(--brand-blue-deep);
+
+  /* Ambient backdrop glows echoing the mark's two lobes. Kept as low-alpha
+     radials so they read as light, never as a colored panel — the logo
+     sits on white and the surfaces that carry it should too. */
+  --aurora-teal: rgba(34, 211, 238, 0.18);
+  --aurora-blue: rgba(59, 130, 246, 0.16);
+  --aurora-spark: rgba(251, 191, 36, 0.14);
+
   /* Semantic surface roles */
   --bg-app: var(--gray-50);
   --bg-surface: #ffffff;
@@ -140,6 +200,25 @@
   --border-default: var(--gray-800);
   --border-strong: var(--gray-700);
   --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+  /* On a near-black canvas the same alphas disappear, so the ambient
+     brand glows are raised rather than reused — the intent is "the mark's
+     light bleeding onto the surface", which needs more energy in the dark
+     than it does against white. */
+  --aurora-teal: rgba(45, 212, 191, 0.22);
+  --aurora-blue: rgba(96, 165, 250, 0.2);
+  --aurora-spark: rgba(251, 191, 36, 0.16);
+  /* The light-mode text sweep is darkened for contrast against white and
+     would nearly vanish here, so the dark theme reads the *bright* end of
+     the palette instead — every stop below is 7.9:1 or better on
+     --bg-app. Same hue journey, inverted for the ground it sits on. */
+  --gradient-brand-text: linear-gradient(
+    100deg,
+    #2dd4bf 0%,
+    #22d3ee 34%,
+    #a5b4fc 66%,
+    #93c5fd 100%
+  );
+  --brand-text-fallback: #93c5fd;
   --background: var(--bg-app);
   --foreground: var(--fg-default);
 }
@@ -233,6 +312,60 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+/* ---- Brand helpers ----
+   Two small utilities rather than repeating the same four declarations at
+   every call site. Both are layered so ordinary Tailwind utilities can
+   still override them (see the @layer base note above for why that
+   matters here). */
+@layer components {
+  /* Gradient headline text. Falls back to a solid color first, so a
+     browser without background-clip:text support (or a forced-colors
+     mode, which drops backgrounds entirely) shows readable text rather
+     than nothing at all. */
+  .brand-gradient-text {
+    color: var(--brand-text-fallback);
+  }
+
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    .brand-gradient-text {
+      background-image: var(--gradient-brand-text);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .brand-gradient-text {
+      color: CanvasText;
+      background-image: none;
+    }
+  }
+
+  /* The ambient two-lobe wash behind hero surfaces: a teal glow on the
+     left, a blue one on the right, and a faint warm center — the mark's
+     own composition, blurred out to atmosphere. Decorative only; always
+     paired with aria-hidden on the element that carries it. */
+  .brand-aurora {
+    background-image:
+      radial-gradient(38rem 26rem at 12% 8%, var(--aurora-teal), transparent 70%),
+      radial-gradient(34rem 24rem at 88% 4%, var(--aurora-blue), transparent 70%),
+      radial-gradient(22rem 16rem at 50% 0%, var(--aurora-spark), transparent 72%);
+  }
+
+  /* Panel-scale variant. The full wash above is tuned for a viewport-wide
+     hero, where its three lobes have room to stay separate; compressed
+     into a card the teal, amber, and blue overlap into a muddy
+     yellow-green band. This drops the warm lobe entirely (the mark's own
+     spark is already right there in the panel) and pushes the two
+     remaining lobes to the outer corners so the middle stays clean. */
+  .brand-aurora-panel {
+    background-image:
+      radial-gradient(26rem 14rem at 0% 0%, var(--aurora-teal), transparent 68%),
+      radial-gradient(26rem 14rem at 100% 0%, var(--aurora-blue), transparent 68%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

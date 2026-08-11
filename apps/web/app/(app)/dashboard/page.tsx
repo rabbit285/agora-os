@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 
 import { ActivityTimeline, type ActivityEntry } from "@/components/activity-timeline";
+import { DashboardHero } from "@/components/dashboard-hero";
 import { EmptyState } from "@/components/empty-state";
 import { InsightCard } from "@/components/insight-card";
 import { CardSkeleton } from "@/components/loading-skeleton";
 import { MetricCard } from "@/components/metric-card";
-import { PageHeader } from "@/components/page-header";
 import { RiskBadge } from "@/components/risk-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
@@ -112,26 +112,13 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
+      <DashboardHero
         title="Command Center"
         description="Your organization's compliance, security, sales, support, and automation posture in one view."
+        briefing={briefing?.ai_suggestion}
+        briefingHref={briefing ? "/briefing" : undefined}
+        loading={briefingLoading}
       />
-
-      {briefingLoading ? (
-        <CardSkeleton />
-      ) : (
-        briefing?.ai_suggestion && (
-          <InsightCard title="Today's AI briefing" reason={briefing.ai_suggestion} />
-        )
-      )}
-      {briefing && (
-        <Link
-          href="/briefing"
-          className="-mt-4 self-start text-xs text-[var(--brand-primary)] hover:underline"
-        >
-          View full daily briefing →
-        </Link>
-      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <MetricCard

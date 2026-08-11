@@ -21,6 +21,50 @@ so a future palette change is a one-file edit, not a grep-and-replace across 70 
 5. **Light mode is the default and the priority.** Dark mode is supported via the same
    tokens and a real toggle, but never blocks a light-mode-only visual decision.
 
+## Brand identity
+
+The mark is two interlocking arcs — a teal→cyan sweep and a violet→blue
+sweep — meeting around a warm amber spark. Those three families are the
+whole brand vocabulary, defined once in `app/globals.css` so the mark, the
+marketing site, and the app all draw from one source.
+
+| Token | Role |
+|---|---|
+| `--brand-teal` → `--brand-cyan` | the mark's left arc; `--gradient-arc-teal` |
+| `--brand-violet` → `--brand-blue-deep` | the mark's right arc; `--gradient-arc-blue` |
+| `--brand-spark` | the center spark — the one warm note, kept rare (AI moments, a single hero accent) so it stays meaningful |
+| `--gradient-brand` | the full sweep across both arcs, for **decorative fills only**: rules, hairlines, hover edges |
+| `--gradient-brand-text` | the sweep for **gradient text** — see the warning below |
+| `--aurora-*` | low-alpha ambient glows echoing the mark's two lobes |
+
+**`--brand-primary` stays indigo.** It is the action color on hundreds of
+existing buttons, links, and focus rings; the arc colors are brand
+*atmosphere* (the mark, gradients, ambient glows), not an "this is
+clickable" signal. Recoloring every control is a separate decision.
+
+### Never paint text with `--gradient-brand`
+
+The decorative stops are not readable: `--brand-cyan` is **1.81:1** on
+white and `--brand-violet` **2.98:1**, both under the 3:1 WCAG AA floor for
+large text. A headline painted with it looks correct at the ends and
+becomes illegible through the middle. Use `--gradient-brand-text` (or the
+`.brand-gradient-text` helper), whose stops are all ≥3.68:1 in light and
+≥7.9:1 in dark. `components/logo.test.tsx` pins both gradients so the two
+cannot be swapped by accident.
+
+### Helpers
+
+- `.brand-gradient-text` — gradient headline text, with a solid-color
+  fallback for browsers without `background-clip: text` and a
+  `forced-colors` override.
+- `.brand-aurora` — the viewport-scale two-lobe wash (marketing heroes).
+- `.brand-aurora-panel` — the card-scale variant. The full wash's three
+  lobes muddy into a yellow-green band when compressed into a panel, so
+  this one drops the warm lobe and pushes the other two to the corners.
+
+Everything carrying an aurora or gradient fill is decorative and must be
+`aria-hidden`.
+
 ## Color tokens
 
 Neutral scale is a cool slate (matches "neutral or slightly cool background" direction).
@@ -112,6 +156,14 @@ identifiable at a glance, distinct from the primary brand color used for ordinar
 Geist Sans (already loaded via `next/font/google`, previously overridden by a stray
 `font-family: Arial` in `globals.css` — fixed as part of this modernization). Geist Mono
 for anything tabular/technical (audit event payloads, API keys, correlation IDs).
+
+> **Applying a size token in Tailwind needs the `length:` hint.**
+> `text-[var(--text-display-1)]` is ambiguous — Tailwind resolves it as a
+> text *color*, so the font size silently never applies and the color
+> resolves to an invalid value that falls back to `inherit`. The marketing
+> display scale was written this way and had never actually rendered:
+> every hero and section heading was coming out at body size. Always write
+> `text-[length:var(--text-display-1)]`.
 
 ```css
 --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
