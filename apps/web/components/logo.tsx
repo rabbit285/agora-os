@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const SIZE_MAP = {
   sm: { mark: 28, text: "text-base" },
-  md: { mark: 36, text: "text-lg" },
+  md: { mark: 46, text: "text-2xl" },
   lg: { mark: 52, text: "text-2xl" },
 } as const;
 

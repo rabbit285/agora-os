@@ -56,7 +56,7 @@ export function PublicHeader() {
       <div className="mx-auto flex h-[var(--header-height-marketing)] max-w-[var(--content-max-width)] items-center justify-between px-4 sm:px-6 lg:px-8">
         <Logo size="md" tone="nav" />
 
-        <nav aria-label="Site" className="hidden items-center gap-1 md:flex">
+        <nav aria-label="Site" className="hidden items-center gap-1 lg:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
@@ -68,7 +68,7 @@ export function PublicHeader() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 lg:flex">
           {user ? (
             <Button asChild>
               <Link href="/dashboard">Go to dashboard</Link>
@@ -98,7 +98,7 @@ export function PublicHeader() {
 
         <button
           type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg)] hover:bg-[var(--nav-hover)] md:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg)] hover:bg-[var(--nav-hover)] lg:hidden"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
           aria-controls="public-mobile-menu"
@@ -112,7 +112,7 @@ export function PublicHeader() {
         <nav
           id="public-mobile-menu"
           aria-label="Mobile"
-          className="border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-4 py-4 md:hidden"
+          className="border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-4 py-4 lg:hidden"
         >
           <ul className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
