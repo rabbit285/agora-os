@@ -14,11 +14,15 @@ type AuthLayoutProps = {
   sideDescription?: string;
 };
 
-/** Desktop: the form on one side, a trust message on the other, per the
- * brief's own requested layout. Mobile: form only — the side panel is
- * `hidden lg:flex`, not just visually de-emphasized, so small screens
- * never pay its layout cost. The logo above the form is a real link back
- * to the homepage, not decoration. */
+/** Desktop: the trust message on the left, the form on the right. Mobile:
+ * form only — the side panel is `hidden lg:flex`, not just visually
+ * de-emphasized, so small screens never pay its layout cost. The logo
+ * above the form is a real link back to the homepage, not decoration.
+ *
+ * The swap is done with `order` rather than by reordering the markup: the
+ * form stays first in the DOM, so it is still what a screen reader reaches
+ * first and what the skip link lands on. Nothing in the side panel is
+ * focusable, so there is no visual/focus order mismatch to worry about. */
 export function AuthLayout({
   children,
   sideTitle = "One governed workspace for compliance, security, sales, and support.",
@@ -26,14 +30,17 @@ export function AuthLayout({
 }: AuthLayoutProps) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div id="main-content" className="flex flex-col items-center justify-center px-4 py-12 sm:px-6">
+      <div
+        id="main-content"
+        className="flex flex-col items-center justify-center px-4 py-12 sm:px-6 lg:order-2"
+      >
         <div className="mb-8">
           <Logo size="lg" />
         </div>
         <div className="w-full max-w-sm">{children}</div>
       </div>
 
-      <div className="relative hidden overflow-hidden bg-[var(--gray-900)] lg:flex lg:flex-col lg:justify-center lg:px-16">
+      <div className="relative hidden overflow-hidden bg-[var(--gray-900)] lg:order-1 lg:flex lg:flex-col lg:justify-center lg:px-16">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(99,102,241,0.25),transparent)]"
