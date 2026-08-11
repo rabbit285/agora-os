@@ -3,15 +3,18 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const SIZE_MAP = {
-  sm: { mark: 22, text: "text-sm" },
-  md: { mark: 28, text: "text-base" },
-  lg: { mark: 38, text: "text-xl" },
+  sm: { mark: 28, text: "text-base" },
+  md: { mark: 36, text: "text-lg" },
+  lg: { mark: 52, text: "text-2xl" },
 } as const;
 
 type LogoProps = {
   size?: keyof typeof SIZE_MAP;
   markOnly?: boolean;
   href?: string | null;
+  /** "nav" for the dark chrome (header, sidebar), which stays dark in both
+   * themes — the default wordmark color would be near-invisible there. */
+  tone?: "default" | "nav";
   className?: string;
 };
 
@@ -19,14 +22,26 @@ type LogoProps = {
  * non-interactive span instead of a link, for contexts (e.g. an auth card
  * that shouldn't navigate away) where a clickable logo would be the wrong
  * affordance. */
-export function Logo({ size = "md", markOnly = false, href = "/", className }: LogoProps) {
+export function Logo({
+  size = "md",
+  markOnly = false,
+  href = "/",
+  tone = "default",
+  className,
+}: LogoProps) {
   const { mark, text } = SIZE_MAP[size];
 
   const content = (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark size={mark} />
       {!markOnly && (
-        <span className={cn("font-semibold tracking-tight text-[var(--fg-default)]", text)}>
+        <span
+          className={cn(
+            "font-semibold tracking-tight",
+            tone === "nav" ? "text-[var(--nav-fg)]" : "text-[var(--fg-default)]",
+            text,
+          )}
+        >
           Agora Origin
         </span>
       )}
@@ -44,13 +59,17 @@ export function Logo({ size = "md", markOnly = false, href = "/", className }: L
   );
 }
 
-/** Two interlocking arcs around a warm spark.
+/** Two interlocking crescents around a warm spark.
  *
- * The arcs are stroked circle segments with round caps rather than filled
- * outline paths: the shape is genuinely two sweeps of a circle, so
- * describing it that way keeps it crisp at every size (a 20px sidebar mark
- * and a 200px hero mark come off the same geometry) and lets the stroke
- * width scale proportionally instead of being baked into fill outlines.
+ * Each crescent is a filled path — outer arc, a straight chord across the
+ * end, inner arc back, close — rather than a stroked circle segment. The
+ * chord is what produces the angular cut on one tip, and running the inner
+ * arc slightly shorter than the outer one tapers the other tip to a point.
+ * A stroke with round caps can't do either; it gives two blunt ends and
+ * reads as a pair of plain rings.
+ *
+ * The blue crescent is drawn first so the teal tip sits above it where they
+ * cross, matching the mark's own overlap.
  *
  * Gradient ids are suffixed per instance — two marks on one page (header
  * and footer) would otherwise share one `<defs>` id, and the second would
@@ -80,43 +99,33 @@ export function LogoMark({
       className={className}
     >
       <defs>
-        <linearGradient id={tealId} x1="6" y1="10" x2="30" y2="38" gradientUnits="userSpaceOnUse">
+        <linearGradient id={tealId} x1="8" y1="12" x2="30" y2="38" gradientUnits="userSpaceOnUse">
           <stop stopColor="var(--brand-teal)" />
-          <stop offset="1" stopColor="var(--brand-cyan)" />
+          <stop offset="1" stopColor="var(--brand-teal-bright)" />
         </linearGradient>
-        <linearGradient id={blueId} x1="42" y1="10" x2="20" y2="40" gradientUnits="userSpaceOnUse">
+        <linearGradient id={blueId} x1="40" y1="12" x2="18" y2="38" gradientUnits="userSpaceOnUse">
           <stop stopColor="var(--brand-violet)" />
           <stop offset="1" stopColor="var(--brand-blue-deep)" />
         </linearGradient>
         <radialGradient id={sparkId} cx="0.5" cy="0.5" r="0.5">
-          <stop stopColor="var(--brand-spark-soft)" stopOpacity="0.55" />
+          <stop stopColor="var(--brand-spark-soft)" stopOpacity="0.7" />
           <stop offset="1" stopColor="var(--brand-spark)" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* Two 256° sweeps of circles offset horizontally by ~0.96r, with
-          their gaps rotated 15° off the horizontal. That rotation is what
-          makes the mark read as one continuous loop: it lets each arc's
-          tip pass *beside* the other's rather than colliding with it head
-          on at the centerline, which is what produces the S through the
-          middle. */}
       <path
-        d="M27.83 31.22A12 12 0 1 1 22.94 12.95"
-        stroke={`url(#${tealId})`}
-        strokeWidth="5.8"
-        strokeLinecap="round"
+        d="M25.24 38A15.1 15.1 0 1 0 21.6 12.1L23.39 17.7A9.8 9.8 0 1 1 25.42 32.12Z"
+        fill={`url(#${blueId})`}
       />
       <path
-        d="M20.17 16.78A12 12 0 1 1 25.06 35.05"
-        stroke={`url(#${blueId})`}
-        strokeWidth="5.8"
-        strokeLinecap="round"
+        d="M22.76 10A15.1 15.1 0 1 0 26.4 35.9L24.61 30.3A9.8 9.8 0 1 1 22.58 15.88Z"
+        fill={`url(#${tealId})`}
       />
 
       {/* The spark's halo, then the four-point star itself. */}
-      <circle cx="24" cy="24" r="8.5" fill={`url(#${sparkId})`} />
+      <circle cx="24" cy="24" r="7" fill={`url(#${sparkId})`} />
       <path
-        d="M24 16.6c.53 4.05 2.8 6.36 6.85 7.4-4.05 1.04-6.32 3.35-6.85 7.4-.53-4.05-2.8-6.36-6.85-7.4 4.05-1.04 6.32-3.35 6.85-7.4Z"
+        d="M24 18.4c.42 3.2 2.18 4.96 5.38 5.38-3.2.42-4.96 2.18-5.38 5.38-.42-3.2-2.18-4.96-5.38-5.38 3.2-.42 4.96-2.18 5.38-5.38Z"
         fill="var(--brand-spark)"
       />
     </svg>

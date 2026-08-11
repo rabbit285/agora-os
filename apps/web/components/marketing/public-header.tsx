@@ -48,26 +48,31 @@ export function PublicHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 border-b bg-[var(--bg-surface)]/95 backdrop-blur transition-[padding,box-shadow] duration-[var(--transition-base)]",
-        scrolled
-          ? "border-[var(--border-default)] shadow-[var(--shadow-token-sm)]"
-          : "border-transparent",
+        "sticky top-0 z-40 border-b bg-[var(--nav-bg)]/95 backdrop-blur transition-[padding,box-shadow] duration-[var(--transition-base)]",
+        scrolled ? "border-[var(--nav-border)] shadow-lg shadow-black/20" : "border-transparent",
       )}
     >
+      {/* The mark's own sweep as the header's bottom edge — the one place
+          every page shares, so the brand is present on all of them without
+          each page having to say so itself. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-70"
+      />
       <div
         className={cn(
           "mx-auto flex max-w-[var(--content-max-width)] items-center justify-between px-4 transition-[height] duration-[var(--transition-base)] sm:px-6 lg:px-8",
-          scrolled ? "h-14" : "h-[var(--header-height)]",
+          scrolled ? "h-16" : "h-20",
         )}
       >
-        <Logo size="md" />
+        <Logo size="md" tone="nav" />
 
         <nav aria-label="Site" className="hidden items-center gap-1 md:flex">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)]"
+              className="rounded-[var(--radius-md)] px-3.5 py-2 text-sm font-medium text-[var(--nav-fg-muted)] transition-colors hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
             >
               {link.label}
             </Link>
@@ -76,18 +81,26 @@ export function PublicHeader() {
 
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
-            <Button asChild size="sm">
+            <Button asChild>
               <Link href="/dashboard">Go to dashboard</Link>
             </Button>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm">
+              <Button
+                asChild
+                variant="ghost"
+                className="text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
+              >
                 <Link href="/login">Sign in</Link>
               </Button>
-              <Button asChild variant="outline" size="sm">
+              <Button
+                asChild
+                variant="outline"
+                className="border-[var(--nav-border)] bg-transparent text-[var(--nav-fg)] hover:bg-[var(--nav-hover)]"
+              >
                 <Link href="/contact">Request a demo</Link>
               </Button>
-              <Button asChild size="sm">
+              <Button asChild>
                 <Link href="/signup">Start free</Link>
               </Button>
             </>
@@ -96,7 +109,7 @@ export function PublicHeader() {
 
         <button
           type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] text-[var(--fg-default)] md:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg)] hover:bg-[var(--nav-hover)] md:hidden"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
           aria-controls="public-mobile-menu"
@@ -110,14 +123,14 @@ export function PublicHeader() {
         <nav
           id="public-mobile-menu"
           aria-label="Mobile"
-          className="border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-4 py-4 md:hidden"
+          className="border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-4 py-4 md:hidden"
         >
           <ul className="flex flex-col gap-1">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="block rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-medium text-[var(--fg-default)] hover:bg-[var(--bg-surface-hover)]"
+                  className="block rounded-[var(--radius-md)] px-3 py-3 text-base font-medium text-[var(--nav-fg)] hover:bg-[var(--nav-hover)]"
                   onClick={() => setMobileOpen(false)}
                 >
                   {link.label}
@@ -125,17 +138,25 @@ export function PublicHeader() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--border-default)] pt-4">
+          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--nav-border)] pt-4">
             {user ? (
               <Button asChild>
                 <Link href="/dashboard">Go to dashboard</Link>
               </Button>
             ) : (
               <>
-                <Button asChild variant="outline">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-[var(--nav-border)] bg-transparent text-[var(--nav-fg)] hover:bg-[var(--nav-hover)]"
+                >
                   <Link href="/login">Sign in</Link>
                 </Button>
-                <Button asChild variant="outline">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-[var(--nav-border)] bg-transparent text-[var(--nav-fg)] hover:bg-[var(--nav-hover)]"
+                >
                   <Link href="/contact">Request a demo</Link>
                 </Button>
                 <Button asChild>

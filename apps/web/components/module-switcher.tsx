@@ -20,8 +20,8 @@ export function ModuleSwitcher() {
             className={cn(
               "whitespace-nowrap rounded-[var(--radius-md)] px-3 py-1.5 text-sm transition-colors duration-[var(--transition-fast)]",
               active
-                ? "bg-[var(--brand-primary-subtle)] font-medium text-[var(--brand-primary)]"
-                : "text-[var(--fg-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-default)]",
+                ? "bg-[var(--nav-active)] font-medium text-[var(--nav-fg)]"
+                : "text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]",
             )}
           >
             {module.label}
