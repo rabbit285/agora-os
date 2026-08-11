@@ -21,5 +21,13 @@ export default defineConfig({
     // time (roughly 45s -> 70-100s on an 8-core machine) — a deliberate
     // trade of some speed for a suite whose result means something.
     maxWorkers: "50%",
+    // Vitest's own per-test budget, raised alongside the Testing Library
+    // one in vitest.setup.ts. Leaving it at the 5s default made that
+    // setting largely pointless: a findBy* given 5s to resolve inside a
+    // test that is killed at 5s can never actually use its budget, so
+    // contended runs still failed. Both now have real headroom, and
+    // neither costs a passing test anything.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });

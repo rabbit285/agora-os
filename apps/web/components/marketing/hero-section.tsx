@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ShieldCheck, Sparkles } from "lucide-react";
 
-import { ProductPreview } from "@/components/marketing/product-preview";
+import { HeroVisual } from "@/components/marketing/hero-visual";
 import { Button } from "@/components/ui/button";
 
 /** The brand's own composition, used as the page's opening statement: two
@@ -23,7 +23,11 @@ export function HeroSection() {
         className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--gradient-brand)] opacity-60"
       />
 
-      <div className="relative mx-auto grid max-w-[var(--content-max-width)] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:py-28 lg:px-8">
+      {/* The visual gets the larger share and a negative right margin so it
+          runs to the viewport edge: its own left-hand fade is what joins it
+          to the copy, and boxing it inside the content gutter would put a
+          hard stop where that fade is meant to continue. */}
+      <div className="relative mx-auto grid max-w-[var(--content-max-width)] items-center gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.2fr] lg:gap-6 lg:py-28 lg:pl-8 lg:pr-0">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-[var(--brand-spark)]" aria-hidden="true" />
@@ -60,17 +64,7 @@ export function HeroSection() {
           </p>
         </div>
 
-        <div className="relative">
-          {/* A soft echo of the mark behind the product shot, so the preview
-              sits in the same light the headline does. */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -inset-8 rounded-[2rem] bg-[radial-gradient(60%_60%_at_50%_40%,var(--aurora-blue),transparent_70%)] blur-2xl"
-          />
-          <div className="relative">
-            <ProductPreview />
-          </div>
-        </div>
+        <HeroVisual />
       </div>
     </section>
   );
