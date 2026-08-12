@@ -44,12 +44,22 @@
   --info-600: #2563eb;
   --info-700: #1d4ed8;
 
-  /* AI accent — violet, deliberately distinct from primary indigo */
-  --ai-50: #f5f3ff;
-  --ai-100: #ede9fe;
-  --ai-500: #8b5cf6;
-  --ai-600: #7c3aed;
-  --ai-700: #6d28d9;
+  /* AI accent — the mark's teal arc.
+     Was violet, on the reasoning that it should stay distinct from a
+     then-indigo primary. Primary is now that same teal, so the AI accent
+     no longer reads as a separate family; that is a deliberate trade of
+     "AI-generated content has its own colour" for brand consistency.
+
+     --ai-600 is teal-700 rather than the nearer teal-600 (#0d9488)
+     because `variant="ai"` puts white text on it in three places
+     (recommendations, ai-action-preview, insight-card). teal-600 is only
+     3.74:1 against white and would fail AA for a button label; this is
+     5.47:1. The icon tone on --ai-50 is 5.25:1. */
+  --ai-50: #f0fdfa;
+  --ai-100: #ccfbf1;
+  --ai-500: #14b8a6;
+  --ai-600: #0f766e;
+  --ai-700: #115e59;
 
   /* ---- Brand identity, derived from the Veyntra mark ----
      The logo is two interlocking arcs around a warm spark: a teal->cyan
@@ -548,10 +558,10 @@ body {
        offsets pushed all the light sideways and left the top and bottom
        edges bare. */
     box-shadow:
-      0 0 64px 10px rgba(34, 211, 238, 0.45),
-      -22px -16px 72px 4px rgba(13, 148, 136, 0.75),
-      22px 16px 72px 4px rgba(37, 99, 235, 0.75),
-      0 0 26px 2px rgba(251, 191, 36, 0.28);
+      0 0 18px 1px rgba(34, 211, 238, 0.6),
+      -4px -3px 16px 0 rgba(13, 148, 136, 0.9),
+      4px 3px 16px 0 rgba(37, 99, 235, 0.9),
+      0 0 8px 0 rgba(251, 191, 36, 0.32);
   }
 
   /* Gradient headline text. Falls back to a solid color first, so a

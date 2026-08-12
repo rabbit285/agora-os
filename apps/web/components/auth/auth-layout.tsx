@@ -38,7 +38,10 @@ export function AuthLayout({
         <div className="mb-8">
           <Logo size="lg" />
         </div>
-        <div className="w-full max-w-sm">{children}</div>
+        {/* max-w-sm left the card at 384px marooned in a half-screen
+            panel roughly 950px wide on a desktop display. Signing in is
+            the only task on the page, so the form should own it. */}
+        <div className="w-full max-w-md lg:max-w-lg">{children}</div>
       </div>
 
       <div className="relative hidden overflow-hidden bg-[var(--gray-900)] lg:order-1 lg:flex lg:flex-col lg:justify-center lg:px-16">
