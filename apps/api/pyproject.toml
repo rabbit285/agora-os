@@ -1,7 +1,7 @@
 [project]
 name = "agora-api"
 version = "0.1.0"
-description = "Agora Origin API - modular monolith backend"
+description = "Veyntra API - modular monolith backend"
 requires-python = ">=3.12"
 
 [tool.ruff]

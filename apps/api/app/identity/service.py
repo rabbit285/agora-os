@@ -27,7 +27,7 @@ logger = logging.getLogger("agora.identity")
 SESSION_TTL = timedelta(hours=settings.session_ttl_hours)
 RESET_TOKEN_TTL = timedelta(hours=2)
 EMAIL_VERIFICATION_TTL = timedelta(hours=48)
-MFA_ISSUER_NAME = "Agora Origin"
+MFA_ISSUER_NAME = "Veyntra"
 
 
 def _slugify(name: str) -> str:

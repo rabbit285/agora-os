@@ -20,7 +20,7 @@ const CAPABILITY_LABELS: Record<keyof ProviderStatusOut["capabilities"], string>
 };
 
 /** Apollo is a per-organization OAuth connection: each customer connects
- * its own Apollo workspace and Agora Origin uses that account's
+ * its own Apollo workspace and Veyntra uses that account's
  * permissions, rate limits, and credits (see
  * docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md). This card therefore shows
  * real connection state and a Connect action for authorized users, rather
@@ -116,7 +116,7 @@ export function ProviderStatusCard({ provider }: { provider: ProviderStatusOut }
               </h4>
             </div>
             <p className="mb-3 text-xs text-[var(--fg-muted)]">
-              Agora Origin will use your organization&rsquo;s Apollo account, permissions, rate
+              Veyntra will use your organization&rsquo;s Apollo account, permissions, rate
               limits, and credits for company search and enrichment.
             </p>
             <ul className="mb-3 list-disc space-y-1 pl-5 text-xs text-[var(--fg-muted)]">

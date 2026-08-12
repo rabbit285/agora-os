@@ -1,4 +1,4 @@
-# UI/UX Audit — Agora Origin Frontend
+# UI/UX Audit — Veyntra Frontend
 
 Audit date: 2026-08-04, on branch `ui/enterprise-modernization`. This audit inspects the
 frontend as it exists today — 70 real routes, ~11,200 lines of `page.tsx` code, backed by

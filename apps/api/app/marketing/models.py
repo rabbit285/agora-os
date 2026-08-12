@@ -22,7 +22,7 @@ class DemoRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     country: Mapped[str] = mapped_column(String(100), nullable=False)
     primary_interest: Mapped[str] = mapped_column(String(100), nullable=False)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # No workflow beyond "someone at Agora followed up" exists yet — see
+    # No workflow beyond "someone at Veyntra followed up" exists yet — see
     # docs/KNOWN_LIMITATIONS.md. A plain string, not an enum, since the
     # real follow-up process this should track isn't defined yet either.
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")

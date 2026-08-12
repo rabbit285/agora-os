@@ -1,6 +1,6 @@
 # Billing architecture
 
-How Agora Origin takes money, what happens when it can't, and what is
+How Veyntra takes money, what happens when it can't, and what is
 deliberately delegated to Stripe.
 
 Related: `docs/KNOWN_LIMITATIONS.md` (what has and has not been exercised

@@ -11,7 +11,7 @@ system). Concrete design decisions building on these findings live in
 
 All live under `apps/web/app/(auth)/` (route group, no auth required) plus
 `apps/web/app/(app)/onboarding/` (requires auth). `(auth)/layout.tsx` centers a `Card`
-with a static "Agora Origin" text wordmark — no other logic.
+with a static "Veyntra" text wordmark — no other logic.
 
 | Route | Fields | States handled | Calls | On success |
 |---|---|---|---|---|

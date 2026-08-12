@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { SectionHeader } from "@/components/marketing/section-header";
 
 export const metadata: Metadata = {
-  title: "About — Agora Origin",
-  description: "Agora Origin is the secure AI operating system for SMEs.",
+  title: "About — Veyntra",
+  description: "Veyntra is the secure AI operating system for SMEs.",
   alternates: { canonical: "/about" },
 };
 
@@ -16,7 +16,7 @@ export default function AboutPage() {
         <p>
           Growing businesses accumulate tools faster than they can govern them. Compliance lives
           in spreadsheets, security findings live in a separate dashboard, sales data lives in a
-          CRM nobody fully trusts, and support tickets live somewhere else entirely. Agora Origin
+          CRM nobody fully trusts, and support tickets live somewhere else entirely. Veyntra
           exists to bring that back into one governed workspace — not by replacing every tool you
           already use, but by connecting them and adding the compliance, security, and
           automation layer most growing companies don&apos;t have time to build themselves.

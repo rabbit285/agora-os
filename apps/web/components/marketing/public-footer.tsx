@@ -68,7 +68,7 @@ export function PublicFooter() {
 
         <div className="mt-10 flex flex-col gap-4 border-t border-[var(--border-default)] pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-[var(--fg-muted)]">
-            © {year} Agora Origin,SRL. All rights reserved.
+            © {year} Veyntra,SRL. All rights reserved.
           </p>
           <Link
             href="/login"

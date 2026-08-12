@@ -29,7 +29,7 @@ export function HeroSection() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--fg-muted)]">
-            Agora Origin helps SMEs manage compliance, reduce security risk, find
+            Veyntra helps SMEs manage compliance, reduce security risk, find
             customers, support users, and automate daily operations from one intelligent
             workspace.
           </p>

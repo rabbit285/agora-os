@@ -87,7 +87,7 @@ export default function BillingSettingsPage() {
     <div>
       <PageHeader
         title="Billing & Plans"
-        description="Your plan, what it includes, and how it is paid for. Card details are handled by Stripe and never touch Agora Origin."
+        description="Your plan, what it includes, and how it is paid for. Card details are handled by Stripe and never touch Veyntra."
       />
 
       {(plansLoading || currentLoading) && (

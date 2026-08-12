@@ -17,7 +17,7 @@ export function CustomerTypeSection() {
       <SectionHeader
         eyebrow="Who it's for"
         title="Built for growing, regulated businesses"
-        description="Agora Origin fits any organization coordinating compliance, security, sales, and support in one place — typically 20–200 employees."
+        description="Veyntra fits any organization coordinating compliance, security, sales, and support in one place — typically 20–200 employees."
       />
       <div className="mt-8 flex flex-wrap justify-center gap-2">
         {CUSTOMER_TYPES.map((type) => (

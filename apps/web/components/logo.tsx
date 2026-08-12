@@ -18,7 +18,7 @@ type LogoProps = {
   className?: string;
 };
 
-/** The Agora Origin mark plus wordmark. href={null} renders a
+/** The Veyntra mark plus wordmark. href={null} renders a
  * non-interactive span instead of a link, for contexts (e.g. an auth card
  * that shouldn't navigate away) where a clickable logo would be the wrong
  * affordance. */
@@ -42,7 +42,7 @@ export function Logo({
             text,
           )}
         >
-          Agora Origin
+          Veyntra
         </span>
       )}
     </span>
@@ -53,7 +53,7 @@ export function Logo({
   }
 
   return (
-    <Link href={href} className="inline-flex items-center" aria-label="Agora Origin home">
+    <Link href={href} className="inline-flex items-center" aria-label="Veyntra home">
       {content}
     </Link>
   );

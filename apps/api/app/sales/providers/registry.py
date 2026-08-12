@@ -28,7 +28,7 @@ _DEMO = DemoSalesDataProvider()
 
 def is_apollo_oauth_available() -> bool:
     """Whether this deployment can offer Apollo connections at all — i.e.
-    whether the Agora Origin OAuth application itself is configured. Says
+    whether the Veyntra OAuth application itself is configured. Says
     nothing about whether any particular organization has connected."""
     return bool(settings.apollo_oauth_client_id and settings.apollo_oauth_client_secret)
 

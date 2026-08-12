@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).
     #
     # Production uses per-customer OAuth connections, never this key: each
-    # organization connects its own Apollo workspace and Agora Origin calls
+    # organization connects its own Apollo workspace and Veyntra calls
     # Apollo with that customer's Bearer token, permissions, limits, and
     # credits. `APOLLO_API_KEY` survives only for the isolated
     # `APOLLO_AUTH_MODE=api_key` local-development/test mode below, and

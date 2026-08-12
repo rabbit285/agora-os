@@ -113,7 +113,7 @@ against that customer's own account, permissions, rate limits, and credits.
 There is deliberately no shared platform key serving multiple customers —
 see `docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md`.
 
-These three variables configure the *Agora Origin OAuth application* (one
+These three variables configure the *Veyntra OAuth application* (one
 per deployment), not any customer's credential:
 
 | Variable | Behavior when unset |

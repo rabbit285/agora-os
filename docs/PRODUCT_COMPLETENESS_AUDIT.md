@@ -1,4 +1,4 @@
-# Agora Origin — Product Completeness Audit
+# Veyntra — Product Completeness Audit
 
 **Audit date**: 2026-08-04 (final recompute, closing out the implementation backlog)
 **Original audit date**: 2026-07-30, commit `e5fa62d`

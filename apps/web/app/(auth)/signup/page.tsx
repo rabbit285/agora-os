@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { SignupPageClient } from "./signup-page-client";
 
 export const metadata: Metadata = {
-  title: "Start free — Agora Origin",
+  title: "Start free — Veyntra",
   robots: { index: false, follow: false },
 };
 

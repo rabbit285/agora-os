@@ -24,7 +24,7 @@ from app.config import settings
 from app.integrations.adapters.base import HealthResult, SyncResult, TokenResult
 
 # Least-privilege: exactly the scopes this build's implemented capabilities
-# need (architecture §4). No write scopes — Agora Origin never creates
+# need (architecture §4). No write scopes — Veyntra never creates
 # Apollo sequences, contacts, accounts, or tasks.
 SCOPES = [
     "read_user_profile",

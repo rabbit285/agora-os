@@ -138,13 +138,13 @@ implied to work.
     are retained for provenance, so multi-workspace support later is an
     index change plus a selection UI, not a destructive redesign.
   - **No token revocation at Apollo.** Apollo publishes no revocation
-    endpoint, so disconnect clears Agora Origin's stored tokens but
+    endpoint, so disconnect clears Veyntra's stored tokens but
     cannot invalidate them at Apollo. This build does not invent a
     revocation URL.
   - **Apollo plan restrictions are the customer's own.** A connected
     account on a plan that excludes an API (e.g. Company Search on
     Apollo's trial tier) receives an honest 403 naming the limitation —
-    Agora Origin cannot and does not work around a customer's Apollo
+    Veyntra cannot and does not work around a customer's Apollo
     plan.
   - **Live verification is pending Apollo app approval.** Until Apollo
     approves the registered OAuth application, the flow is exercised
@@ -608,7 +608,7 @@ implied to work.
 - **No CI pipeline configured** (no `.github/workflows/*` yet).
 - **Local port conflicts**: this development machine has other unrelated
   Docker projects (`compliance-os`, `ai-sales-os`) bound to the default
-  ports; Agora Origin's compose stack uses an `infra/docker/.env`
+  ports; Veyntra's compose stack uses an `infra/docker/.env`
   override (gitignored) for non-standard host ports on this machine only.
   See `docs/ENVIRONMENT_VARIABLES.md`.
 - **The web container's Turbopack dev server doesn't reliably detect new

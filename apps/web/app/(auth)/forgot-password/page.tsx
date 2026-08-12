@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ForgotPasswordClient } from "./forgot-password-client";
 
 export const metadata: Metadata = {
-  title: "Reset your password — Agora Origin",
+  title: "Reset your password — Veyntra",
   robots: { index: false, follow: false },
 };
 

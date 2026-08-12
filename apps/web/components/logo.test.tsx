@@ -76,17 +76,17 @@ describe("LogoMark", () => {
 describe("Logo", () => {
   it("links home by default with an accessible name", () => {
     render(<Logo />);
-    expect(screen.getByRole("link", { name: "Agora Origin home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Veyntra home" })).toHaveAttribute("href", "/");
   });
 
   it("renders a non-interactive mark when href is null", () => {
     render(<Logo href={null} />);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.getByText("Agora Origin")).toBeInTheDocument();
+    expect(screen.getByText("Veyntra")).toBeInTheDocument();
   });
 
   it("hides the wordmark in markOnly mode (collapsed sidebar)", () => {
     render(<Logo markOnly href={null} />);
-    expect(screen.queryByText("Agora Origin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Veyntra")).not.toBeInTheDocument();
   });
 });

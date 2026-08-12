@@ -1,4 +1,4 @@
-# Agora Origin Design System
+# Veyntra Design System
 
 The design system for the enterprise modernization (branch `ui/enterprise-modernization`).
 Tokens live as CSS custom properties in `apps/web/app/globals.css`, mapped into Tailwind

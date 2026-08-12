@@ -5,9 +5,9 @@ import { PageHero } from "@/components/marketing/page-hero";
 import { TrustSection } from "@/components/marketing/trust-section";
 
 export const metadata: Metadata = {
-  title: "Security & Trust — Agora Origin",
+  title: "Security & Trust — Veyntra",
   description:
-    "How Agora Origin approaches tenant isolation, access control, audit logging, and data handling. Built with enterprise security and governance principles.",
+    "How Veyntra approaches tenant isolation, access control, audit logging, and data handling. Built with enterprise security and governance principles.",
   alternates: { canonical: "/trust" },
 };
 
@@ -76,7 +76,7 @@ export default function TrustPage() {
             What we have not done yet
           </p>
           <p className="mt-2 text-sm leading-relaxed text-[var(--warning-700)]">
-            Agora Origin is built with enterprise security and governance principles. We have not
+            Veyntra is built with enterprise security and governance principles. We have not
             completed SOC 2, ISO 27001, or a third-party penetration test at this time — if
             certification status matters for your evaluation, please ask us directly.
           </p>

@@ -17,7 +17,7 @@ You are operating as my autonomous technical co-founder and senior delivery team
 
 Build the complete production-oriented SaaS platform described in the product specification included below.
 
-The working product name is **Agora Origin** unless the repository already defines another approved name.
+The working product name is **Veyntra** unless the repository already defines another approved name.
 
 This is a serious multi-tenant B2B SaaS product for SMEs. It is not merely a UI demonstration, landing page, disconnected set of dashboards, or thin LLM wrapper.
 

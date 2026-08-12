@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Cookie Policy — Agora Origin",
-  description: "The cookies Agora Origin uses, and the ones it doesn't.",
+  title: "Cookie Policy — Veyntra",
+  description: "The cookies Veyntra uses, and the ones it doesn't.",
   alternates: { canonical: "/cookies" },
 };
 
@@ -16,7 +16,7 @@ export default function CookiesPage() {
         <section>
           <h2 className="text-base font-semibold text-[var(--fg-default)]">What we use</h2>
           <p className="mt-2">
-            Agora Origin sets exactly one cookie: a strictly necessary, HttpOnly session cookie
+            Veyntra sets exactly one cookie: a strictly necessary, HttpOnly session cookie
             used to keep you signed in. It cannot be read by JavaScript and is not used for
             tracking.
           </p>

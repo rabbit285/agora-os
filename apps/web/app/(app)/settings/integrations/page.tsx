@@ -366,7 +366,7 @@ function ProviderCatalogSection() {
                     {provider.connector_key === "apollo" && (
                       <div className="mb-3 flex flex-col gap-1 text-xs text-[var(--fg-muted)]">
                         <p>
-                          Agora Origin will use your organization&rsquo;s Apollo account,
+                          Veyntra will use your organization&rsquo;s Apollo account,
                           permissions, rate limits, and credits for company search and enrichment.
                         </p>
                         <p>

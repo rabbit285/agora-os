@@ -2680,21 +2680,21 @@ demo-mode honesty) stands unchanged.
 **Why not a shared key.** A single platform credential makes every
 customer's searches share one account's rate limits, one plan's
 capabilities, and one credit pool — so one tenant's usage degrades every
-other tenant's, Agora Origin silently funds all prospecting, and Apollo's
+other tenant's, Veyntra silently funds all prospecting, and Apollo's
 own per-account permissions can't be honored per customer. It also gives
-Agora Origin's key visibility into which companies every customer is
+Veyntra's key visibility into which companies every customer is
 researching. Customer-connected OAuth removes all four problems at once,
 and is the only model under which "Apollo credits" honestly belong to the
 customer being charged.
 
 **Why not ask for an API key instead.** Pasting a personal Apollo API key
 into a third-party product trains exactly the credential-sharing habit
-security programs try to eliminate, gives Agora Origin a long-lived secret
+security programs try to eliminate, gives Veyntra a long-lived secret
 with no scoping and no revocation story, and cannot express least-privilege
 capability grants. OAuth gives per-capability scopes, an explicit user-facing
 consent step, a refresh/expiry lifecycle, and a real disconnect.
 
-**Registration.** Agora Origin registers one OAuth application per
+**Registration.** Veyntra registers one OAuth application per
 deployment in Apollo (Settings → Integrations → API/OAuth) with the
 approved logo and the exact HTTPS callback URL; separate URLs for
 development, staging, and production. Apollo requires HTTPS, so local

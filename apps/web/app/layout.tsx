@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: {
-    default: "Agora Origin — The secure AI operating system for SMEs",
+    default: "Veyntra — The secure AI operating system for SMEs",
     template: "%s",
   },
   description: "AI-powered business operating system for SMEs",

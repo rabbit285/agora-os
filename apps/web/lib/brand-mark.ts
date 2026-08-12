@@ -1,4 +1,4 @@
-/** The Agora Origin mark as a standalone SVG string, for contexts that
+/** The Veyntra mark as a standalone SVG string, for contexts that
  * can't render the `LogoMark` React component: `next/og` `ImageResponse`
  * routes (apple-icon, opengraph-image) rasterize through Satori, which
  * takes an `<img src="data:...">` far more reliably than inline SVG JSX.
