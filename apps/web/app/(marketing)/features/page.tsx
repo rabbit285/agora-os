@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { FeatureGrid, type FeatureItem } from "@/components/marketing/feature-grid";
-import { SectionHeader } from "@/components/marketing/section-header";
+import { PageHero } from "@/components/marketing/page-hero";
 
 export const metadata: Metadata = {
   title: "Product — Agora Origin",
@@ -88,29 +88,53 @@ const SECTIONS: { id: string; title: string; description: string; items: Feature
 
 export default function FeaturesPage() {
   return (
-    <div className="mx-auto max-w-[var(--content-max-width)] px-4 py-16 sm:px-6 lg:px-8">
-      <SectionHeader
+    <div>
+      <PageHero
         eyebrow="Product"
-        title="Everything your operations team needs, in one place"
+        title="Everything your operations team needs,"
+        accent="in one place"
         description="Compliance, security, sales, support, automation, and AI governance — sharing the same organization, permissions, and audit trail."
-        align="left"
-        className="max-w-2xl mx-0 text-left"
-      />
-      <div className="mt-4 flex items-center gap-2 text-sm text-[var(--fg-muted)]">
-        <Gauge className="h-4 w-4" aria-hidden="true" />
-        Plus an AI Copilot that works across every module below.
-      </div>
+      >
+        <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-4 py-2 text-sm text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
+          <Gauge className="h-4 w-4 text-[var(--brand-primary)]" aria-hidden="true" />
+          Plus an AI Copilot that works across every module below.
+        </p>
+      </PageHero>
 
-      <div className="mt-16 flex flex-col gap-16">
-        {SECTIONS.map((section) => (
-          <div key={section.id} id={section.id} className="scroll-mt-24">
-            <h2 className="text-xl font-semibold text-[var(--fg-default)]">{section.title}</h2>
-            <p className="mt-1 max-w-xl text-sm text-[var(--fg-muted)]">{section.description}</p>
-            <div className="mt-6">
-              <FeatureGrid items={section.items} />
-            </div>
-          </div>
-        ))}
+      <div className="mx-auto max-w-[var(--content-max-width)] px-4 pb-24 sm:px-6 lg:px-8">
+        {/* Each module is a panel rather than a run of headings: this page
+            is linked into per-section (/features#security from the module
+            cards on the homepage), so a reader usually lands mid-page and
+            needs the section they jumped to to be visually self-contained. */}
+        <div className="flex flex-col gap-6">
+          {SECTIONS.map((section) => (
+            <section
+              key={section.id}
+              id={section.id}
+              aria-labelledby={`${section.id}-heading`}
+              className="scroll-mt-28 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 sm:p-8"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-1 rounded-full bg-[image:var(--gradient-brand)]"
+                />
+                <h2
+                  id={`${section.id}-heading`}
+                  className="text-2xl font-semibold tracking-tight text-[var(--fg-default)]"
+                >
+                  {section.title}
+                </h2>
+              </div>
+              <p className="mt-2 max-w-2xl text-base leading-relaxed text-[var(--fg-muted)]">
+                {section.description}
+              </p>
+              <div className="mt-7 border-t border-[var(--border-default)] pt-7">
+                <FeatureGrid items={section.items} />
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );
