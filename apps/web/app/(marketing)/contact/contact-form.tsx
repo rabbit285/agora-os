@@ -132,7 +132,7 @@ export function ContactForm() {
       </div>
       {serverError && <AuthAlert variant="error">{serverError}</AuthAlert>}
       <p className="text-xs text-[var(--fg-muted)]">
-        By submitting, you agree to be contacted about Agora Origin. See our{" "}
+        By submitting, you agree to be contacted about Veyntra. See our{" "}
         <Link href="/privacy" className="underline hover:text-[var(--fg-muted)]">
           Privacy Policy
         </Link>

@@ -7,7 +7,7 @@ import { PricingPreview } from "@/components/marketing/pricing-preview";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Pricing — Agora Origin",
+  title: "Pricing — Veyntra",
   description: "Simple plans that grow with you — from a free workspace to enterprise-scale governance.",
   alternates: { canonical: "/pricing" },
 };

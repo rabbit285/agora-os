@@ -6,8 +6,8 @@ import { PageHero } from "@/components/marketing/page-hero";
 import { WorkflowExample } from "@/components/marketing/workflow-example";
 
 export const metadata: Metadata = {
-  title: "Solutions — Agora Origin",
-  description: "How Agora Origin fits growing, regulated businesses across compliance, security, sales, and support.",
+  title: "Solutions — Veyntra",
+  description: "How Veyntra fits growing, regulated businesses across compliance, security, sales, and support.",
   alternates: { canonical: "/solutions" },
 };
 
@@ -45,7 +45,7 @@ export default function SolutionsPage() {
         eyebrow="Solutions"
         title="Built for the teams that keep a growing business"
         accent="governed"
-        description="Agora Origin adapts to how your teams already work, without asking them to abandon the tools that already fit."
+        description="Veyntra adapts to how your teams already work, without asking them to abandon the tools that already fit."
       />
 
       <div className="mx-auto max-w-[var(--content-max-width)] px-4 pb-24 sm:px-6 lg:px-8">

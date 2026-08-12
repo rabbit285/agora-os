@@ -127,11 +127,11 @@ language.
 
 `Logo` (`apps/web/components/logo.tsx`) is new and shared by literally everything —
 `PublicHeader`, `AuthLayout`, and the existing `AppSidebar`/`(auth)/layout.tsx` (which today
-each independently render the plain text string "Agora Origin" — both are updated to use
+each independently render the plain text string "Veyntra" — both are updated to use
 the same component, so the brand mark is consistent everywhere for the first time). It's a
 small SVG wordmark: a minimal geometric mark (a rounded square containing a stylized
 concentric-node motif in `--brand-primary`, evoking "a governed center" — deliberately
-restrained, not a literal shield/lock cliché) plus the "Agora Origin" text set in the
+restrained, not a literal shield/lock cliché) plus the "Veyntra" text set in the
 existing Geist Sans, with a `size` prop (`sm`/`md`/`lg`) and a `markOnly` prop for the
 favicon/collapsed-sidebar case. The generated favicon and OG image are both derived from
 this same mark for visual consistency (previously: an untouched default Next.js favicon,

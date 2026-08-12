@@ -398,7 +398,7 @@ async def estimate_enrichment(
         record_count=len(payload.record_ids),
     )
     # Names the customer's own Apollo workspace that will be charged, so
-    # the confirmation dialog can never imply Agora Origin supplies the
+    # the confirmation dialog can never imply Veyntra supplies the
     # credits (docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md §9).
     connection = await get_active_apollo_connection(db, organization_id=context.organization_id)
     return CreditEstimatePreviewOut(

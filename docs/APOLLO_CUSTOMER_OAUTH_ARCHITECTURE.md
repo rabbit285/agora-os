@@ -1,9 +1,9 @@
 # Apollo Customer-Connected OAuth — Architecture
 
-The production model: each Agora Origin **customer organization connects its
+The production model: each Veyntra **customer organization connects its
 own Apollo workspace** via OAuth 2.0. Every Apollo search and enrichment
 request runs against that customer's Apollo account, permissions, rate
-limits, and credits. Agora Origin never supplies Apollo data from one shared
+limits, and credits. Veyntra never supplies Apollo data from one shared
 platform key, and never asks a customer to paste an Apollo password or
 personal API key.
 
@@ -181,7 +181,7 @@ no Apollo connection gets the deterministic demo provider, never fabricated
 ## 9. Credit ownership
 
 All Apollo credit consumption belongs to the connected customer's Apollo
-workspace. Agora Origin maintains no credit pool and never deducts one.
+workspace. Veyntra maintains no credit pool and never deducts one.
 `SalesProviderCreditUsage` gains a nullable `connection_id` so usage is
 attributable to a specific connection (and therefore to a specific connected
 Apollo user), alongside the existing organization, initiating Agora user,

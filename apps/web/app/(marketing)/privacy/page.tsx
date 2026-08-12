@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Agora Origin",
-  description: "How Agora Origin collects, uses, and protects your data.",
+  title: "Privacy Policy — Veyntra",
+  description: "How Veyntra collects, uses, and protects your data.",
   alternates: { canonical: "/privacy" },
 };
 

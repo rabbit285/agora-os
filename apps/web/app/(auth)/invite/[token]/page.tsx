@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { AcceptInvitationForm } from "./accept-invitation-form";
 
 export const metadata: Metadata = {
-  title: "Accept invitation — Agora Origin",
+  title: "Accept invitation — Veyntra",
   robots: { index: false, follow: false },
 };
 

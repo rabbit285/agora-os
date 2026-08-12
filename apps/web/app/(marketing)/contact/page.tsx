@@ -6,8 +6,8 @@ import { SectionHeader } from "@/components/marketing/section-header";
 import { ContactForm } from "./contact-form";
 
 export const metadata: Metadata = {
-  title: "Contact — Agora Origin",
-  description: "Request a demo or get in touch with the Agora Origin team.",
+  title: "Contact — Veyntra",
+  description: "Request a demo or get in touch with the Veyntra team.",
   alternates: { canonical: "/contact" },
 };
 

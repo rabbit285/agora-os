@@ -51,7 +51,7 @@
   --ai-600: #7c3aed;
   --ai-700: #6d28d9;
 
-  /* ---- Brand identity, derived from the Agora Origin mark ----
+  /* ---- Brand identity, derived from the Veyntra mark ----
      The logo is two interlocking arcs around a warm spark: a teal->cyan
      arc and a violet->blue arc, meeting at an amber four-point star. Those
      three families are the whole brand vocabulary, defined once here so
@@ -515,6 +515,43 @@ body {
     .btn-glow::before {
       transition: none;
     }
+  }
+
+  /* ---- Active carousel-slide bloom ----
+     The same trick as .btn-glow, scaled up: a box-shadow paints only
+     outside its border box, so a layer sitting exactly on the card's
+     footprint throws colored light around it without touching the image.
+
+     It has to be its own element rather than a pseudo-element on the card,
+     because the card carries `overflow-hidden` to clip the photo to its
+     rounded corners — which would clip this away too. The layer is
+     rendered *before* the card in DOM order, so the card paints over it
+     with no z-index needed (a negative z-index would drop it behind any
+     ancestor that paints a background).
+
+     Colors follow the mark rather than AWS's pink/orange: teal sweeping
+     in from the left, blue from the right, and a low amber wash beneath
+     for the spark at the center. box-shadow takes no gradient, so the
+     multi-tone effect comes from stacking them. */
+  .card-bloom {
+    /* Alphas run high because these hues sit on a near-white page: teal
+       and blue read far softer against --bg-app than AWS's saturated
+       pink/orange do, so matching their *perceived* intensity takes more
+       opacity, not the same numbers.
+
+       The first shadow is the one that wraps the card: zero offset and a
+       positive spread, so it radiates the same distance on all four
+       sides. The offset pair only tints that halo teal toward the top
+       left and blue toward the bottom right — box-shadow takes no
+       gradient, so a two-tone edge has to be stacked. They carry a
+       positive spread too; with the negative spreads used before, the
+       offsets pushed all the light sideways and left the top and bottom
+       edges bare. */
+    box-shadow:
+      0 0 64px 10px rgba(34, 211, 238, 0.45),
+      -22px -16px 72px 4px rgba(13, 148, 136, 0.75),
+      22px 16px 72px 4px rgba(37, 99, 235, 0.75),
+      0 0 26px 2px rgba(251, 191, 36, 0.28);
   }
 
   /* Gradient headline text. Falls back to a solid color first, so a

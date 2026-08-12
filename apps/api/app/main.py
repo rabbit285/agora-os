@@ -89,7 +89,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Agora Origin API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Veyntra API", version="0.1.0", lifespan=lifespan)
 
 # spec §E7 "API Quality": rate limiting and idempotency for side effects.
 # Both fail open on a Redis outage. Added before CORSMiddleware: Starlette

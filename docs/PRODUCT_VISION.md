@@ -1,9 +1,9 @@
-# Product Vision — Agora Origin
+# Product Vision — Veyntra
 
 ## What this is
 
-Agora Origin is a multi-tenant B2B SaaS "AI Business Operating System" for
-European SMEs (10–500 employees). It unifies five business applications
+Veyntra is a multi-tenant B2B SaaS "AI Business Operating System" for
+SMEs (10–500 employees). It unifies five business applications
 around one company knowledge layer, one AI infrastructure, one governance
 model, and one audit trail:
 
@@ -38,13 +38,13 @@ spec into an implementable architecture.
 
 ## Target customer
 
-European SaaS/software/consulting/e-commerce/FinTech/HealthTech companies,
+SaaS/software/consulting/e-commerce/FinTech/HealthTech companies,
 10–500 employees. Buyers: Founder/CEO/COO/CTO/CISO/DPO/Compliance
 Manager/Head of Sales/Head of Support/Operations Manager.
 
 ## Positioning
 
-> One secure AI operating system that helps European businesses stay
+> One secure AI operating system that helps businesses stay
 > compliant, sell more, support customers, automate operations, and safely
 > adopt AI.
 

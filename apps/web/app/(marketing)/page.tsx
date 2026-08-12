@@ -14,12 +14,12 @@ import { WorkflowExample } from "@/components/marketing/workflow-example";
 import { WorldMapBackdropLazy } from "@/components/marketing/world-map-backdrop-lazy";
 
 export const metadata: Metadata = {
-  title: "Agora Origin — The secure AI operating system for European SMEs",
+  title: "Veyntra — The secure AI operating system for SMEs",
   description:
-    "Agora Origin helps European SMEs manage compliance, reduce security risk, find customers, support users, and automate daily operations from one intelligent workspace.",
+    "Veyntra helps SMEs manage compliance, reduce security risk, find customers, support users, and automate daily operations from one intelligent workspace.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Agora Origin — The secure AI operating system for European SMEs",
+    title: "Veyntra — The secure AI operating system for SMEs",
     description:
       "Compliance, security, sales, support, and automation — from one governed workspace.",
     url: "/",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 const HOW_IT_WORKS = [
   { step: "1", title: "Connect your business tools", description: "Bring in CRM, calendar, mail, and engineering data through read-only or configurable integrations." },
-  { step: "2", title: "Understand risks and opportunities", description: "Agora Origin surfaces compliance gaps, security findings, and sales signals across your data." },
+  { step: "2", title: "Understand risks and opportunities", description: "Veyntra surfaces compliance gaps, security findings, and sales signals across your data." },
   { step: "3", title: "Receive AI-assisted recommendations", description: "The AI Copilot proposes next actions, grounded in your organization's own records." },
   { step: "4", title: "Review, approve, and automate", description: "Nothing sensitive runs without a human review — approved actions become repeatable automations." },
 ];
@@ -99,7 +99,7 @@ export default function HomePage() {
           ))}
         </div>
         <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-[var(--fg-muted)]">
-          Agora Origin can analyze, recommend, and prepare actions, while important changes remain
+          Veyntra can analyze, recommend, and prepare actions, while important changes remain
           permission-aware, reviewable, and auditable.
         </p>
       </section>

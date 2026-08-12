@@ -167,18 +167,26 @@ export function ModuleCarousel() {
   const current = SLIDES[selectedIndex] ?? SLIDES[0];
 
   return (
-    <section className="mx-auto max-w-[var(--content-max-width)] px-4 py-20 sm:px-6 lg:px-8">
-      <SectionHeader
-        eyebrow="Platform"
-        title="One platform for the work that keeps your business moving."
-        description="Bring compliance, security, sales, customer support, automation, and AI governance into one connected workspace."
-      />
+    <section className="py-20">
+      {/* The heading stays in the normal content column; only the carousel
+          breaks out. A full-width band of prose would be unreadable. */}
+      <div className="mx-auto max-w-[var(--content-max-width)] px-4 sm:px-6 lg:px-8">
+        <SectionHeader
+          eyebrow="Platform"
+          title="One platform for the work that keeps your business moving."
+          description="Bring compliance, security, sales, customer support, automation, and AI governance into one connected workspace."
+        />
+      </div>
 
       <div
         role="region"
         aria-roledescription="carousel"
         aria-label="Product modules"
-        className="mt-12"
+        // Wider than --content-max-width on purpose: the neighbouring
+        // slides are meant to run off both edges, which is what signals
+        // "there is more here" without a caption saying so. Capped at
+        // 120rem so an ultrawide monitor doesn't get an absurd slide.
+        className="mx-auto mt-12 max-w-[120rem] px-4 sm:px-6 lg:px-0"
         onMouseEnter={() => setIsInteracting(true)}
         onMouseLeave={() => setIsInteracting(false)}
         onFocus={() => setIsInteracting(true)}
@@ -197,8 +205,14 @@ export function ModuleCarousel() {
           }
         }}
       >
-        <div className="overflow-hidden" ref={emblaRef}>
-          <div className="-mx-2 flex sm:-mx-3">
+        {/* The viewport must clip horizontally — that is what makes the
+            neighbouring slides run off the edges. But it clips vertically
+            too, which sheared the active slide's bloom flat against the
+            top and bottom of the card. Padding opens up room inside the
+            clip for the glow to finish; the matching negative margin
+            takes that space back out of the layout, so nothing moves. */}
+        <div className="overflow-hidden py-12 -my-12" ref={emblaRef}>
+          <div className="-mx-2 flex sm:-mx-3 lg:-mx-4">
             {SLIDES.map((slide, index) => {
               const isActive = index === selectedIndex;
               const media = (
@@ -208,7 +222,7 @@ export function ModuleCarousel() {
                       src={slide.image}
                       alt={slide.alt}
                       fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 84vw, 60vw"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 84vw, 68vw"
                       className="object-cover object-[68%_center]"
                       priority={index === 0}
                     />
@@ -221,15 +235,20 @@ export function ModuleCarousel() {
                     }}
                   />
 
-                  <span className="absolute left-4 top-4 inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[var(--fg-default)] sm:left-6 sm:top-6">
+                  <span className="absolute left-4 top-4 inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-[var(--fg-default)] sm:left-6 sm:top-6 lg:left-10 lg:top-10 lg:px-3.5 lg:py-1.5 lg:text-sm">
                     {slide.label}
                   </span>
 
-                  <div className="absolute inset-x-4 bottom-4 sm:inset-x-6 sm:bottom-6 lg:max-w-md">
-                    <h3 className="text-base font-semibold text-white transition-colors duration-[var(--transition-card)] ease-[var(--ease-card)] group-hover:text-white sm:text-lg lg:text-xl">
+                  {/* Copy scales with the card — at the large size the old
+                      text held its original scale and read as a caption
+                      floating in a lot of empty image. */}
+                  <div className="absolute inset-x-4 bottom-4 sm:inset-x-6 sm:bottom-6 lg:inset-x-10 lg:bottom-10 lg:max-w-xl">
+                    <h3 className="text-base font-semibold text-white transition-colors duration-[var(--transition-card)] ease-[var(--ease-card)] group-hover:text-white sm:text-lg lg:text-[length:var(--text-3xl)] lg:leading-tight">
                       {slide.headline}
                     </h3>
-                    <p className="mt-2 text-xs leading-relaxed text-white/85 sm:text-sm">{slide.description}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-white/85 sm:text-sm lg:mt-3 lg:text-base">
+                      {slide.description}
+                    </p>
                     {isActive ? (
                       <Link
                         href={slide.href}
@@ -248,8 +267,12 @@ export function ModuleCarousel() {
                 </>
               );
 
+              // Widens rather than just scaling up: at ~68% of a 1900px
+              // viewport a 16/9 card would stand 727px tall and push the
+              // controls off the fold, so the large breakpoint trades
+              // height for width.
               const cardClassName = cn(
-                "block aspect-[3/4] w-full overflow-hidden p-0 text-left sm:aspect-[16/9]",
+                "block aspect-[3/4] w-full overflow-hidden p-0 text-left sm:aspect-[16/9] lg:aspect-[2/1]",
                 !isActive &&
                   "scale-[0.95] opacity-[0.85] motion-reduce:scale-100 motion-reduce:opacity-100",
               );
@@ -257,25 +280,44 @@ export function ModuleCarousel() {
               return (
                 <div
                   key={slide.id}
-                  className="min-w-0 flex-[0_0_100%] px-2 sm:flex-[0_0_84%] sm:px-3 lg:flex-[0_0_68%]"
+                  className="min-w-0 flex-[0_0_100%] px-2 sm:flex-[0_0_84%] sm:px-3 lg:flex-[0_0_68%] lg:px-4"
                   aria-roledescription="slide"
                   aria-label={`${index + 1} of ${total}: ${slide.label}`}
                   aria-hidden={!isActive}
                 >
-                  {isActive ? (
-                    <InteractiveCard selected className={cardClassName}>
-                      {media}
-                    </InteractiveCard>
-                  ) : (
-                    <InteractiveCard
-                      onClick={() => scrollTo(index)}
-                      tabIndex={-1}
-                      aria-label={`Show the ${slide.label} module`}
-                      className={cardClassName}
-                    >
-                      {media}
-                    </InteractiveCard>
-                  )}
+                  {/* A *named* group: InteractiveCard already claims the
+                      bare `group` for its own hover affordances, and an
+                      unnamed nested one would make `group-hover` here
+                      ambiguous. The bloom is an earlier sibling than the
+                      card, so `peer-*` cannot reach it — it only works
+                      forwards — which is why the hover is read from the
+                      shared wrapper instead. */}
+                  <div className="group/slide relative">
+                    {/* Always rendered, toggled by opacity, so the light
+                        fades in and out instead of popping. */}
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        "card-bloom pointer-events-none absolute inset-0 rounded-[var(--radius-lg)] transition-opacity duration-[var(--transition-card)] ease-[var(--ease-card)]",
+                        "group-hover/slide:opacity-100 group-focus-within/slide:opacity-100",
+                        isActive ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {isActive ? (
+                      <InteractiveCard selected className={cardClassName}>
+                        {media}
+                      </InteractiveCard>
+                    ) : (
+                      <InteractiveCard
+                        onClick={() => scrollTo(index)}
+                        tabIndex={-1}
+                        aria-label={`Show the ${slide.label} module`}
+                        className={cardClassName}
+                      >
+                        {media}
+                      </InteractiveCard>
+                    )}
+                  </div>
                 </div>
               );
             })}

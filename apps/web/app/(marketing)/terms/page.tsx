@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Agora Origin",
-  description: "The terms that govern use of Agora Origin.",
+  title: "Terms of Service — Veyntra",
+  description: "The terms that govern use of Veyntra.",
   alternates: { canonical: "/terms" },
 };
 
@@ -25,7 +25,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-base font-semibold text-[var(--fg-default)]">Acceptable use</h2>
           <p className="mt-2">
-            Agora Origin is provided for legitimate business use. You may not use it to store or
+            Veyntra is provided for legitimate business use. You may not use it to store or
             process data you don&apos;t have the right to process, or to attempt to access
             another organization&apos;s workspace.
           </p>

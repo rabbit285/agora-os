@@ -113,7 +113,7 @@ def _provider_specs() -> dict[str, _ProviderSpec]:
             settings.intercom_redirect_uri,
         ),
         # The Sales Lead Finder's customer-connected data provider: each
-        # organization authorizes its own Apollo workspace and Agora Origin
+        # organization authorizes its own Apollo workspace and Veyntra
         # uses that customer's own account, permissions, limits, and
         # credits — never one shared platform key (see
         # docs/APOLLO_CUSTOMER_OAUTH_ARCHITECTURE.md).

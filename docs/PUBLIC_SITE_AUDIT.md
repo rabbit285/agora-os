@@ -30,7 +30,7 @@ apps/web/app/
 │   └── ...23 module directories (approvals, automation, compliance, knowledge,
 │         onboarding, sales, security, settings, support, tasks, ...)
 ├── (auth)/                     # unauthenticated auth flows
-│   ├── layout.tsx                # centered Card, plain "Agora Origin" text wordmark
+│   ├── layout.tsx                # centered Card, plain "Veyntra" text wordmark
 │   └── login/, signup/, forgot-password/, reset-password/[token]/,
 │         verify-email/[token]/, invite/[token]/, mfa-challenge/
 └── trust/[org_slug]/page.tsx   # a genuinely public route OUTSIDE both groups — a
@@ -140,7 +140,7 @@ Full token inventory, `apps/web/app/globals.css` (mirrored in `docs/DESIGN_SYSTE
   radius vocabulary. See `docs/PUBLIC_SITE_DESIGN.md` §1.
 
 **No logo exists.** The "logo" everywhere in the app today is the plain text string
-`"Agora Origin"` (`apps/web/components/app-sidebar.tsx:49-51`,
+`"Veyntra"` (`apps/web/components/app-sidebar.tsx:49-51`,
 `apps/web/app/(auth)/layout.tsx:5-7`) — no SVG mark, no icon, no favicon beyond the
 untouched Next.js default. `apps/web/public/` contains only stock `create-next-app`
 scaffold SVGs (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`) — zero real

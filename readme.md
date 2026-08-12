@@ -1,6 +1,6 @@
-# Agora Origin
+# Veyntra
 
-AI-powered business operating system for European SMEs — a multi-tenant
+AI-powered business operating system for SMEs — a multi-tenant
 B2B SaaS platform unifying Compliance, Security, Sales, Customer Support,
 and Business Process Automation around one company knowledge layer, one
 AI infrastructure, and one governance/audit model.

@@ -105,9 +105,9 @@ customer-owned Apollo connections.
 Implementation proceeds against the mock adapter; the following require real
 action in Apollo before live verification is possible:
 
-1. Register Agora Origin as an OAuth integration in Apollo (Settings →
+1. Register Veyntra as an OAuth integration in Apollo (Settings →
    Integrations → API/OAuth registration).
-2. Upload the approved Agora Origin logo.
+2. Upload the approved Veyntra logo.
 3. Register the exact HTTPS callback URL(s) — separate ones for
    development, staging, and production where supported. Apollo requires
    HTTPS; local development needs an HTTPS tunnel rather than weakened

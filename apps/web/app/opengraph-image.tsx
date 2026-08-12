@@ -27,7 +27,7 @@ export default function OpengraphImage() {
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 44 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={BRAND_MARK_DATA_URI} width={64} height={64} alt="" />
-          <div style={{ fontSize: 36, fontWeight: 700, color: "#e8edf7" }}>Agora Origin</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: "#e8edf7" }}>Veyntra</div>
         </div>
         <div
           style={{
@@ -38,7 +38,7 @@ export default function OpengraphImage() {
             lineHeight: 1.15,
           }}
         >
-          The secure AI operating system for European SMEs
+          The secure AI operating system for SMEs
         </div>
         <div style={{ fontSize: 26, color: "#96a3bd", marginTop: 28, maxWidth: 840 }}>
           Compliance, security, sales, support, and automation — from one governed workspace.

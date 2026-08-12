@@ -13,7 +13,7 @@ import { FeatureGrid, type FeatureItem } from "@/components/marketing/feature-gr
 import { PageHero } from "@/components/marketing/page-hero";
 
 export const metadata: Metadata = {
-  title: "Product — Agora Origin",
+  title: "Product — Veyntra",
   description:
     "Compliance, security, sales, support, automation, AI governance, knowledge management, and an AI Copilot — one platform, permission-aware throughout.",
   alternates: { canonical: "/features" },
