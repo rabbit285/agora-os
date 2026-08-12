@@ -279,20 +279,31 @@ export function ModuleCarousel() {
                   aria-label={`${index + 1} of ${total}: ${slide.label}`}
                   aria-hidden={!isActive}
                 >
-                  {isActive ? (
-                    <InteractiveCard selected className={cardClassName}>
-                      {media}
-                    </InteractiveCard>
-                  ) : (
-                    <InteractiveCard
-                      onClick={() => scrollTo(index)}
-                      tabIndex={-1}
-                      aria-label={`Show the ${slide.label} module`}
-                      className={cardClassName}
-                    >
-                      {media}
-                    </InteractiveCard>
-                  )}
+                  <div className="relative">
+                    {/* Always rendered, toggled by opacity, so the light
+                        fades between slides instead of popping on. */}
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        "card-bloom pointer-events-none absolute inset-0 rounded-[var(--radius-lg)] transition-opacity duration-[var(--transition-card)] ease-[var(--ease-card)]",
+                        isActive ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {isActive ? (
+                      <InteractiveCard selected className={cardClassName}>
+                        {media}
+                      </InteractiveCard>
+                    ) : (
+                      <InteractiveCard
+                        onClick={() => scrollTo(index)}
+                        tabIndex={-1}
+                        aria-label={`Show the ${slide.label} module`}
+                        className={cardClassName}
+                      >
+                        {media}
+                      </InteractiveCard>
+                    )}
+                  </div>
                 </div>
               );
             })}

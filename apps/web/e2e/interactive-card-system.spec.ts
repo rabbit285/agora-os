@@ -115,9 +115,11 @@ test.describe("Interactive card system", () => {
     // measured while it was still an unselected, scaled-down neighbor.
     // The active slide's own InteractiveCard is a plain <div> (its CTA
     // <a> is nested inside it, not the card itself — only inactive
-    // slides' whole card is the clickable element) — "> .group" matches
+    // slides' whole card is the clickable element) — ".group" matches
     // either shape via the class every InteractiveCard variant shares.
-    const activeAfterState = await motionState(activeAfter.locator("> .group"));
+    // Not a direct-child selector: the card sits inside the positioning
+    // wrapper that carries the active slide's bloom layer.
+    const activeAfterState = await motionState(activeAfter.locator(".group"));
     expect(activeAfterState.scale).not.toBe(neighborBefore.scale);
   });
 
