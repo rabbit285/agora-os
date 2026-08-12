@@ -293,14 +293,21 @@ export function ModuleCarousel() {
                       forwards — which is why the hover is read from the
                       shared wrapper instead. */}
                   <div className="group/slide relative">
-                    {/* Always rendered, toggled by opacity, so the light
-                        fades in and out instead of popping. */}
+                    {/* Hover/focus only — the active slide does not carry
+                        the glow at rest. It is already marked as current
+                        by its border, its full scale and opacity, and the
+                        pager; lighting it permanently as well left the
+                        glow meaning "selected" rather than "you are
+                        pointing at this", and nothing on screen then
+                        responded to the cursor.
+
+                        Always rendered and toggled by opacity so the
+                        light fades in and out instead of popping. */}
                     <div
                       aria-hidden="true"
                       className={cn(
-                        "card-bloom pointer-events-none absolute inset-0 rounded-[var(--radius-lg)] transition-opacity duration-[var(--transition-card)] ease-[var(--ease-card)]",
+                        "card-bloom pointer-events-none absolute inset-0 rounded-[var(--radius-lg)] opacity-0 transition-opacity duration-[var(--transition-card)] ease-[var(--ease-card)]",
                         "group-hover/slide:opacity-100 group-focus-within/slide:opacity-100",
-                        isActive ? "opacity-100" : "opacity-0",
                       )}
                     />
                     {isActive ? (
