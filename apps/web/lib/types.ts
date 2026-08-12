@@ -181,10 +181,33 @@ export type Plan = {
   entitlements: Record<string, number | boolean | null>;
 };
 
+/** Billing state, kept separate from entitlements so the UI can explain
+ * *why* something is unavailable instead of just showing it greyed out. */
+export type Subscription = {
+  /** What the row says: trialing | active | past_due | trial_expired | canceled. */
+  status: string;
+  /** What the entitlement service actually resolved. Not always `status` —
+   * an expired trial still reads "trialing" in the row until a write
+   * touches it, but resolves to "locked" here. Branch on this. */
+  access_state: "trialing" | "active" | "past_due" | "locked";
+  plan_key: string;
+  trial_ends_at: string | null;
+  trial_days_remaining: number | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  /** False when the deployment has no Stripe keys — upgrade buttons must
+   * say so rather than leading to a dead end. */
+  payments_configured: boolean;
+  has_payment_method: boolean;
+  tax_id: string | null;
+};
+
 export type OrganizationPlan = {
   plan_key: string;
   entitlements: Record<string, number | boolean | null>;
   current_users: number;
+  /** Null only for organizations created before billing existed. */
+  subscription: Subscription | null;
 };
 
 export const ENTITLEMENT_LABELS: Record<string, string> = {

@@ -26,6 +26,14 @@ x-api-env: &api-env
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   APOLLO_API_KEY: ${APOLLO_API_KEY:-}
+  # Billing. All optional: with these unset the Starter trial still works
+  # (it takes no card) and checkout refuses honestly rather than faking a
+  # purchase. See docs/BILLING_ARCHITECTURE.md §6 for a test-mode run.
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  STRIPE_PRICE_GROWTH: ${STRIPE_PRICE_GROWTH:-}
+  STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS:-}
 
 services:
   postgres:

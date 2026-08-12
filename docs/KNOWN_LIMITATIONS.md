@@ -492,10 +492,31 @@ implied to work.
   up org — defaults to Starter, whose catalog has `trust_center_enabled:
   false`, which would have silently broken a feature that predates
   Billing entirely. No other pre-existing feature is retroactively
-  gated. There is no Stripe/payment integration anywhere — switching
-  plans on `/settings/billing` is an immediate, free, self-service
-  change, not a checkout flow; this matches the spec's own "Plans
-  architecture:" qualifier on that half of §64.
+  gated. That narrowness is why the lapsed-plan lock added in 2026-08 is
+  *not* built on entitlement values: with only two call sites consulting
+  them, zeroing entitlements would leave a "locked" org still able to
+  create everything except invitations. The lock is instead a single
+  check on mutating requests in `app.dependencies._enforce_subscription_
+  lock` — see `docs/BILLING_ARCHITECTURE.md` §3.
+
+  **Payment collection was added 2026-08-12** and this entry's original
+  "there is no Stripe/payment integration anywhere" no longer holds — see
+  `docs/BILLING_ARCHITECTURE.md`. Growth and Business are now bought
+  through Stripe Checkout and granted only by a signature-verified
+  webhook; `PUT /billing/current` no longer hands out paid plans, which
+  was a real hole (an org_admin could assign themselves Enterprise for
+  free). What remains limited: **the Stripe integration has never been
+  exercised against real Stripe credentials.** Every test drives the
+  webhook path with a locally-signed payload and no `STRIPE_SECRET_KEY`,
+  so the outbound half — customer creation, Checkout Session creation,
+  the billing portal, and Stripe Tax's actual VAT/reverse-charge
+  behaviour — is verified only against the documented API shape, not
+  against Stripe itself. Anyone enabling this in production should run a
+  full test-mode purchase first (`docs/BILLING_ARCHITECTURE.md` §6).
+  Dunning beyond Stripe's own retry schedule, proration on mid-cycle plan
+  changes, and invoice history in-app are not implemented; the first two
+  are left to Stripe's defaults and the third is delegated to Stripe's
+  hosted billing portal.
 - **Reporting (spec §65) is real for all 14 named report types and all
   5 export options** (fixed 2026-08-04, PLAT-20), with two disclosed
   scope choices. First, "Secure link" is realized as the same signed-

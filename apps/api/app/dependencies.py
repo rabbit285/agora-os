@@ -101,12 +101,65 @@ async def get_org_context(
         # whether the organization exists if the user isn't a member of it.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
+    await _enforce_subscription_lock(db, request, organization_id)
+
     permissions = await _resolve_permissions(db, membership.id)
     return OrgContext(
         user=user,
         organization_id=organization_id,
         membership=membership,
         permissions=permissions,
+    )
+
+
+# Paths that must keep working for a locked organization. Billing is how
+# they unlock; the deletion request is a data right that cannot be held
+# hostage behind a payment.
+_LOCK_EXEMPT_PATH_PREFIXES = (
+    "/api/v1/billing",
+    "/api/v1/organizations/current/deletion-request",
+)
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+async def _enforce_subscription_lock(
+    db: AsyncSession, request: Request, organization_id: uuid.UUID
+) -> None:
+    """Block writes for an organization whose trial lapsed or whose
+    subscription ended.
+
+    This lives here rather than as an entitlement check per feature for a
+    blunt reason: only two call sites in the codebase consult entitlements
+    at all (invitations and SSO login), so zeroing the entitlement values
+    alone would "lock" an account that could still create documents,
+    workflows, and everything else. `get_org_context` is the one place
+    every org-scoped request already passes through.
+
+    Reads are deliberately untouched — GET stays open, which is what keeps
+    "your organization and its data are preserved, and you can still
+    export them" true rather than a slogan.
+    """
+    if request.method not in _MUTATING_METHODS:
+        return
+    path = request.url.path
+    if any(path.startswith(prefix) for prefix in _LOCK_EXEMPT_PATH_PREFIXES):
+        return
+
+    # Imported here, not at module scope: app.billing.service imports the
+    # models this module's callers also import, and a top-level import
+    # would make the cycle load-order dependent.
+    from app.billing.service import get_subscription, resolve_access_state
+
+    subscription = await get_subscription(db, organization_id=organization_id)
+    if resolve_access_state(subscription) != "locked":
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+        detail=(
+            "This organization's plan has lapsed. Your data is safe and still readable — "
+            "choose a plan in Settings → Billing to resume making changes."
+        ),
     )
 
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { AuthGuard } from "@/components/auth-guard";
+import { BillingStatusBanner } from "@/components/billing-status-banner";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { TopNavigation } from "@/components/top-navigation";
 
@@ -20,6 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <AppSidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopNavigation />
+            <BillingStatusBanner />
             <main id="main-content" className="flex-1 overflow-y-auto bg-[var(--bg-app)] p-4 sm:p-6">
               <div className="mx-auto max-w-[var(--content-max-width)]">{children}</div>
             </main>

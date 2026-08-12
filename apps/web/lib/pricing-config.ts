@@ -2,20 +2,26 @@
  * Plan names and entitlement values are never hardcoded here — both the
  * homepage's PricingPreview and the full /pricing page fetch the real,
  * public GET /api/v1/billing/plans for those. This file only supplies the
- * marketing framing (tagline, price label, which entitlements to headline)
- * for each of the four real plan keys, so there is exactly one place to
- * change if that framing ever needs to.
+ * marketing framing (price, tagline, what each tier is *for*, which
+ * entitlements to headline) for each of the four real plan keys.
  *
- * No plan has a real euro figure anywhere in the system (see
- * docs/PUBLIC_SITE_AUDIT.md §3) — Starter is "Free" (org creation genuinely
- * has no payment step today, and it matches the hero's "Start free" CTA);
- * the rest are "Contact sales", the brief's own specified fallback for
- * unfinalized pricing. Nothing here is a number this effort invented. */
+ * These prices are real: Growth and Business are charged through Stripe
+ * Checkout (see docs/BILLING_ARCHITECTURE.md). Keep the CTA labels honest
+ * about which plans include a trial — only Starter does. Promising a free
+ * trial on a plan whose checkout asks for a card immediately is the kind
+ * of mismatch that gets a signup abandoned at the payment form.
+ */
 
 export type PricingPlanCopy = {
   key: "starter" | "growth" | "business" | "enterprise";
   priceLabel: string;
+  /** Shown next to the price — "/month", or a qualifier like "from". */
+  priceSuffix?: string;
+  /** A short badge above the plan name, e.g. the trial offer. */
+  badge?: string;
   tagline: string;
+  /** What the tier is actually for, in one line. */
+  summary: string;
   ctaLabel: string;
   ctaHref: string;
   highlightEntitlements: string[];
@@ -25,27 +31,34 @@ export type PricingPlanCopy = {
 export const PRICING_PLAN_COPY: PricingPlanCopy[] = [
   {
     key: "starter",
-    priceLabel: "Free",
-    tagline: "Get a governed workspace running in minutes.",
-    ctaLabel: "Start free",
+    priceLabel: "€499",
+    priceSuffix: "/month",
+    badge: "14-day free trial",
+    tagline: "AI Compliance core, with limited users and usage.",
+    summary: "Try it for 14 days with no card. Your data stays if you don't continue.",
+    ctaLabel: "Start free trial",
     ctaHref: "/signup",
     highlightEntitlements: ["max_users", "max_documents", "max_storage_gb", "max_frameworks"],
   },
   {
     key: "growth",
-    priceLabel: "Contact sales",
-    tagline: "For teams ready to connect SSO and their own tools.",
-    ctaLabel: "Contact sales",
-    ctaHref: "/contact",
+    priceLabel: "€999",
+    priceSuffix: "/month",
+    tagline: "Compliance, Automation, and Security together.",
+    summary: "For teams ready to connect SSO and automate their own workflows.",
+    ctaLabel: "Get started",
+    ctaHref: "/signup",
     highlightEntitlements: ["max_users", "sso_enabled", "api_enabled", "max_integrations"],
     featured: true,
   },
   {
     key: "business",
-    priceLabel: "Contact sales",
-    tagline: "Custom frameworks, advanced reporting, and SCIM provisioning.",
-    ctaLabel: "Contact sales",
-    ctaHref: "/contact",
+    priceLabel: "€1,999",
+    priceSuffix: "/month",
+    tagline: "The full platform, with Sales and Support.",
+    summary: "Higher limits, every integration, custom frameworks, and SCIM.",
+    ctaLabel: "Get started",
+    ctaHref: "/signup",
     highlightEntitlements: [
       "max_users",
       "scim_enabled",
@@ -55,10 +68,17 @@ export const PRICING_PLAN_COPY: PricingPlanCopy[] = [
   },
   {
     key: "enterprise",
-    priceLabel: "Contact sales",
-    tagline: "Unlimited scale with data residency and dedicated support.",
+    priceLabel: "€3,500+",
+    priceSuffix: "/month",
+    tagline: "Custom scale, with an SLA and dedicated support.",
+    summary: "Advanced RBAC, custom integrations, data residency, and agency support.",
     ctaLabel: "Contact sales",
     ctaHref: "/contact",
-    highlightEntitlements: ["data_residency_enabled", "trust_center_enabled", "sso_enabled", "scim_enabled"],
+    highlightEntitlements: [
+      "data_residency_enabled",
+      "trust_center_enabled",
+      "sso_enabled",
+      "scim_enabled",
+    ],
   },
 ];

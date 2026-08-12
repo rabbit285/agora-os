@@ -34,15 +34,30 @@ export function PricingPreview() {
         const plan = plans?.find((p) => p.key === copy.key);
         return (
           <InteractiveCard key={copy.key} selected={copy.featured} className="flex flex-col">
-            <CardHeader>
-              <span className="text-sm font-semibold text-[var(--fg-default)]">
-                {plan?.name ?? copy.key}
-              </span>
-              <span className="text-2xl font-semibold text-[var(--fg-default)]">{copy.priceLabel}</span>
-              <p className="text-xs text-[var(--fg-muted)]">{copy.tagline}</p>
+            <CardHeader className="gap-0">
+              <div className="flex min-h-6 items-center gap-2">
+                <span className="text-sm font-semibold text-[var(--fg-default)]">
+                  {plan?.name ?? copy.key}
+                </span>
+                {copy.badge && (
+                  <span className="rounded-full bg-[var(--brand-primary-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-primary)]">
+                    {copy.badge}
+                  </span>
+                )}
+              </div>
+              <p className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-semibold tracking-tight text-[var(--fg-default)]">
+                  {copy.priceLabel}
+                </span>
+                {copy.priceSuffix && (
+                  <span className="text-sm text-[var(--fg-muted)]">{copy.priceSuffix}</span>
+                )}
+              </p>
+              <p className="mt-2 text-sm font-medium text-[var(--fg-default)]">{copy.tagline}</p>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--fg-muted)]">{copy.summary}</p>
             </CardHeader>
             <CardContent className="flex-1 pt-0">
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col gap-2 border-t border-[var(--border-default)] pt-4">
                 {copy.highlightEntitlements.map((key) => {
                   const value = plan?.entitlements[key] ?? null;
                   return (

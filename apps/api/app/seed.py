@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.gateway import ModelGateway
 from app.automation.models import Workflow, WorkflowTemplate
 from app.automation.service import advance_run, start_run
+from app.billing.models import Subscription
 from app.compliance.models import (
     AIAssessment,
     AIIncident,
@@ -98,6 +99,15 @@ async def seed() -> None:
             organization = Organization(name="Acme AI Technologies", slug=DEMO_ORG_SLUG)
             db.add(organization)
             await db.flush()
+            # The demo org is given a live subscription rather than a
+            # trial, so demo data never locks itself 14 days after the
+            # database was seeded.
+            db.add(
+                Subscription(
+                    organization_id=organization.id, status="active", plan_key="business"
+                )
+            )
+            organization.plan_key = "business"
             db.add(
                 LegalEntity(
                     organization_id=organization.id,
