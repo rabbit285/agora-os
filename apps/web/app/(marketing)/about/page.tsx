@@ -4,14 +4,14 @@ import { SectionHeader } from "@/components/marketing/section-header";
 
 export const metadata: Metadata = {
   title: "About — Agora Origin",
-  description: "Agora Origin is the secure AI operating system for European SMEs.",
+  description: "Agora Origin is the secure AI operating system for SMEs.",
   alternates: { canonical: "/about" },
 };
 
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-      <SectionHeader eyebrow="About" title="The secure AI operating system for European SMEs" />
+      <SectionHeader eyebrow="About" title="The secure AI operating system for SMEs" />
       <div className="mx-auto mt-10 flex max-w-2xl flex-col gap-6 text-sm leading-relaxed text-[var(--fg-muted)]">
         <p>
           Growing businesses accumulate tools faster than they can govern them. Compliance lives

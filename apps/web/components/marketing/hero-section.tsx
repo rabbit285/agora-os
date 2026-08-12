@@ -20,7 +20,7 @@ export function HeroSection() {
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-[var(--brand-spark)]" aria-hidden="true" />
-            Governed AI for European SMEs
+            Governed AI for SMEs
           </p>
 
           <h1 className="mt-6 text-[length:var(--text-display-2)] font-semibold leading-[1.06] tracking-tight text-[var(--fg-default)] sm:text-[length:var(--text-display-1)]">
@@ -29,7 +29,7 @@ export function HeroSection() {
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--fg-muted)]">
-            Agora Origin helps European SMEs manage compliance, reduce security risk, find
+            Agora Origin helps SMEs manage compliance, reduce security risk, find
             customers, support users, and automate daily operations from one intelligent
             workspace.
           </p>
@@ -48,7 +48,7 @@ export function HeroSection() {
               className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-teal)]"
               aria-hidden="true"
             />
-            Designed for growing European businesses that need practical AI with governance,
+            Designed for growing businesses that need practical AI with governance,
             visibility, and control.
           </p>
         </div>

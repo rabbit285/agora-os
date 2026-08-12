@@ -75,7 +75,7 @@ test.describe("Accessibility: public site", () => {
 
   test("About page", async ({ page }) => {
     await page.goto("/about");
-    await page.getByRole("heading", { name: "The secure AI operating system for European SMEs" }).waitFor();
+    await page.getByRole("heading", { name: "The secure AI operating system for SMEs" }).waitFor();
     const results = await runAxeScan(page);
     expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
   });

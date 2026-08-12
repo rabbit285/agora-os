@@ -14,12 +14,12 @@ import { WorkflowExample } from "@/components/marketing/workflow-example";
 import { WorldMapBackdropLazy } from "@/components/marketing/world-map-backdrop-lazy";
 
 export const metadata: Metadata = {
-  title: "Agora Origin — The secure AI operating system for European SMEs",
+  title: "Agora Origin — The secure AI operating system for SMEs",
   description:
-    "Agora Origin helps European SMEs manage compliance, reduce security risk, find customers, support users, and automate daily operations from one intelligent workspace.",
+    "Agora Origin helps SMEs manage compliance, reduce security risk, find customers, support users, and automate daily operations from one intelligent workspace.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Agora Origin — The secure AI operating system for European SMEs",
+    title: "Agora Origin — The secure AI operating system for SMEs",
     description:
       "Compliance, security, sales, support, and automation — from one governed workspace.",
     url: "/",

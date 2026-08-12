@@ -8,7 +8,7 @@ const CUSTOMER_TYPES = [
   "Fintech companies",
   "Healthcare technology businesses",
   "Professional services teams",
-  "Growing European SMEs",
+  "Growing SMEs",
 ];
 
 export function CustomerTypeSection() {

@@ -19,7 +19,7 @@ Build the complete production-oriented SaaS platform described in the product sp
 
 The working product name is **Agora Origin** unless the repository already defines another approved name.
 
-This is a serious multi-tenant B2B SaaS product for European SMEs. It is not merely a UI demonstration, landing page, disconnected set of dashboards, or thin LLM wrapper.
+This is a serious multi-tenant B2B SaaS product for SMEs. It is not merely a UI demonstration, landing page, disconnected set of dashboards, or thin LLM wrapper.
 
 ---
 
@@ -2566,15 +2566,15 @@ Record evidence in:
 
 # MASTER BUILD PROMPT
 
-# AI-POWERED BUSINESS OPERATING SYSTEM FOR EUROPEAN SMEs
+# AI-POWERED BUSINESS OPERATING SYSTEM FOR SMEs
 
 You are my Principal Software Architect, Staff Full-Stack Engineer, AI Engineer, Security Engineer, DevOps Engineer, Product Designer, Data Architect, and technical co-founder.
 
 Your task is to design and build a complete, production-grade SaaS platform:
 
-# AI Business Operating System for European Companies
+# AI Business Operating System for Companies
 
-The long-term goal is to create an AI-powered operating layer for European SMEs that combines:
+The long-term goal is to create an AI-powered operating layer for SMEs that combines:
 
 1. AI Compliance
 2. AI Security Assistant
@@ -2595,7 +2595,7 @@ This is NOT:
 * a collection of disconnected AI tools
 * a simple ChatGPT wrapper
 
-This must be architected as a serious multi-tenant B2B SaaS platform that can become the daily AI operating system used by small and mid-sized European companies.
+This must be architected as a serious multi-tenant B2B SaaS platform that can become the daily AI operating system used by small and mid-sized companies.
 
 The platform should help a company:
 
@@ -2615,7 +2615,7 @@ The platform should help a company:
 
 The platform's long-term positioning is:
 
-> One secure AI operating system that helps European businesses stay compliant, sell more, support customers, automate operations, and safely adopt AI.
+> One secure AI operating system that helps businesses stay compliant, sell more, support customers, automate operations, and safely adopt AI.
 
 The compliance and governance layer should sit underneath all AI modules.
 
@@ -3012,7 +3012,7 @@ Shared services:
 
 Primary:
 
-European SMEs
+SMEs
 
 Initial focus:
 
@@ -3051,7 +3051,7 @@ Core buyer personas:
 
 Possible positioning:
 
-> AI-powered operating system for European SMEs.
+> AI-powered operating system for SMEs.
 
 Alternative:
 
@@ -4071,7 +4071,7 @@ Exclusions
 
 Example:
 
-European SaaS companies
+SaaS companies
 
 20–200 employees
 
@@ -7508,7 +7508,7 @@ Create:
 
 Acme AI Technologies
 
-European B2B SaaS
+B2B SaaS
 
 120 employees
 
@@ -8104,7 +8104,7 @@ Consistent patterns.
 
 # 99. SUCCESS CRITERIA
 
-The finished platform should allow a European business to:
+The finished platform should allow a business to:
 
 COMPLIANCE
 
@@ -8232,7 +8232,7 @@ Business automation
 
 The platform should become:
 
-> The secure AI operating system for European SMEs.
+> The secure AI operating system for SMEs.
 
 A company should be able to connect its tools and data, then use one intelligent platform to:
 
@@ -8291,7 +8291,7 @@ When a reasonable engineering choice can be inferred, make the decision and docu
 
 Only ask me questions when a decision has a major product or business consequence that cannot reasonably be inferred.
 
-Build this as a production-grade, scalable, secure, AI-native SaaS platform intended to become the operating system for European SMEs.
+Build this as a production-grade, scalable, secure, AI-native SaaS platform intended to become the operating system for SMEs.
 
 
 ---

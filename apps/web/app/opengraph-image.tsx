@@ -38,7 +38,7 @@ export default function OpengraphImage() {
             lineHeight: 1.15,
           }}
         >
-          The secure AI operating system for European SMEs
+          The secure AI operating system for SMEs
         </div>
         <div style={{ fontSize: 26, color: "#96a3bd", marginTop: 28, maxWidth: 840 }}>
           Compliance, security, sales, support, and automation — from one governed workspace.
