@@ -36,7 +36,11 @@ describe("LoginPage — SSO", () => {
     pushMock.mockReset();
     searchParamsValue = new URLSearchParams();
     Object.defineProperty(window, "location", {
-      value: { ...window.location, href: "" },
+      // A real URL, not "": the SSO assertions below only care that the
+      // code *overwrites* href, but anything in the tree that resolves a
+      // relative URL against the document — next/image does, for the auth
+      // layout's backdrop — throws "Invalid URL" on an empty base.
+      value: { ...window.location, href: "http://localhost/login" },
       writable: true,
     });
   });

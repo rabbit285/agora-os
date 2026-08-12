@@ -69,7 +69,7 @@ export function AppSidebar() {
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
+        <div className="nav-scrollbar flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
         {NAVIGATION.map((group) => {
           const visibleItems = group.items.filter((item) => isItemVisible(item, permissionSet));
           if (visibleItems.length === 0) return null;
