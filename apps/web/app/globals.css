@@ -179,6 +179,16 @@
   --nav-hover: rgba(148, 163, 184, 0.1);
   --nav-active: rgba(34, 211, 238, 0.14);
 
+  /* Scrollbars. The browser default is a wide grey trough that reads as
+     chrome from a different application — and inside the dark sidebar a
+     light-grey bar is actively jarring. Kept as tokens so the dark
+     navigation can override just the thumb rather than restate the whole
+     treatment. */
+  --scrollbar-thumb: rgba(100, 116, 139, 0.4);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.65);
+  --nav-scrollbar-thumb: rgba(148, 163, 184, 0.28);
+  --nav-scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
+
   /* Shadow */
   --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
   --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
@@ -231,6 +241,8 @@
   --aurora-teal: rgba(45, 212, 191, 0.22);
   --aurora-blue: rgba(96, 165, 250, 0.2);
   --aurora-spark: rgba(251, 191, 36, 0.16);
+  --scrollbar-thumb: rgba(148, 163, 184, 0.3);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.55);
   /* The light-mode text sweep is darkened for contrast against white and
      would nearly vanish here, so the dark theme reads the *bright* end of
      the palette instead — every stop below is 7.9:1 or better on
@@ -247,6 +259,13 @@
   --foreground: var(--fg-default);
 }
 
+/* MUST stay identical to the [data-theme="dark"] block above — this one
+   serves anyone on a dark OS who has never touched the theme toggle, which
+   is most dark-mode users. The two had already drifted: the aurora,
+   gradient-text, and text-fallback overrides were added above but never
+   here, so a system-dark visitor was getting the *light* gradient stops
+   (#0f766e -> #1d4ed8, chosen for contrast against white) painted on a
+   near-black background. Any token added to one block belongs in both. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg-app: var(--gray-950);
@@ -259,6 +278,19 @@
     --border-default: var(--gray-800);
     --border-strong: var(--gray-700);
     --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+    --aurora-teal: rgba(45, 212, 191, 0.22);
+    --aurora-blue: rgba(96, 165, 250, 0.2);
+    --aurora-spark: rgba(251, 191, 36, 0.16);
+    --scrollbar-thumb: rgba(148, 163, 184, 0.3);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.55);
+    --gradient-brand-text: linear-gradient(
+      100deg,
+      #2dd4bf 0%,
+      #22d3ee 34%,
+      #a5b4fc 66%,
+      #93c5fd 100%
+    );
+    --brand-text-fallback: #93c5fd;
     --background: var(--bg-app);
     --foreground: var(--fg-default);
   }
@@ -347,6 +379,67 @@
 @layer base {
   * {
     border-color: var(--border-default);
+  }
+
+  /* ---- Scrollbars ----
+     The standard properties do the work in current Chrome, Firefox, and
+     Safari 17.4+. The ::-webkit-scrollbar block below is a fallback for
+     older WebKit/Blink only — those engines are *not* additive: once
+     `scrollbar-color` is honored, the pseudo-element rules are ignored
+     entirely. So the two describe the same intent twice rather than
+     layering, and any change to one should be mirrored in the other.
+
+     Deliberately still a visible bar, not an overlay that only appears
+     while scrolling. A long compliance table or the sidebar's own list
+     needs a persistent position indicator; the goal here is to make the
+     bar match the surface it sits on, not to hide it.
+
+     `scrollbar-width` is not an inherited property, so it has to be set
+     on every scroll container rather than once on `html` — hence `*`.
+     `scrollbar-color` does inherit, and is overridden per-surface below. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 9999px;
+    /* Transparent border plus content-box clipping insets the thumb
+       inside the 10px gutter, so it reads as a slim floating pill rather
+       than a bar wedged edge-to-edge. The gutter stays wide enough to be
+       an easy pointer target. */
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  /* The dark navigation chrome keeps its own thumb: the content-surface
+     value is tuned for a light canvas and turns into a muddy grey smear
+     against --nav-bg. */
+  .nav-scrollbar {
+    scrollbar-color: var(--nav-scrollbar-thumb) transparent;
+  }
+
+  .nav-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--nav-scrollbar-thumb);
+  }
+
+  .nav-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--nav-scrollbar-thumb-hover);
   }
 }
 

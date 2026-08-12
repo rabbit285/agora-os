@@ -19,6 +19,13 @@ from app.core.rate_limit import RateLimitMiddleware
 from app.core.rbac import ensure_system_roles
 from app.core.storage import ensure_bucket
 from app.db.session import AsyncSessionLocal
+from app.ai.exceptions import (
+    AiProviderAuthError,
+    AiProviderError,
+    AiProviderNotConfigured,
+    AiProviderQuotaExceeded,
+    AiProviderRateLimited,
+)
 from app.identity.router import router as auth_router
 from app.sales.providers.exceptions import (
     ProviderAuthError,
@@ -140,6 +147,49 @@ async def validation_exception_handler(
         status.HTTP_422_UNPROCESSABLE_ENTITY,
         "Validation error",
         jsonable_encoder(exc.errors()),
+    )
+
+
+@app.exception_handler(AiProviderError)
+async def ai_provider_error_handler(request: Request, exc: AiProviderError) -> JSONResponse:
+    """Same contract as the Sales handler below: without it a provider
+    fault reaches ServerErrorMiddleware as a bare 500 with no CORS header,
+    and the browser reports only "Failed to fetch". Messages are written
+    for the person who has to act on them — an exhausted balance and a
+    rate limit both arrive as HTTP 429 from OpenAI but need different
+    responses from the reader."""
+    logging.getLogger(__name__).warning("AI provider error: %s", exc)
+
+    if isinstance(exc, AiProviderQuotaExceeded):
+        return _error_envelope(
+            request,
+            status.HTTP_402_PAYMENT_REQUIRED,
+            "The connected AI provider account has no remaining quota. "
+            "Add credit to the provider account to re-enable AI features.",
+        )
+    if isinstance(exc, AiProviderRateLimited):
+        response = _error_envelope(
+            request,
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "The AI provider is rate limiting requests. Please try again shortly.",
+        )
+        if exc.retry_after_seconds is not None:
+            response.headers["Retry-After"] = str(exc.retry_after_seconds)
+        return response
+    if isinstance(exc, AiProviderAuthError):
+        return _error_envelope(
+            request,
+            status.HTTP_502_BAD_GATEWAY,
+            "The configured AI provider credential was rejected. Check the provider settings.",
+        )
+    if isinstance(exc, AiProviderNotConfigured):
+        return _error_envelope(
+            request, status.HTTP_409_CONFLICT, "No AI provider is configured."
+        )
+    return _error_envelope(
+        request,
+        status.HTTP_502_BAD_GATEWAY,
+        "The AI provider is temporarily unavailable. Please try again shortly.",
     )
 
 

@@ -5,6 +5,22 @@ from collections.abc import AsyncIterator
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_ENV", "test")
+
+# Third-party provider credentials are force-cleared, not `setdefault`-ed:
+# a developer with real keys in their environment (or a container started
+# from infra/docker/.env) would otherwise have the suite silently switch
+# from the deterministic demo adapters to live providers. That has already
+# broken this suite twice — once when APOLLO_API_KEY was present, making
+# the "returns demo-labeled results" tests hit Apollo and fail on a plan
+# restriction, and again when a real OPENAI_API_KEY turned the AI tests
+# into live calls that failed on the account's quota. Tests must not
+# depend on, or spend, anyone's real credentials.
+#
+# Must happen before `app.config` is first imported below, since Settings
+# reads the environment once at module import.
+os.environ["AI_PROVIDER"] = "demo"
+for _provider_key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "APOLLO_API_KEY", "CLEARBIT_API_KEY"):
+    os.environ.pop(_provider_key, None)
 # app.core.rate_limit's real per-IP limit is production-tuned; the full
 # suite issues thousands of requests from one loopback identity, which
 # would otherwise trip it. test_rate_limit.py monkeypatches this setting
