@@ -62,6 +62,24 @@ is ever deployed to AWS; see "AWS production secrets" below.
 No AI feature crashes or blocks signup/login when these are unset — Copilot
 responses are just clearly labeled demo output until a key is added.
 
+`AI_PROVIDER=openai` only takes effect when `OPENAI_API_KEY` is also set;
+either alone leaves the demo adapter in place (`app.ai.gateway.build_adapter`).
+
+**Once a real provider is live, its failures are the app's failures.** A
+rejected key, an exhausted balance, a rate limit, or a provider outage each
+map to a distinct HTTP status and an actionable message
+(`app.ai.exceptions`, handled in `app.main`). In particular an exhausted
+balance returns **402**, not 429 — OpenAI reports both as HTTP 429, but
+retrying only helps for one of them. Untranslated provider exceptions must
+never escape: FastAPI turns them into a bare 500 that has already passed
+CORSMiddleware, so the browser drops the response and the user sees only
+"Failed to fetch".
+
+Real credentials belong in `.env` or `infra/docker/.env` — both gitignored.
+Never in `.env.example`, which is a committed template. The backend test
+suite force-clears these variables (`apps/api/tests/conftest.py`) so a
+developer's real keys can't turn the suite into live, billable calls.
+
 ## Email — optional
 
 | Variable | Behavior when unset |
