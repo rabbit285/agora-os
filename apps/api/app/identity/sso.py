@@ -37,7 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.billing.service import ensure_plan_catalog
+from app.billing.service import ensure_plan_catalog, start_trial
 from app.config import settings
 from app.core.models import LegalEntity, Membership, MembershipRole, Organization
 from app.core.rbac import ensure_system_roles, get_system_role
@@ -185,6 +185,9 @@ async def _provision_user_and_organization(
     await db.flush()
 
     db.add(LegalEntity(organization_id=organization.id, name=org_name, is_default=True))
+
+    # Same 14-day Starter trial a password signup gets.
+    await start_trial(db, organization_id=organization.id)
 
     membership = Membership(organization_id=organization.id, user_id=user.id, status="active")
     db.add(membership)

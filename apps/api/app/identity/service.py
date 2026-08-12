@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.billing.service import ensure_plan_catalog
+from app.billing.service import ensure_plan_catalog, start_trial
 from app.config import settings
 from app.core.crypto import decrypt_token, encrypt_token
 from app.core.models import LegalEntity, Membership, MembershipRole, Organization
@@ -81,6 +81,10 @@ async def signup(
             organization_id=organization.id, name=payload.organization_name, is_default=True
         )
     )
+
+    # The 14-day Starter trial. No card, no Stripe call — signup stays a
+    # single local transaction that cannot fail on a payment provider.
+    await start_trial(db, organization_id=organization.id)
 
     membership = Membership(organization_id=organization.id, user_id=user.id, status="active")
     db.add(membership)

@@ -19,7 +19,7 @@ export default function PricingPage() {
         eyebrow="Pricing"
         title="Simple plans that"
         accent="grow with you"
-        description="Every plan includes the full platform — plans differ by scale and by the governance features larger teams need. Start with a 14-day free trial."
+        description="Every plan includes the full platform — plans differ by scale and by the governance features larger teams need. Start free for 14 days on Starter, no card required."
       />
 
       <div className="mx-auto max-w-[var(--content-max-width)] px-4 pb-24 sm:px-6 lg:px-8">
@@ -33,13 +33,15 @@ export default function PricingPage() {
             How pricing works
           </p>
           <p className="mt-2 text-sm leading-relaxed text-[var(--fg-muted)]">
-            Listed prices are per organization, per month, excluding VAT. Every plan starts with a
-            14-day free trial and no card is required to begin. Enterprise starts at €3,500 and is
-            scoped per organization — talk to sales for a quote.
+            Listed prices are per organization, per month, excluding VAT. Starter includes a 14-day
+            free trial with no card required — if you don&rsquo;t continue, your data is kept and
+            you can pick a plan later. Growth and Business are paid by card at checkout, where VAT
+            is calculated for your location and reverse charge is applied if you have an EU VAT
+            number. Enterprise starts at €3,500 and is scoped per organization.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <Button asChild>
-              <Link href="/signup">Start free</Link>
+              <Link href="/signup">Start free trial</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/contact">Talk to sales</Link>

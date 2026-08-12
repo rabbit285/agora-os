@@ -5,11 +5,11 @@
  * marketing framing (price, tagline, what each tier is *for*, which
  * entitlements to headline) for each of the four real plan keys.
  *
- * These are list prices, not what the system charges: there is no payment
- * collection in this build (see docs/KNOWN_LIMITATIONS.md and the note on
- * `app.routers.billing.update_current_plan`). Showing a price while the
- * product cannot take one is a deliberate, reversible marketing decision;
- * the number must not be read anywhere as evidence that billing works.
+ * These prices are real: Growth and Business are charged through Stripe
+ * Checkout (see docs/BILLING_ARCHITECTURE.md). Keep the CTA labels honest
+ * about which plans include a trial — only Starter does. Promising a free
+ * trial on a plan whose checkout asks for a card immediately is the kind
+ * of mismatch that gets a signup abandoned at the payment form.
  */
 
 export type PricingPlanCopy = {
@@ -35,7 +35,7 @@ export const PRICING_PLAN_COPY: PricingPlanCopy[] = [
     priceSuffix: "/month",
     badge: "14-day free trial",
     tagline: "AI Compliance core, with limited users and usage.",
-    summary: "Start with a free trial — no card required until it ends.",
+    summary: "Try it for 14 days with no card. Your data stays if you don't continue.",
     ctaLabel: "Start free trial",
     ctaHref: "/signup",
     highlightEntitlements: ["max_users", "max_documents", "max_storage_gb", "max_frameworks"],
@@ -46,7 +46,7 @@ export const PRICING_PLAN_COPY: PricingPlanCopy[] = [
     priceSuffix: "/month",
     tagline: "Compliance, Automation, and Security together.",
     summary: "For teams ready to connect SSO and automate their own workflows.",
-    ctaLabel: "Start free trial",
+    ctaLabel: "Get started",
     ctaHref: "/signup",
     highlightEntitlements: ["max_users", "sso_enabled", "api_enabled", "max_integrations"],
     featured: true,
@@ -57,8 +57,8 @@ export const PRICING_PLAN_COPY: PricingPlanCopy[] = [
     priceSuffix: "/month",
     tagline: "The full platform, with Sales and Support.",
     summary: "Higher limits, every integration, custom frameworks, and SCIM.",
-    ctaLabel: "Contact sales",
-    ctaHref: "/contact",
+    ctaLabel: "Get started",
+    ctaHref: "/signup",
     highlightEntitlements: [
       "max_users",
       "scim_enabled",

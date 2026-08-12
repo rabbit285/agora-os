@@ -12,13 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.billing.service import ensure_plan_catalog
-from app.config import settings
-from app.core.idempotency import IdempotencyKeyMiddleware
-from app.core.rate_limit import RateLimitMiddleware
-from app.core.rbac import ensure_system_roles
-from app.core.storage import ensure_bucket
-from app.db.session import AsyncSessionLocal
 from app.ai.exceptions import (
     AiProviderAuthError,
     AiProviderError,
@@ -26,16 +19,21 @@ from app.ai.exceptions import (
     AiProviderQuotaExceeded,
     AiProviderRateLimited,
 )
-from app.identity.router import router as auth_router
-from app.sales.providers.exceptions import (
-    ProviderAuthError,
-    ProviderInvalidRequest,
-    ProviderNotConfigured,
-    ProviderRateLimited,
-    ProviderScopeMissing,
-    ProviderUnavailable,
-    SalesProviderError,
+from app.billing.exceptions import (
+    BillingError,
+    PlanChangeNotAllowed,
+    StripeApiError,
+    StripeNotConfigured,
+    WebhookSignatureError,
 )
+from app.billing.service import ensure_plan_catalog
+from app.config import settings
+from app.core.idempotency import IdempotencyKeyMiddleware
+from app.core.rate_limit import RateLimitMiddleware
+from app.core.rbac import ensure_system_roles
+from app.core.storage import ensure_bucket
+from app.db.session import AsyncSessionLocal
+from app.identity.router import router as auth_router
 from app.routers import (
     ai,
     approvals,
@@ -62,6 +60,15 @@ from app.routers import (
     support,
     tasks,
     trust_center,
+)
+from app.sales.providers.exceptions import (
+    ProviderAuthError,
+    ProviderInvalidRequest,
+    ProviderNotConfigured,
+    ProviderRateLimited,
+    ProviderScopeMissing,
+    ProviderUnavailable,
+    SalesProviderError,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +258,31 @@ async def sales_provider_error_handler(request: Request, exc: SalesProviderError
     # (the exception's own docstring says so), not a client-facing
     # provider condition — surface as an opaque 500 like any other
     # unhandled server error rather than inventing a fake honest message.
+    return _error_envelope(request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.")
+
+
+@app.exception_handler(BillingError)
+async def billing_error_handler(request: Request, exc: BillingError) -> JSONResponse:
+    """Same contract as the two handlers above — a billing fault must not
+    reach the browser as a bare 500 with the CORS headers stripped, least
+    of all on a checkout button where the user needs to know whether they
+    were charged."""
+    logging.getLogger(__name__).warning("Billing error: %s", type(exc).__name__)
+
+    if isinstance(exc, WebhookSignatureError):
+        # Never 500 and never retried into: an unverifiable event is not a
+        # server fault, and telling Stripe to retry it would just repeat a
+        # rejection. The text stays generic — an attacker probing the
+        # endpoint learns nothing about why verification failed.
+        return _error_envelope(request, status.HTTP_400_BAD_REQUEST, "Invalid webhook signature.")
+    if isinstance(exc, StripeNotConfigured):
+        return _error_envelope(request, status.HTTP_409_CONFLICT, str(exc))
+    if isinstance(exc, PlanChangeNotAllowed):
+        return _error_envelope(request, status.HTTP_402_PAYMENT_REQUIRED, str(exc))
+    if isinstance(exc, StripeApiError):
+        # Stripe's own user-facing message ("Your card was declined."),
+        # never the raw payload.
+        return _error_envelope(request, status.HTTP_502_BAD_GATEWAY, exc.message)
     return _error_envelope(request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Something went wrong.")
 
 

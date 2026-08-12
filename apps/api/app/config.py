@@ -127,10 +127,20 @@ class Settings(BaseSettings):
         default="https://api.apollo.io/api/v1", alias="APOLLO_API_BASE_URL"
     )
 
-    # Billing — optional
+    # Billing — optional. Absent keys mean checkout honestly refuses to
+    # start (409) rather than faking a purchase; the Starter trial still
+    # works without Stripe, since it takes no card. See
+    # docs/BILLING_ARCHITECTURE.md.
     stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
     stripe_publishable_key: str | None = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
     stripe_webhook_secret: str | None = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
+    # Stripe Price ids for the two self-serve paid plans. Starter is
+    # trial-only and Enterprise is contract-only, so neither has one.
+    stripe_price_growth: str | None = Field(default=None, alias="STRIPE_PRICE_GROWTH")
+    stripe_price_business: str | None = Field(default=None, alias="STRIPE_PRICE_BUSINESS")
+    # Length of the no-card Starter trial. Configurable because "14 days"
+    # is a commercial decision, not an architectural one.
+    trial_period_days: int = Field(default=14, alias="TRIAL_PERIOD_DAYS")
 
     # Integrations — optional; absence means the connector's catalog entry
     # reports configured=false and no real OAuth flow can start (never a
