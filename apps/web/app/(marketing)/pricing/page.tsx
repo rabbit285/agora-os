@@ -19,24 +19,23 @@ export default function PricingPage() {
         eyebrow="Pricing"
         title="Simple plans that"
         accent="grow with you"
-        description="Start free. Every plan includes the full platform — plans differ by scale and by the governance features larger teams need."
+        description="Every plan includes the full platform — plans differ by scale and by the governance features larger teams need. Start with a 14-day free trial."
       />
 
       <div className="mx-auto max-w-[var(--content-max-width)] px-4 pb-24 sm:px-6 lg:px-8">
         <PricingPreview />
 
-        {/* Kept visible rather than set as fine print: "contact sales for a
-            quote" is the actual answer to the question most readers arrive
-            with, and hiding it under the table wastes their time. */}
+        {/* Kept visible rather than set as fine print: these are the terms
+            a reader needs before they can act on a price. */}
         <div className="mx-auto mt-12 max-w-3xl rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6">
           <p className="flex items-center gap-2 text-sm font-semibold text-[var(--fg-default)]">
             <Info className="h-4 w-4 shrink-0 text-[var(--brand-primary)]" aria-hidden="true" />
-            How pricing is set
+            How pricing works
           </p>
           <p className="mt-2 text-sm leading-relaxed text-[var(--fg-muted)]">
-            Prices for Growth, Business, and Enterprise are set per organization based on scale and
-            requirements — contact sales for a quote. No payment details are required to start on
-            the Starter plan.
+            Listed prices are per organization, per month, excluding VAT. Every plan starts with a
+            14-day free trial and no card is required to begin. Enterprise starts at €3,500 and is
+            scoped per organization — talk to sales for a quote.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <Button asChild>
