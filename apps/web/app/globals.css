@@ -469,69 +469,51 @@ body {
    matters here). */
 @layer components {
   /* ---- Button hover glow ----
-     A lit ring around the button's edge. Deliberately confined to the
-     border: a blurred halo behind the whole control bleeds a coloured
-     cloud over the surface behind it and washes out the button's own
-     fill, which is not what a crisp edge highlight should do.
-
-     The ring is one pseudo-element painted with the brand gradient and
-     then masked so only its border band survives — two full-size mask
-     layers, one clipped to the content box, composited so they cancel in
-     the middle. That is the only way to get a *gradient* border on a
-     rounded element; `border-image` does not follow border-radius.
-
-     The gradient is oversized and its position animates on hover, so the
-     light travels around the edge instead of the whole ring simply
-     fading up. */
+     A soft bloom that hugs the button's silhouette and fades outward,
+     leaving the fill untouched. */
   .btn-glow {
     position: relative;
   }
 
+  /* The glow is the *shadow* of an invisible layer sitting exactly on the
+     button's box, not a blurred copy of it. A box-shadow is painted only
+     outside the border box, so the button's own fill can never be tinted
+     — which is what went wrong when this was a blurred gradient behind
+     the control.
+
+     It lives on the pseudo-element rather than the button because the
+     focus ring is also a box-shadow (Tailwind's `ring-*`); putting both
+     on the same element means whichever is declared last silently wins.
+
+     Layered shadows offset left and right approximate the mark's sweep:
+     box-shadow takes no gradient, so the two-tone effect has to come from
+     stacking a teal and a blue bloom. */
   .btn-glow::before {
     content: "";
     position: absolute;
-    inset: -1.5px;
+    inset: 0;
+    z-index: -1;
     border-radius: inherit;
-    padding: 1.5px;
-    background-image: var(--gradient-brand);
-    background-size: 250% 100%;
-    background-position: 140% 0;
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: 0;
     pointer-events: none;
-    transition:
-      opacity var(--transition-card) var(--ease-card),
-      background-position 700ms var(--ease-card);
+    opacity: 0;
+    box-shadow:
+      -7px 0 22px -3px rgba(13, 148, 136, 0.7),
+      7px 0 22px -3px rgba(37, 99, 235, 0.7),
+      0 0 16px 0 rgba(34, 211, 238, 0.45);
+    transition: opacity var(--transition-card) var(--ease-card);
   }
 
   .btn-glow:hover::before,
   .btn-glow:focus-visible::before {
     opacity: 1;
-    background-position: -40% 0;
   }
 
-  /* A tight outer bloom so the edge reads as lit rather than merely
-     recoloured. Kept small and on the button itself, so it hugs the
-     border instead of forming a cloud around the control. */
-  .btn-glow:hover,
-  .btn-glow:focus-visible {
-    box-shadow: 0 0 10px -2px rgba(34, 211, 238, 0.5);
-  }
-
-  /* The travelling light is decoration; a vestibular-sensitive reader
-     asks the OS to stop exactly this. The ring still appears on hover, so
-     the affordance survives — it just arrives without motion. */
+  /* Only a fade, so there is nothing here that a vestibular-sensitive
+     reader needs stopped — the reduced-motion rule just removes the
+     transition, leaving the glow to appear instantly. */
   @media (prefers-reduced-motion: reduce) {
     .btn-glow::before {
       transition: none;
-      background-position: 50% 0;
     }
   }
 
