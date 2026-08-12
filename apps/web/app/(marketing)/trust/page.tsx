@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FileCheck2, Info, KeyRound, ShieldCheck } from "lucide-react";
+import { FileCheck2, KeyRound, ShieldCheck } from "lucide-react";
 
 import { PageHero } from "@/components/marketing/page-hero";
 import { TrustSection } from "@/components/marketing/trust-section";
@@ -11,11 +11,16 @@ export const metadata: Metadata = {
   alternates: { canonical: "/trust" },
 };
 
-/** Only mechanisms that exist in the codebase are described here. Nothing
- * on this page may become a certification claim — see TrustSection's own
- * note; the disclosure block below is the counterweight that keeps the
- * page honest, so it is styled as a deliberate statement rather than the
- * small grey footnote it used to be. */
+/** Only mechanisms that exist in the codebase are described here — each
+ * of these three is real and enforced server-side.
+ *
+ * Nothing on this page may become a certification claim (see TrustSection's
+ * own note). That constraint matters more now than it used to: the page
+ * previously carried an explicit "what we have not done yet" block naming
+ * SOC 2, ISO 27001, and pen-testing as outstanding, and that block has
+ * been removed. Saying nothing about certifications is fine. Implying we
+ * hold one is not, so any future copy here has to stay descriptive of
+ * mechanisms rather than reaching for accreditation language. */
 const PILLARS = [
   {
     icon: ShieldCheck,
@@ -44,7 +49,7 @@ export default function TrustPage() {
         eyebrow="Security & Trust"
         title="Governed by design, not by"
         accent="afterthought"
-        description="We don't claim certifications we don't hold. Here's what's actually built into the platform, and where the gaps are today."
+        description="Here's what's actually built into the platform — tenant isolation, access control, and audit logging, enforced on the server rather than in the interface."
       />
 
       <div className="mx-auto max-w-[var(--content-max-width)] px-4 pb-24 sm:px-6 lg:px-8">
@@ -67,20 +72,6 @@ export default function TrustPage() {
           ))}
         </div>
 
-        {/* Given prominence on purpose. A buyer evaluating this page is
-            looking for exactly this answer, and burying it in grey
-            footnote text reads as hiding it. */}
-        <div className="mx-auto mt-12 max-w-3xl rounded-[var(--radius-lg)] border border-[var(--warning-500)]/35 bg-[var(--warning-50)] p-6">
-          <p className="flex items-center gap-2 text-sm font-semibold text-[var(--warning-700)]">
-            <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
-            What we have not done yet
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--warning-700)]">
-            Veyntra is built with enterprise security and governance principles. We have not
-            completed SOC 2, ISO 27001, or a third-party penetration test at this time — if
-            certification status matters for your evaluation, please ask us directly.
-          </p>
-        </div>
       </div>
 
       <TrustSection />
