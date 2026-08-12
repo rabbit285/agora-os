@@ -38,7 +38,7 @@ function NavIconLink({
     <Link
       href={href}
       aria-label={count ? `${label} (${count} unread)` : label}
-      className="relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] transition-colors duration-[var(--transition-fast)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
+      className="btn-glow relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] transition-colors duration-[var(--transition-fast)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
       {count !== undefined && count > 0 && (
@@ -97,7 +97,7 @@ export function TopNavigation() {
         type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Open menu"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
+        className="btn-glow flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
       >
         <Menu className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -129,7 +129,7 @@ export function TopNavigation() {
             <button
               type="button"
               aria-label="User menu"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--nav-active)] text-xs font-semibold text-[var(--nav-fg)] transition-opacity duration-[var(--transition-fast)] hover:opacity-80"
+              className="btn-glow flex h-8 w-8 items-center justify-center rounded-full bg-[var(--nav-active)] text-xs font-semibold text-[var(--nav-fg)] transition-opacity duration-[var(--transition-fast)] hover:opacity-80"
             >
               {initials}
             </button>

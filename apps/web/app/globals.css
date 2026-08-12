@@ -58,10 +58,11 @@
      the mark, the marketing site, and the app all draw from the same
      source rather than each hard-coding its own approximation.
 
-     `--brand-primary` deliberately stays indigo: it is the site-wide
-     action color on hundreds of existing buttons/links, and the arc
-     colors read as *brand atmosphere* (gradients, glows, the mark), not
-     as "this is clickable". Recoloring every control was not the ask. */
+     `--brand-primary` now draws from the teal arc too (see its own note
+     further down), so the action color and the mark finally agree. The
+     values here remain the *mark's* colors — several are too light to
+     put text on, which is why the action color and the text gradient
+     each define their own darker variants rather than reusing these. */
   --brand-teal: #0d9488;
   --brand-teal-bright: #2dd4bf;
   --brand-cyan: #22d3ee;
@@ -125,11 +126,19 @@
 
   --border-default: var(--gray-200);
   --border-strong: var(--gray-300);
-  --border-focus: var(--primary-500);
+  /* Focus ring follows the action color. teal-500 is a non-text UI
+     indicator, which needs 3:1 against adjacent colors rather than the
+     4.5:1 the label itself must clear. */
+  --border-focus: #14b8a6;
 
-  --brand-primary: var(--primary-600);
-  --brand-primary-hover: var(--primary-700);
-  --brand-primary-subtle: var(--primary-50);
+  /* The action color, taken from the mark's teal arc.
+     Deliberately teal-700, not the mark's own --brand-teal (#0d9488):
+     that is 3.74:1 against white, under the 4.5:1 AA floor for button
+     labels and link text, so it would have shipped unreadable controls.
+     #0f766e is the same hue one step down at 5.47:1. */
+  --brand-primary: #0f766e;
+  --brand-primary-hover: #115e59;
+  --brand-primary-subtle: #f0fdfa;
 
   /* Layout */
   --sidebar-width: 15.5rem;
@@ -233,7 +242,7 @@
   --fg-subtle: var(--gray-500);
   --border-default: var(--gray-800);
   --border-strong: var(--gray-700);
-  --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+  --brand-primary-subtle: rgba(20, 184, 166, 0.14);
   /* On a near-black canvas the same alphas disappear, so the ambient
      brand glows are raised rather than reused — the intent is "the mark's
      light bleeding onto the surface", which needs more energy in the dark
@@ -277,7 +286,7 @@
     --fg-subtle: var(--gray-500);
     --border-default: var(--gray-800);
     --border-strong: var(--gray-700);
-    --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+    --brand-primary-subtle: rgba(20, 184, 166, 0.14);
     --aurora-teal: rgba(45, 212, 191, 0.22);
     --aurora-blue: rgba(96, 165, 250, 0.2);
     --aurora-spark: rgba(251, 191, 36, 0.16);
@@ -459,6 +468,55 @@ body {
    still override them (see the @layer base note above for why that
    matters here). */
 @layer components {
+  /* ---- Button hover glow ----
+     A soft bloom that hugs the button's silhouette and fades outward,
+     leaving the fill untouched. */
+  .btn-glow {
+    position: relative;
+  }
+
+  /* The glow is the *shadow* of an invisible layer sitting exactly on the
+     button's box, not a blurred copy of it. A box-shadow is painted only
+     outside the border box, so the button's own fill can never be tinted
+     — which is what went wrong when this was a blurred gradient behind
+     the control.
+
+     It lives on the pseudo-element rather than the button because the
+     focus ring is also a box-shadow (Tailwind's `ring-*`); putting both
+     on the same element means whichever is declared last silently wins.
+
+     Layered shadows offset left and right approximate the mark's sweep:
+     box-shadow takes no gradient, so the two-tone effect has to come from
+     stacking a teal and a blue bloom. */
+  .btn-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    box-shadow:
+      -7px 0 22px -3px rgba(13, 148, 136, 0.7),
+      7px 0 22px -3px rgba(37, 99, 235, 0.7),
+      0 0 16px 0 rgba(34, 211, 238, 0.45);
+    transition: opacity var(--transition-card) var(--ease-card);
+  }
+
+  .btn-glow:hover::before,
+  .btn-glow:focus-visible::before {
+    opacity: 1;
+  }
+
+  /* Only a fade, so there is nothing here that a vestibular-sensitive
+     reader needs stopped — the reduced-motion rule just removes the
+     transition, leaving the glow to appear instantly. */
+  @media (prefers-reduced-motion: reduce) {
+    .btn-glow::before {
+      transition: none;
+    }
+  }
+
   /* Gradient headline text. Falls back to a solid color first, so a
      browser without background-clip:text support (or a forced-colors
      mode, which drops backgrounds entirely) shows readable text rather
