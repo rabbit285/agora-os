@@ -287,7 +287,7 @@ export function ModuleCarousel() {
             type="button"
             onClick={scrollPrev}
             aria-label="Previous module"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+            className="btn-glow flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -318,7 +318,7 @@ export function ModuleCarousel() {
             type="button"
             onClick={scrollNext}
             aria-label="Next module"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+            className="btn-glow flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -329,7 +329,7 @@ export function ModuleCarousel() {
               onClick={() => setIsPaused((value) => !value)}
               aria-label={isPaused ? "Play automatic slide rotation" : "Pause automatic slide rotation"}
               aria-pressed={isPaused}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+              className="btn-glow flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-strong)] text-[var(--fg-default)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
             >
               {isPaused ? (
                 <Play className="h-4 w-4" aria-hidden="true" />

@@ -51,7 +51,7 @@ export function AppSidebar() {
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
+            className="btn-glow ml-auto flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:hidden"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -59,7 +59,7 @@ export function AppSidebar() {
             type="button"
             onClick={() => setCollapsed((v) => !v)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="ml-auto hidden h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:flex"
+            className="btn-glow ml-auto hidden h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--nav-fg-muted)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)] md:flex"
           >
             {collapsed ? (
               <ChevronsRight className="h-4 w-4" aria-hidden="true" />

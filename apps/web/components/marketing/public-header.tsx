@@ -98,7 +98,7 @@ export function PublicHeader() {
 
         <button
           type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg)] hover:bg-[var(--nav-hover)] lg:hidden"
+          className="btn-glow flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg)] hover:bg-[var(--nav-hover)] lg:hidden"
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileOpen}
           aria-controls="public-mobile-menu"
