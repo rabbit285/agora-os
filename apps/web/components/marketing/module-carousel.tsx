@@ -211,7 +211,7 @@ export function ModuleCarousel() {
             top and bottom of the card. Padding opens up room inside the
             clip for the glow to finish; the matching negative margin
             takes that space back out of the layout, so nothing moves. */}
-        <div className="overflow-hidden py-8 -my-8" ref={emblaRef}>
+        <div className="overflow-hidden py-5 -my-5" ref={emblaRef}>
           <div className="-mx-2 flex sm:-mx-3 lg:-mx-4">
             {SLIDES.map((slide, index) => {
               const isActive = index === selectedIndex;
