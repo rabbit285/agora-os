@@ -16,7 +16,16 @@ export function HeroSection() {
         aria-hidden="true"
         className="brand-aurora pointer-events-none absolute inset-x-0 -top-24 h-[46rem]"
       />
-      <div className="relative mx-auto grid max-w-[var(--content-max-width)] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:py-28 lg:px-8">
+      {/* Above 2xl the 88rem content cap leaves ~250px of gutter on each
+          side, which the artwork can use. The text column is pinned to a
+          fixed 38rem there rather than sharing the extra proportionally,
+          so the headline keeps its four-line break and every additional
+          pixel goes to the image.
+          Below 2xl the original split is left exactly as it was: there is
+          no gutter to spend there, so widening the image could only come
+          out of the text column, and taking 60px off it pushed the
+          headline from four lines to five at 1280. */}
+      <div className="relative mx-auto grid max-w-[var(--content-max-width)] gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:py-28 lg:px-8 2xl:max-w-[96rem] 2xl:grid-cols-[38rem_1fr]">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-[var(--brand-spark)]" aria-hidden="true" />
@@ -69,7 +78,7 @@ export function HeroSection() {
               // Largest element above the fold, so it is the likely LCP
               // candidate — eager rather than lazy.
               priority
-              sizes="(max-width: 1024px) 100vw, 46vw"
+              sizes="(max-width: 1024px) 100vw, 54vw"
               // No corner radius and no frame: roughly half the artwork is
               // transparent, so it blends into the hero on its own and a
               // rounded edge would have nothing to round.
