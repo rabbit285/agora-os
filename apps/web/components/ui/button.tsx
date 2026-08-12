@@ -5,7 +5,12 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-[var(--transition-fast)] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg-surface)]",
+  // `btn-glow` (app/globals.css) adds the brand halo and sheen on hover
+  // and focus. Applied to every variant so the interaction reads the same
+  // whatever the button looks like at rest. `disabled:before:opacity-0`
+  // keeps a disabled control from glowing — pointer-events are already
+  // off, but a keyboard user can still focus one in some browsers.
+  "btn-glow inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-[var(--transition-fast)] disabled:pointer-events-none disabled:opacity-50 disabled:before:opacity-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--bg-surface)]",
   {
     variants: {
       variant: {

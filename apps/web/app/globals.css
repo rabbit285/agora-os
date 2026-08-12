@@ -58,10 +58,11 @@
      the mark, the marketing site, and the app all draw from the same
      source rather than each hard-coding its own approximation.
 
-     `--brand-primary` deliberately stays indigo: it is the site-wide
-     action color on hundreds of existing buttons/links, and the arc
-     colors read as *brand atmosphere* (gradients, glows, the mark), not
-     as "this is clickable". Recoloring every control was not the ask. */
+     `--brand-primary` now draws from the teal arc too (see its own note
+     further down), so the action color and the mark finally agree. The
+     values here remain the *mark's* colors — several are too light to
+     put text on, which is why the action color and the text gradient
+     each define their own darker variants rather than reusing these. */
   --brand-teal: #0d9488;
   --brand-teal-bright: #2dd4bf;
   --brand-cyan: #22d3ee;
@@ -125,11 +126,19 @@
 
   --border-default: var(--gray-200);
   --border-strong: var(--gray-300);
-  --border-focus: var(--primary-500);
+  /* Focus ring follows the action color. teal-500 is a non-text UI
+     indicator, which needs 3:1 against adjacent colors rather than the
+     4.5:1 the label itself must clear. */
+  --border-focus: #14b8a6;
 
-  --brand-primary: var(--primary-600);
-  --brand-primary-hover: var(--primary-700);
-  --brand-primary-subtle: var(--primary-50);
+  /* The action color, taken from the mark's teal arc.
+     Deliberately teal-700, not the mark's own --brand-teal (#0d9488):
+     that is 3.74:1 against white, under the 4.5:1 AA floor for button
+     labels and link text, so it would have shipped unreadable controls.
+     #0f766e is the same hue one step down at 5.47:1. */
+  --brand-primary: #0f766e;
+  --brand-primary-hover: #115e59;
+  --brand-primary-subtle: #f0fdfa;
 
   /* Layout */
   --sidebar-width: 15.5rem;
@@ -233,7 +242,7 @@
   --fg-subtle: var(--gray-500);
   --border-default: var(--gray-800);
   --border-strong: var(--gray-700);
-  --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+  --brand-primary-subtle: rgba(20, 184, 166, 0.14);
   /* On a near-black canvas the same alphas disappear, so the ambient
      brand glows are raised rather than reused — the intent is "the mark's
      light bleeding onto the surface", which needs more energy in the dark
@@ -277,7 +286,7 @@
     --fg-subtle: var(--gray-500);
     --border-default: var(--gray-800);
     --border-strong: var(--gray-700);
-    --brand-primary-subtle: rgba(99, 102, 241, 0.12);
+    --brand-primary-subtle: rgba(20, 184, 166, 0.14);
     --aurora-teal: rgba(45, 212, 191, 0.22);
     --aurora-blue: rgba(96, 165, 250, 0.2);
     --aurora-spark: rgba(251, 191, 36, 0.16);
@@ -459,6 +468,78 @@ body {
    still override them (see the @layer base note above for why that
    matters here). */
 @layer components {
+  /* ---- Button hover glow ----
+     A blurred halo of the brand sweep behind the control, plus a sheen
+     that travels across its face — the effect the brief asked for.
+
+     Two pseudo-elements rather than one because they need opposite
+     clipping. The halo sits *outside* the button (inset -4px) so it can
+     bloom past the edge; the sheen must be clipped *to* the button's
+     shape. `overflow: hidden` would satisfy the second and destroy the
+     first, so the sheen instead animates its own background-position
+     inside a fixed, inherit-radius layer, which needs no overflow at all.
+
+     The halo is z-index -1: behind the button's own background, in front
+     of the page. That relies on the button establishing a stacking
+     context, which `position: relative` here provides. */
+  .btn-glow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .btn-glow::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: var(--gradient-brand);
+    filter: blur(9px);
+    opacity: 0;
+    transition: opacity var(--transition-card) var(--ease-card);
+  }
+
+  .btn-glow:hover::before,
+  .btn-glow:focus-visible::before {
+    opacity: 0.85;
+  }
+
+  .btn-glow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: linear-gradient(
+      100deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.45) 50%,
+      transparent 62%
+    );
+    background-size: 250% 100%;
+    background-position: 160% 0;
+    transition: background-position 700ms var(--ease-card);
+  }
+
+  .btn-glow:hover::after,
+  .btn-glow:focus-visible::after {
+    background-position: -60% 0;
+  }
+
+  /* The sheen is pure decoration and the halo is a large moving bloom;
+     both are exactly what a vestibular-sensitive reader asks the OS to
+     stop. The border and background still change on hover, so the
+     control never loses its hover affordance. */
+  @media (prefers-reduced-motion: reduce) {
+    .btn-glow::before,
+    .btn-glow::after {
+      transition: none;
+    }
+    .btn-glow::after {
+      display: none;
+    }
+  }
+
   /* Gradient headline text. Falls back to a solid color first, so a
      browser without background-clip:text support (or a forced-colors
      mode, which drops backgrounds entirely) shows readable text rather
