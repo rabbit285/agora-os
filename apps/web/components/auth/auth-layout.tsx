@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { CheckCircle2 } from "lucide-react";
 
 import { Logo } from "@/components/logo";
@@ -41,6 +42,27 @@ export function AuthLayout({
       </div>
 
       <div className="relative hidden overflow-hidden bg-[var(--gray-900)] lg:order-1 lg:flex lg:flex-col lg:justify-center lg:px-16">
+        <Image
+          src="/images/auth-tower.jpg"
+          // Decorative: the panel's message is carried entirely by the
+          // heading and list beside it, so describing the photo would only
+          // add noise for a screen reader.
+          alt=""
+          fill
+          sizes="50vw"
+          // Not `priority`: this panel is hidden below lg, and even on
+          // desktop the form is the task — the photo should never compete
+          // with it for bandwidth.
+          className="object-cover"
+        />
+        {/* The photograph is bright (open sky, sun flare, white cloud) and
+            the copy over it is white, so it needs a real scrim rather than
+            a tint. Weighted toward the left, where the text sits, and
+            eased off toward the right so the building stays legible. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(100deg,rgba(2,6,23,0.86)_0%,rgba(2,6,23,0.74)_45%,rgba(2,6,23,0.46)_100%)]"
+        />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(99,102,241,0.25),transparent)]"
