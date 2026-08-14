@@ -175,7 +175,18 @@ class Control(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # not_started | in_progress | implemented | needs_review
+    #
+    # Workflow state only. Whether a control is *evidenced* is derived in
+    # app.compliance.assessment from what is actually attached, and is
+    # deliberately not a field here — a self-declared "evidenced" flag
+    # that nothing checks is the thing an auditor discounts first.
     status: Mapped[str] = mapped_column(String(30), default="not_started")
+    # Free text: organizations group controls by their own taxonomy
+    # ("Privacy / Data Governance", "Access Management"), and forcing them
+    # onto ours would mean maintaining a list that fits nobody.
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # low | medium | high
+    priority: Mapped[str] = mapped_column(String(10), default="medium")
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
