@@ -718,3 +718,99 @@ class DataTransfer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+
+
+class FrameworkActivation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Which catalog Frameworks an organization has actually adopted.
+
+    Frameworks and Requirements are global catalog rows, so "GDPR is
+    active for us" is not a property of the framework — it is a property
+    of the relationship between an organization and that framework, which
+    is what this row is. Without it every tenant sees all seven
+    frameworks as equally in-scope and no one can say which ones they are
+    actually being held to.
+
+    Deactivation is a status change rather than a delete: the controls,
+    evidence, assessments and gaps built against a framework must survive
+    someone switching it off, or turning it back on would silently lose
+    the organization's own work.
+    """
+
+    __tablename__ = "framework_activations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "framework_id", name="uq_framework_activation_org_framework"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    framework_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("frameworks.id"), nullable=False, index=True
+    )
+    # active | inactive
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=utcnow
+    )
+    activated_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class ComplianceGap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A named, explainable deficiency against one Requirement.
+
+    This is the missing link in the spec's chain. Before it, a failed
+    assessment produced a Task whose only record of *why* was a free-text
+    title, and a requirement with no evidence produced nothing at all —
+    so nothing could be traced from "GDPR Article 30 is not satisfied"
+    back to what was missing, or forward to the work that fixed it.
+
+    Deliberately factual rather than legal. `summary` states what
+    evidence was and was not found; it must not assert that the
+    organization is in breach. Absence of evidence in this system is
+    evidence of absence *in this system*, not proof of a violation, and
+    the copy here is written to keep that distinction visible to whoever
+    reads it.
+    """
+
+    __tablename__ = "compliance_gaps"
+    __table_args__ = (
+        # One open gap per requirement per org: re-running an assessment
+        # updates the existing finding rather than stacking duplicates of
+        # the same deficiency.
+        UniqueConstraint(
+            "organization_id", "requirement_id", name="uq_compliance_gap_org_requirement"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    framework_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("frameworks.id"), nullable=False, index=True
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("requirements.id"), nullable=False, index=True
+    )
+    # Null when the deficiency is that no control is mapped at all.
+    control_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
+    )
+    # no_control | evidence_missing | evidence_partial | assessment_failed
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    # open | remediating | resolved
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    # low | medium | high
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    summary: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # Populated by generate_remediation — kept separate from `summary` so
+    # the finding and the proposed fix stay distinguishable.
+    recommendation: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # The remediation Task, once one has been raised from this gap.
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
