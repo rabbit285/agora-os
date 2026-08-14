@@ -448,6 +448,21 @@ class DPIA(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # low | medium | high — DPIA's own concluded risk level, not necessarily
     # the same scale as AISystem.risk_classification
     risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    # Article 35(7)'s required content. Held as named sections rather than
+    # one `findings` blob because each is separately assessable and a DPO
+    # reviewing one needs to see what is missing, not read prose looking
+    # for whether necessity was addressed at all.
+    processing_description: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    necessity_assessment: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    proportionality_assessment: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    consultation_notes: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # Derived from the risks raised against this DPIA once they have been
+    # reassessed — see app.compliance.dpia_screening.recalculate_residual_risk.
+    residual_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # What the screening concluded, and on what basis. Kept so the
+    # decision to carry out (or skip) the DPIA is itself auditable.
+    screening_outcome: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    screening_findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     # draft | in_review | approved | rejected
     status: Mapped[str] = mapped_column(String(20), default="draft")
     findings: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -478,6 +493,29 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     request_type: Mapped[str] = mapped_column(String(20), nullable=False)
     # received | in_progress | fulfilled | rejected
     status: Mapped[str] = mapped_column(String(20), default="received")
+    # pending | verified | failed. The gate on disclosure: fulfilling an
+    # unverified access request hands one person's data to another, which
+    # is itself a breach — the request is the attack. Article 12(6) exists
+    # precisely so a controller can demand proof before answering.
+    verification_status: Mapped[str] = mapped_column(String(20), default="pending")
+    verification_method: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # What the search across authorised sources found, and where. Recorded
+    # so the response can be reviewed before it is sent, and so "we looked"
+    # is demonstrable after the fact.
+    discovery_findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    discovery_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    export_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    export_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)

@@ -513,6 +513,15 @@ export type Risk = {
   impact: "low" | "medium" | "high";
   status: "open" | "mitigated" | "accepted";
   control_id: string | null;
+  /** What the risk is about, so the register does not force every reader
+   * to re-derive it from the title. */
+  ai_system_id: string | null;
+  dpia_id: string | null;
+  /** Risk remaining after mitigating controls. Null until someone has
+   * actually reassessed — deliberately not defaulted to the inherent
+   * rating, so "not yet reassessed" stays visible. */
+  residual_likelihood: "low" | "medium" | "high" | null;
+  residual_impact: "low" | "medium" | "high" | null;
   owner_id: string | null;
   created_at: string;
 };
@@ -592,6 +601,16 @@ export type DPIA = {
   risk_level: DPIARiskLevel;
   status: DPIAStatus;
   findings: string | null;
+  /** Article 35(7)'s required content, one field per section so a
+   * reviewer can see which parts were never addressed. */
+  processing_description: string | null;
+  necessity_assessment: string | null;
+  proportionality_assessment: string | null;
+  consultation_notes: string | null;
+  /** Derived from the risks raised against this DPIA. Null until they
+   * have been reassessed — a DPIA must not reach "low" by inaction. */
+  residual_risk_level: DPIARiskLevel | null;
+  screening_outcome: string | null;
   approval_id: string | null;
   owner_id: string | null;
   created_at: string;
@@ -606,11 +625,32 @@ export type DSAR = {
   requester_email: string;
   request_type: DSARRequestType;
   status: DSARStatus;
+  /** The gate on disclosure. Export is refused server-side until this
+   * reads "verified" — answering an unverified request hands one
+   * person's data to whoever asked. */
+  verification_status: "pending" | "verified" | "failed";
+  verification_method: string | null;
+  verified_at: string | null;
+  discovery_findings: DsarDiscovery | null;
+  discovery_run_at: string | null;
+  export_generated_at: string | null;
   due_at: string;
   fulfilled_at: string | null;
   notes: string | null;
   assigned_to: string | null;
   created_at: string;
+};
+
+/** Where the data subject appears, as counts and record references — not
+ * the records themselves, so the discovery result does not become a
+ * second uncontrolled copy of the personal data it located. */
+export type DsarDiscovery = {
+  email: string;
+  sources: { source: string; matches: number; record_ids: string[] }[];
+  total_matches: number;
+  /** Says what was *not* searched, so a clean result is not read as
+   * "there is nothing to disclose". */
+  coverage_note: string;
 };
 
 export type AIIncidentStatus = "open" | "investigating" | "resolved" | "closed";
