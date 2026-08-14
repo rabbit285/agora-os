@@ -169,7 +169,7 @@ export const NAVIGATION: NavGroup[] = [
       { label: "Business Memory", href: "/settings/memory", implemented: true, icon: Brain },
       { label: "Business Rules", href: "/settings/business-rules", implemented: true, icon: GitBranch },
       { label: "Data Management", href: "/settings/data-management", implemented: true, icon: Database },
-      { label: "Audit Logs", href: "/settings/audit-logs", implemented: false, icon: FileClock },
+      { label: "Audit Logs", href: "/settings/audit-logs", implemented: true, icon: FileClock },
       { label: "Security", href: "/settings/security", implemented: true, icon: Lock },
     ],
   },
