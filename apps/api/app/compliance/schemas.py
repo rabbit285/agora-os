@@ -331,6 +331,14 @@ class DSAROut(BaseModel):
     requester_email: str
     request_type: str
     status: str
+    # The gate on disclosure. Surfaced so the UI can disable export rather
+    # than offering a button that will be refused.
+    verification_status: str = "pending"
+    verification_method: str | None = None
+    verified_at: datetime | None = None
+    discovery_findings: dict[str, Any] | None = None
+    discovery_run_at: datetime | None = None
+    export_generated_at: datetime | None = None
     due_at: datetime
     fulfilled_at: datetime | None
     notes: str | None
@@ -750,3 +758,18 @@ class DPIASectionsUpdate(BaseModel):
     necessity_assessment: str | None = Field(default=None, max_length=4000)
     proportionality_assessment: str | None = Field(default=None, max_length=4000)
     consultation_notes: str | None = Field(default=None, max_length=4000)
+
+
+class DsarVerificationRequest(BaseModel):
+    """Identity verification outcome. `verified=false` is recorded too —
+    a refused request is a fact the audit trail needs."""
+
+    verified: bool
+    method: str = Field(min_length=1, max_length=200)
+
+
+class DsarDiscoveryOut(BaseModel):
+    email: str
+    sources: list[dict[str, Any]]
+    total_matches: int
+    coverage_note: str

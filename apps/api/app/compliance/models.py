@@ -493,6 +493,29 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     request_type: Mapped[str] = mapped_column(String(20), nullable=False)
     # received | in_progress | fulfilled | rejected
     status: Mapped[str] = mapped_column(String(20), default="received")
+    # pending | verified | failed. The gate on disclosure: fulfilling an
+    # unverified access request hands one person's data to another, which
+    # is itself a breach — the request is the attack. Article 12(6) exists
+    # precisely so a controller can demand proof before answering.
+    verification_status: Mapped[str] = mapped_column(String(20), default="pending")
+    verification_method: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # What the search across authorised sources found, and where. Recorded
+    # so the response can be reviewed before it is sent, and so "we looked"
+    # is demonstrable after the fact.
+    discovery_findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    discovery_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    export_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    export_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)

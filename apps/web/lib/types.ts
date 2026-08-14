@@ -625,11 +625,32 @@ export type DSAR = {
   requester_email: string;
   request_type: DSARRequestType;
   status: DSARStatus;
+  /** The gate on disclosure. Export is refused server-side until this
+   * reads "verified" — answering an unverified request hands one
+   * person's data to whoever asked. */
+  verification_status: "pending" | "verified" | "failed";
+  verification_method: string | null;
+  verified_at: string | null;
+  discovery_findings: DsarDiscovery | null;
+  discovery_run_at: string | null;
+  export_generated_at: string | null;
   due_at: string;
   fulfilled_at: string | null;
   notes: string | null;
   assigned_to: string | null;
   created_at: string;
+};
+
+/** Where the data subject appears, as counts and record references — not
+ * the records themselves, so the discovery result does not become a
+ * second uncontrolled copy of the personal data it located. */
+export type DsarDiscovery = {
+  email: string;
+  sources: { source: string; matches: number; record_ids: string[] }[];
+  total_matches: number;
+  /** Says what was *not* searched, so a clean result is not read as
+   * "there is nothing to disclose". */
+  coverage_note: string;
 };
 
 export type AIIncidentStatus = "open" | "investigating" | "resolved" | "closed";

@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DsarWorkflow } from "@/components/compliance/dsar-workflow";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +60,8 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
           </span>
         )}
       </div>
+
+      <DsarWorkflow dsar={dsar} />
 
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-3 pt-6">

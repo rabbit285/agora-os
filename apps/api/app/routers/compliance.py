@@ -25,6 +25,12 @@ from app.compliance.dpia_screening import (
     recalculate_residual_risk,
     record_dpia_screening,
 )
+from app.compliance.dsar import (
+    DsarVerificationRequired,
+    generate_export,
+    run_data_discovery,
+    verify_identity,
+)
 from app.compliance.models import (
     DPIA,
     DSAR,
@@ -88,8 +94,10 @@ from app.compliance.schemas import (
     DPIASectionsUpdate,
     DPIAStatusUpdate,
     DSARCreate,
+    DsarDiscoveryOut,
     DSAROut,
     DSARStatusUpdate,
+    DsarVerificationRequest,
     EuAiActScreeningRequest,
     EvidenceCreate,
     EvidenceOut,
@@ -1377,6 +1385,90 @@ async def update_dpia_status(
     return dpia
 
 
+async def _get_org_dsar(db: AsyncSession, dsar_id: uuid.UUID, organization_id: uuid.UUID) -> DSAR:
+    dsar = await db.get(DSAR, dsar_id)
+    if dsar is None or dsar.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DSAR not found")
+    return dsar
+
+
+@router.post("/dsars/{dsar_id}/verify-identity", response_model=DSAROut)
+async def verify_dsar_identity(
+    dsar_id: uuid.UUID,
+    payload: DsarVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DSAR:
+    """Record whether the requester's identity was established.
+
+    A failed verification is recorded too — "we refused this one, and
+    why" is as important to be able to show as a completed response.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    await verify_identity(
+        db,
+        organization_id=context.organization_id,
+        dsar=dsar,
+        method=payload.method,
+        verified=payload.verified,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dsar)
+    return dsar
+
+
+@router.post("/dsars/{dsar_id}/discover", response_model=DsarDiscoveryOut)
+async def discover_dsar_data(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DsarDiscoveryOut:
+    """Search this organization's own records for the requester.
+
+    Returns a map of where the person appears — counts and record ids,
+    not the records themselves — which is what a case worker needs to
+    decide what belongs in the response, and stops the discovery result
+    from becoming a second uncontrolled copy of the data.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    findings = await run_data_discovery(
+        db, organization_id=context.organization_id, dsar=dsar, actor_user_id=context.user.id
+    )
+    await db.commit()
+    return DsarDiscoveryOut(**findings)
+
+
+@router.post("/dsars/{dsar_id}/export")
+async def export_dsar(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> Response:
+    """Produce the response package.
+
+    Blocked until the requester is verified. The guard lives in
+    `app.compliance.dsar.generate_export`, not here, so a second caller
+    added later cannot skip it — see that module's docstring for why this
+    direction of risk is the one that matters.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    try:
+        payload, filename = await generate_export(
+            db, organization_id=context.organization_id, dsar=dsar, actor_user_id=context.user.id
+        )
+    except DsarVerificationRequired as exc:
+        # 409, not 403: the caller has permission, the request is not in a
+        # state where this action is allowed yet.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await db.commit()
+    return Response(
+        content=payload,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/dsars", response_model=list[DSAROut])
 async def list_dsars(
     db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
@@ -1406,13 +1498,6 @@ async def create_dsar_endpoint(
     )
     await db.commit()
     await db.refresh(dsar)
-    return dsar
-
-
-async def _get_org_dsar(db: AsyncSession, dsar_id: uuid.UUID, organization_id: uuid.UUID) -> DSAR:
-    dsar = await db.get(DSAR, dsar_id)
-    if dsar is None or dsar.organization_id != organization_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DSAR not found")
     return dsar
 
 
