@@ -126,6 +126,10 @@ const VENDOR_FIXTURE: Vendor = {
   risk_tier: "critical",
   status: "active",
   dpa_status: "pending",
+  approval_state: "not_submitted",
+  approval_conditions: null,
+  approval_decided_at: null,
+  compliance_owner_id: null,
   owner_id: null,
   created_at: new Date().toISOString(),
 };

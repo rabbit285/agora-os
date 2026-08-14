@@ -587,6 +587,27 @@ class Vendor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # not_required. Real, reviewable state an admin updates directly;
     # never auto-flipped to "signed" (that would fabricate a legal fact).
     dpa_status: Mapped[str] = mapped_column(String(20), default="pending")
+    # not_submitted | pending | approved | conditionally_approved | rejected
+    #
+    # "Conditionally approved" is the state real vendor reviews actually
+    # end in, and its absence is why review processes quietly become
+    # rubber stamps: without it, a reviewer holding one outstanding
+    # question must either block a vendor the business needs or approve
+    # outright and lose the caveat. Conditions are required text on that
+    # decision, so the caveat outlives the person who made it.
+    approval_state: Mapped[str] = mapped_column(String(30), default="not_submitted")
+    approval_conditions: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approval_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approval_decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # `owner_id` above is the business owner; compliance carries its own
+    # accountable name, which is rarely the same person.
+    compliance_owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
 
 
 class VendorAssessment(UUIDPrimaryKeyMixin, Base):
@@ -604,9 +625,16 @@ class VendorAssessment(UUIDPrimaryKeyMixin, Base):
     vendor_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=False, index=True
     )
+    # privacy | security | general. A privacy review and a security review
+    # reach different conclusions about the same vendor, and one must not
+    # overwrite or stand in for the other.
+    assessment_type: Mapped[str] = mapped_column(String(20), nullable=False, default="general")
     # low | medium | high | critical
     risk_conclusion: Mapped[str] = mapped_column(String(10), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Which checks ran and what each concluded, so a reviewer can see the
+    # gaps that drove the rating rather than taking the rating on trust.
+    findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     # Cross-module hook: set when risk_conclusion is high/critical.
     related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
@@ -635,6 +663,12 @@ class Questionnaire(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("sales_opportunities.id"), nullable=True, index=True
+    )
+    # The same questionnaire machinery serves vendor due diligence. It was
+    # reachable only from a sales opportunity, so a security questionnaire
+    # sent *to* a vendor had nowhere to attach.
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True, index=True
     )
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True

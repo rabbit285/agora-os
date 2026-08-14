@@ -402,7 +402,13 @@ class VendorOut(BaseModel):
     risk_tier: str
     status: str
     dpa_status: str
+    # The decision, separate from the operational `status`. A vendor can
+    # be operationally active while its review is still conditional.
+    approval_state: str = "not_submitted"
+    approval_conditions: str | None = None
+    approval_decided_at: datetime | None = None
     owner_id: uuid.UUID | None
+    compliance_owner_id: uuid.UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -416,8 +422,13 @@ class VendorAssessmentCreate(BaseModel):
 class VendorAssessmentOut(BaseModel):
     id: uuid.UUID
     vendor_id: uuid.UUID
+    # Which review this was. Without it the vendor detail cannot tell a
+    # privacy review from a security review, and any UI showing "the
+    # latest privacy position" has nothing to filter on.
+    assessment_type: str = "general"
     risk_conclusion: str
     notes: str | None
+    findings: dict[str, Any] | None = None
     related_risk_id: uuid.UUID | None
     assessed_by: uuid.UUID | None
     created_at: datetime
@@ -436,6 +447,9 @@ class QuestionnaireCreate(BaseModel):
         default="internal_template", pattern="^(customer_provided|internal_template)$"
     )
     opportunity_id: uuid.UUID | None = None
+    # The same machinery serves vendor due diligence; without this a
+    # security questionnaire sent *to* a vendor has nowhere to attach.
+    vendor_id: uuid.UUID | None = None
     owner_id: uuid.UUID | None = None
 
 
@@ -449,6 +463,7 @@ class QuestionnaireOut(BaseModel):
     source: str
     status: str
     opportunity_id: uuid.UUID | None
+    vendor_id: uuid.UUID | None = None
     owner_id: uuid.UUID | None
     created_at: datetime
 
@@ -773,3 +788,31 @@ class DsarDiscoveryOut(BaseModel):
     sources: list[dict[str, Any]]
     total_matches: int
     coverage_note: str
+
+
+class VendorApprovalRequest(BaseModel):
+    """A conditional approval must state its conditions — the service
+    rejects one without them, since a vendor marked "conditionally
+    approved" with no recorded condition is the exact record that makes
+    the state worthless later."""
+
+    decision: str = Field(pattern="^(pending|approved|conditionally_approved|rejected)$")
+    conditions: str | None = Field(default=None, max_length=2000)
+
+
+class VendorReviewFindingOut(BaseModel):
+    check: str
+    outcome: str
+    detail: str
+
+
+class VendorAssessmentDetailOut(BaseModel):
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    assessment_type: str
+    risk_conclusion: str
+    notes: str | None
+    findings: dict[str, Any] | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
