@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, Info } from "lucide-react";
 
+import { MapControl } from "@/components/compliance/map-control";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,13 @@ export default function FrameworkDashboardPage({
                     {evaluation.latest_assessment_status ?? "none"}
                   </p>
                 )}
+
+                <MapControl
+                  requirementId={requirement.id}
+                  requirementCode={requirement.reference_code}
+                  frameworkId={id}
+                  mappedControlIds={requirement.controls.map((c) => c.id)}
+                />
 
                 {gap && gap.status !== "resolved" && (
                   <GapPanel gap={gap} frameworkId={id} />

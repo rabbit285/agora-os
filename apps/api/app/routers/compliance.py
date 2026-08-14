@@ -83,6 +83,7 @@ from app.compliance.schemas import (
     ControlCreate,
     ControlDetailOut,
     ControlOut,
+    ControlRequirementMapping,
     CreateGapTaskRequest,
     DataTransferCreate,
     DataTransferOut,
@@ -552,6 +553,8 @@ async def create_control(
         organization_id=context.organization_id,
         title=payload.title,
         description=payload.description,
+        category=payload.category,
+        priority=payload.priority,
         owner_id=payload.owner_id,
     )
     db.add(control)
@@ -589,14 +592,15 @@ async def _get_org_control(
     return control
 
 
-@router.get("/controls/{control_id}", response_model=ControlDetailOut)
-async def get_control(
-    control_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
+async def _control_detail(
+    db: AsyncSession, control: Control, organization_id: uuid.UUID
 ) -> ControlDetailOut:
-    control = await _get_org_control(db, control_id, context.organization_id)
+    """Assemble a control with its requirements, assessments and evidence.
 
+    Shared by the detail route and the mapping route so a caller who has
+    just mapped a requirement sees the same shape back, rather than
+    having to re-fetch to find out what changed.
+    """
     requirements_result = await db.execute(
         select(Requirement)
         .join(ControlMapping, ControlMapping.requirement_id == Requirement.id)
@@ -611,11 +615,10 @@ async def get_control(
         select(Evidence)
         .where(
             Evidence.control_id == control.id,
-            Evidence.organization_id == context.organization_id,
+            Evidence.organization_id == organization_id,
         )
         .order_by(Evidence.created_at.desc())
     )
-
     return ControlDetailOut(
         **ControlOut.model_validate(control).model_dump(),
         requirements=[
@@ -626,6 +629,125 @@ async def get_control(
         ],
         evidence=[EvidenceOut.model_validate(e) for e in evidence_result.scalars().all()],
     )
+
+
+@router.post(
+    "/controls/{control_id}/requirements",
+    response_model=ControlDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def map_control_to_requirements(
+    control_id: uuid.UUID,
+    payload: ControlRequirementMapping,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.controls.manage")),
+) -> ControlDetailOut:
+    """Map an existing control to one or more requirements.
+
+    Mapping used to be possible only when the control was created, which
+    forced a duplicate control every time the same measure answered a
+    second requirement — and one control satisfying several requirements
+    is the normal case. Re-mapping an existing pair is a no-op rather
+    than an error, so the button is safe to press twice.
+    """
+    control = await _get_org_control(db, control_id, context.organization_id)
+
+    existing = set(
+        (
+            await db.execute(
+                select(ControlMapping.requirement_id).where(
+                    ControlMapping.control_id == control.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    added: list[str] = []
+    for requirement_id in payload.requirement_ids:
+        requirement = await db.get(Requirement, requirement_id)
+        if requirement is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found"
+            )
+        # Catalog requirements are global, but a *custom* framework's are
+        # not — mapping to another tenant's private requirement would leak
+        # its existence.
+        framework = await db.get(Framework, requirement.framework_id)
+        if framework is None or (
+            framework.organization_id is not None
+            and framework.organization_id != context.organization_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found"
+            )
+        if requirement_id in existing:
+            continue
+        db.add(ControlMapping(control_id=control.id, requirement_id=requirement_id))
+        added.append(requirement.reference_code)
+
+    if added:
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="compliance.control.mapped",
+            object_type="control",
+            object_id=str(control.id),
+            after_state={"requirements": added},
+        )
+    await db.commit()
+    return await _control_detail(db, control, context.organization_id)
+
+
+@router.delete(
+    "/controls/{control_id}/requirements/{requirement_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+async def unmap_control_from_requirement(
+    control_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.controls.manage")),
+) -> Response:
+    """Remove a mapping. The control itself survives — it may still answer
+    other requirements, and deleting it would take its evidence and
+    assessment history with it."""
+    control = await _get_org_control(db, control_id, context.organization_id)
+    mapping = (
+        await db.execute(
+            select(ControlMapping).where(
+                ControlMapping.control_id == control.id,
+                ControlMapping.requirement_id == requirement_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if mapping is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mapping not found")
+    await db.delete(mapping)
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.control.unmapped",
+        object_type="control",
+        object_id=str(control.id),
+        before_state={"requirement_id": str(requirement_id)},
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/controls/{control_id}", response_model=ControlDetailOut)
+async def get_control(
+    control_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ControlDetailOut:
+    control = await _get_org_control(db, control_id, context.organization_id)
+    return await _control_detail(db, control, context.organization_id)
 
 
 @router.post(

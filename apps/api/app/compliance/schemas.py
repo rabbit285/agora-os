@@ -63,6 +63,9 @@ class FrameworkDashboardOut(BaseModel):
 class ControlCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str | None = None
+    # The organization's own taxonomy, not ours — see Control.category.
+    category: str | None = Field(default=None, max_length=100)
+    priority: str = Field(default="medium", pattern="^(low|medium|high)$")
     owner_id: uuid.UUID | None = None
     requirement_ids: list[uuid.UUID] = Field(default_factory=list)
 
@@ -71,6 +74,8 @@ class ControlOut(BaseModel):
     id: uuid.UUID
     title: str
     description: str | None
+    category: str | None = None
+    priority: str = "medium"
     status: str
     owner_id: uuid.UUID | None
     created_at: datetime
@@ -816,3 +821,15 @@ class VendorAssessmentDetailOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ControlRequirementMapping(BaseModel):
+    """Map an existing control to requirements after it was created.
+
+    Mapping was previously only possible at creation time, which forced a
+    duplicate control whenever the same measure answered a second
+    requirement — and one control satisfying several requirements is the
+    normal case, not the exception.
+    """
+
+    requirement_ids: list[uuid.UUID] = Field(min_length=1)

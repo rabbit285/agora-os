@@ -476,6 +476,12 @@ export type Control = {
   id: string;
   title: string;
   description: string | null;
+  /** The organization's own taxonomy, not a fixed enum — an enum of ours
+   * would fit nobody and need extending forever. */
+  category: string | null;
+  priority: "low" | "medium" | "high";
+  /** Workflow state only. Whether a control is *evidenced* is derived
+   * from what is attached to it, never declared here. */
   status: ControlStatus;
   owner_id: string | null;
   created_at: string;
