@@ -16,13 +16,26 @@ normal task queue rather than a separate inbox.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
-from app.core.models import Task
+from app.compliance.models import Policy
+from app.core.models import File, Task
 from app.trust_center.models import EvidenceRequest, TrustCenterItem
+
+
+class TrustCenterClaimError(Exception):
+    """A published claim this system will not record as stated."""
+
+
+# Statuses that assert a third party's conclusion rather than our own
+# work. A buyer can reason about "implemented" from the rest of the page;
+# they cannot check "certified" without the certificate, which is exactly
+# why it is the one worth faking and the one we refuse to take on trust.
+ATTESTED_STATUSES = ("independently_assessed", "certified")
 
 
 async def upsert_trust_center_item(
@@ -37,6 +50,8 @@ async def upsert_trust_center_item(
     policy_id: uuid.UUID | None,
     owner_id: uuid.UUID | None,
     actor_user_id: uuid.UUID | None,
+    attestation_file_id: uuid.UUID | None = None,
+    attestation_note: str | None = None,
 ) -> TrustCenterItem:
     existing = (
         await db.execute(
@@ -46,6 +61,40 @@ async def upsert_trust_center_item(
             )
         )
     ).scalar_one_or_none()
+
+    if status in ATTESTED_STATUSES:
+        # Deliberately not inferable from anything else in the product.
+        # Every control being implemented does not make an organization
+        # certified; only an auditor does, and the evidence of that is a
+        # document with a named person standing behind it.
+        if attestation_file_id is None:
+            raise TrustCenterClaimError(
+                f"'{status}' states that an external party assessed this organization. Attach "
+                "the certificate or audit report before publishing that claim — it cannot be "
+                "inferred from the controls recorded in Veyntra."
+            )
+        file_record = await db.get(File, attestation_file_id)
+        if file_record is None or file_record.organization_id != organization_id:
+            raise TrustCenterClaimError("The attestation document could not be found.")
+        if not (attestation_note or "").strip():
+            raise TrustCenterClaimError(
+                "Record who issued this attestation and what it covers, so a reader can tell a "
+                "scoped report from a full certification."
+            )
+
+    if is_public and policy_id is not None:
+        # A draft policy is by definition not agreed internally, so
+        # publishing it externally publishes something nobody has signed
+        # off. The public view already hides unpublished policies; this
+        # refuses the intent rather than silently doing something else.
+        policy = await db.get(Policy, policy_id)
+        if policy is None or policy.organization_id != organization_id:
+            raise TrustCenterClaimError("The linked policy could not be found.")
+        if policy.status != "published":
+            raise TrustCenterClaimError(
+                f"'{policy.title}' is still a draft. Publish the policy before linking it to a "
+                "public Trust Center entry."
+            )
 
     if existing is None:
         item = TrustCenterItem(
@@ -57,6 +106,10 @@ async def upsert_trust_center_item(
             is_public=is_public,
             policy_id=policy_id,
             owner_id=owner_id,
+            attestation_file_id=attestation_file_id,
+            attestation_note=attestation_note,
+            attested_by=actor_user_id if status in ATTESTED_STATUSES else None,
+            attested_at=datetime.now(UTC) if status in ATTESTED_STATUSES else None,
         )
         db.add(item)
         before_state = None
@@ -69,6 +122,17 @@ async def upsert_trust_center_item(
         item.is_public = is_public
         item.policy_id = policy_id
         item.owner_id = owner_id
+        item.attestation_file_id = attestation_file_id
+        item.attestation_note = attestation_note
+        if status in ATTESTED_STATUSES:
+            item.attested_by = actor_user_id
+            item.attested_at = datetime.now(UTC)
+        else:
+            # Dropping back below a certification claim clears its
+            # attestation, so a stale certificate cannot linger against a
+            # status that no longer asserts one.
+            item.attested_by = None
+            item.attested_at = None
     await db.flush()
 
     await record_event(

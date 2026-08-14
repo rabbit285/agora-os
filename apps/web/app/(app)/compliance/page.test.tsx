@@ -126,6 +126,10 @@ const VENDOR_FIXTURE: Vendor = {
   risk_tier: "critical",
   status: "active",
   dpa_status: "pending",
+  approval_state: "not_submitted",
+  approval_conditions: null,
+  approval_decided_at: null,
+  compliance_owner_id: null,
   owner_id: null,
   created_at: new Date().toISOString(),
 };
@@ -522,6 +526,11 @@ describe("CompliancePage — Trust Center section", () => {
           content: null,
           status: "planned",
           is_public: false,
+          // Sent as null for ordinary statuses. Only
+          // independently_assessed and certified require them, and the
+          // API refuses those without an attestation.
+          attestation_file_id: null,
+          attestation_note: null,
         },
       }),
     );

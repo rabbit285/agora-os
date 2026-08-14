@@ -366,6 +366,14 @@ const TRUST_CENTER_CATEGORIES: TrustCenterCategory[] = [
   "business_continuity",
 ];
 
+/** The two statuses that assert an outside party's conclusion rather than
+ * our own work. Mirrors ATTESTED_STATUSES on the API, which enforces it —
+ * this only decides whether to show the attestation fields. */
+const ATTESTED_STATUSES = new Set<TrustCenterItemStatus>([
+  "independently_assessed",
+  "certified",
+]);
+
 function TrustCenterSection() {
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<TrustCenterCategory>("security_overview");
@@ -373,6 +381,8 @@ function TrustCenterSection() {
   const [content, setContent] = useState("");
   const [itemStatus, setItemStatus] = useState<TrustCenterItemStatus>("planned");
   const [isPublic, setIsPublic] = useState(false);
+  const [attestationFileId, setAttestationFileId] = useState("");
+  const [attestationNote, setAttestationNote] = useState("");
 
   const { data: items } = useQuery<TrustCenterItem[]>({
     queryKey: ["compliance", "trust-center-items"],
@@ -388,13 +398,23 @@ function TrustCenterSection() {
     mutationFn: () =>
       apiFetch<TrustCenterItem>("/api/v1/trust-center/items", {
         method: "POST",
-        body: { category, title, content: content.trim() || null, status: itemStatus, is_public: isPublic },
+        body: {
+          category,
+          title,
+          content: content.trim() || null,
+          status: itemStatus,
+          is_public: isPublic,
+          attestation_file_id: attestationFileId.trim() || null,
+          attestation_note: attestationNote.trim() || null,
+        },
       }),
     onSuccess: () => {
       setTitle("");
       setContent("");
       setItemStatus("planned");
       setIsPublic(false);
+      setAttestationFileId("");
+      setAttestationNote("");
       queryClient.invalidateQueries({ queryKey: ["compliance", "trust-center-items"] });
     },
   });
@@ -459,6 +479,42 @@ function TrustCenterSection() {
             />
             Publish on public Trust Center page
           </label>
+
+          {/* "Independently assessed" and "certified" state what an
+              outside party concluded — the only claims on a trust page a
+              buyer cannot check against the rest of it. The API refuses
+              them without an attestation, so the form has to collect one
+              rather than leaving the reader with a 422 and no way to
+              comply. */}
+          {ATTESTED_STATUSES.has(itemStatus) && (
+            <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--warning-500)]/35 bg-[var(--warning-50)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--warning-700)]">
+                Attestation required
+              </p>
+              <p className="text-sm leading-relaxed text-[var(--warning-700)]">
+                This status says an external party assessed your organization. It cannot be
+                inferred from the controls recorded here, so attach the certificate or audit
+                report and say what it covers.
+              </p>
+              <Input
+                placeholder="Attestation document file ID"
+                value={attestationFileId}
+                onChange={(e) => setAttestationFileId(e.target.value)}
+              />
+              <Input
+                placeholder="Who issued it and what it covers (e.g. scope, audit period)"
+                value={attestationNote}
+                onChange={(e) => setAttestationNote(e.target.value)}
+              />
+            </div>
+          )}
+
+          {saveItem.isError && (
+            <p className="text-sm text-[var(--critical-600)]">
+              {(saveItem.error as Error).message}
+            </p>
+          )}
+
           <Button
             disabled={!title.trim() || saveItem.isPending}
             onClick={() => saveItem.mutate()}

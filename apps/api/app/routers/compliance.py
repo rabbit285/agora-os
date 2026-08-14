@@ -135,7 +135,9 @@ from app.compliance.schemas import (
     SecurityReviewStatusUpdate,
     SecurityReviewSyncResult,
     SetFrameworkActivationRequest,
+    VendorApprovalRequest,
     VendorAssessmentCreate,
+    VendorAssessmentDetailOut,
     VendorAssessmentOut,
     VendorCreate,
     VendorDetailOut,
@@ -166,6 +168,12 @@ from app.compliance.service import (
     update_dsar_status,
     update_questionnaire_answer,
     update_security_review_status,
+)
+from app.compliance.vendor_review import (
+    VendorApprovalError,
+    decide_vendor_approval,
+    run_privacy_review,
+    run_security_review,
 )
 from app.core.models import Approval, File, Task
 from app.core.pagination import Pagination, paginate, pagination_params
@@ -1728,6 +1736,82 @@ async def _get_org_vendor(
     return vendor
 
 
+@router.post(
+    "/vendors/{vendor_id}/privacy-review",
+    response_model=VendorAssessmentDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def review_vendor_privacy(
+    vendor_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> VendorAssessment:
+    """Check the privacy position from what is actually on file: DPA
+    status, and the questionnaire answers about transfers, retention and
+    subprocessors. Reports what is missing; it does not judge the vendor.
+    """
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    assessment = await run_privacy_review(
+        db, organization_id=context.organization_id, vendor=vendor, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment
+
+
+@router.post(
+    "/vendors/{vendor_id}/security-review",
+    response_model=VendorAssessmentDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def review_vendor_security(
+    vendor_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> VendorAssessment:
+    """Check the security position: evidence on file, and whether the
+    questionnaire was actually completed."""
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    assessment = await run_security_review(
+        db, organization_id=context.organization_id, vendor=vendor, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment
+
+
+@router.post("/vendors/{vendor_id}/approval", response_model=VendorOut)
+async def decide_vendor(
+    vendor_id: uuid.UUID,
+    payload: VendorApprovalRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.vendors.manage")),
+) -> Vendor:
+    """Record the approval decision.
+
+    `conditionally_approved` is the state real reviews end in most often,
+    and it requires its conditions in writing — see
+    `app.compliance.vendor_review.decide_vendor_approval`.
+    """
+    vendor = await _get_org_vendor(db, vendor_id, context.organization_id)
+    try:
+        await decide_vendor_approval(
+            db,
+            organization_id=context.organization_id,
+            vendor=vendor,
+            decision=payload.decision,
+            conditions=payload.conditions,
+            actor_user_id=context.user.id,
+        )
+    except VendorApprovalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(vendor)
+    return vendor
+
+
 @router.get("/vendors/{vendor_id}", response_model=VendorDetailOut)
 async def get_vendor(
     vendor_id: uuid.UUID,
@@ -1857,6 +1941,10 @@ async def create_questionnaire(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity not found"
             )
+    # Same org check as the opportunity above: an unknown or another
+    # tenant's id must not reach the foreign key as an opaque 500.
+    if payload.vendor_id is not None:
+        await _get_org_vendor(db, payload.vendor_id, context.organization_id)
 
     questionnaire = Questionnaire(organization_id=context.organization_id, **payload.model_dump())
     db.add(questionnaire)

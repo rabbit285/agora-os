@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { VendorReview } from "@/components/compliance/vendor-review";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -104,6 +105,8 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
           <option value="not_required">Not required</option>
         </select>
       </div>
+
+      <VendorReview vendor={vendor} />
 
       <div className="mb-8">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">

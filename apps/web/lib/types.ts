@@ -680,15 +680,45 @@ export type Vendor = {
   risk_tier: Severity;
   status: VendorStatus;
   dpa_status: "pending" | "signed" | "not_required";
+  /** The review decision, separate from the operational `status`: a
+   * vendor can be operationally active while its review is conditional.
+   * "Conditionally approved" is the state real reviews usually end in —
+   * without it a reviewer must either block a vendor the business needs
+   * or approve outright and lose the caveat. */
+  approval_state:
+    | "not_submitted"
+    | "pending"
+    | "approved"
+    | "conditionally_approved"
+    | "rejected";
+  approval_conditions: string | null;
+  approval_decided_at: string | null;
   owner_id: string | null;
+  compliance_owner_id: string | null;
   created_at: string;
+};
+
+export type VendorReviewCheck = {
+  check: string;
+  outcome: "satisfied" | "missing" | "unanswered";
+  detail: string;
 };
 
 export type VendorAssessment = {
   id: string;
   vendor_id: string;
+  /** Privacy and security reviews reach different conclusions about the
+   * same vendor; neither stands in for the other. */
+  assessment_type: "privacy" | "security" | "general";
   risk_conclusion: Severity;
   notes: string | null;
+  /** Which checks ran and what each concluded, so a reader can see the
+   * gaps that drove the rating rather than taking it on trust. */
+  findings: {
+    checks?: VendorReviewCheck[];
+    outstanding?: number;
+    coverage_note?: string;
+  } | null;
   related_risk_id: string | null;
   assessed_by: string | null;
   created_at: string;
