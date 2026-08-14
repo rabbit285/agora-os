@@ -265,6 +265,21 @@ class Risk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     control_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True
     )
+    # Which AI system or DPIA this risk was raised against. A risk
+    # register that cannot say what a risk is *about* forces every reader
+    # to re-derive it from the title.
+    ai_system_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=True, index=True
+    )
+    dpia_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("dpias.id"), nullable=True, index=True
+    )
+    # Risk after mitigating controls are applied. Null until someone has
+    # actually assessed the mitigation — deliberately not defaulted to the
+    # inherent value, so "not yet reassessed" stays distinguishable from
+    # "reassessed and unchanged".
+    residual_likelihood: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    residual_impact: Mapped[str | None] = mapped_column(String(10), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -310,11 +325,37 @@ class AISystem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True
     )
     purpose: Mapped[str] = mapped_column(String(2000), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # The specific model behind the system. Recorded separately from
+    # `vendor` because "Anthropic" and "claude-opus-4" are different facts
+    # and an inventory that conflates them cannot answer which model is
+    # actually in production. A demo/unconfigured deployment must say so
+    # here rather than naming a live model it is not calling.
+    model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Who uses it internally, and who is affected by it without using it —
+    # the second group is the one the EU AI Act cares most about, and the
+    # one an inventory keyed only on "owner" loses entirely.
+    internal_users: Mapped[list[str]] = mapped_column(JSON, default=list)
+    affected_users: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # [{"name": "Customer email", "classification": "confidential"}, ...]
+    processed_data: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     # minimal | limited | high | unacceptable (EU AI Act risk tiers)
     risk_classification: Mapped[str] = mapped_column(String(20), default="minimal")
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # in_review | approved | rejected | retired
     status: Mapped[str] = mapped_column(String(20), default="in_review")
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    business_owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    technical_owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    governance_owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     # Cross-module hook (spec §69 "New AI Tool Adoption") — set when
@@ -337,9 +378,20 @@ class AIAssessment(UUIDPrimaryKeyMixin, Base):
     ai_system_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=False, index=True
     )
+    # eu_ai_act | privacy | general. Without this, the regulatory
+    # applicability assessment and the privacy assessment are the same
+    # undifferentiated row, and neither can be shown as done independently
+    # — they answer different questions to different regulators.
+    assessment_type: Mapped[str] = mapped_column(String(20), nullable=False, default="general")
     # pass | fail | partial | not_assessed
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # The reasoning, kept structured rather than prose: which indicators
+    # were answered, what was concluded from them, what remains uncertain,
+    # and whether a human still has to look. A classification without its
+    # basis is an assertion, and this is a domain where an unsupported
+    # assertion is worse than no answer.
+    findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     assessed_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

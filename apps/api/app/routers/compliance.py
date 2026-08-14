@@ -8,6 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance.ai_governance import (
+    indicator_catalog,
+    record_eu_ai_act_assessment,
+    record_privacy_assessment,
+)
 from app.compliance.assessment import (
     create_task_from_gap,
     generate_remediation,
@@ -43,6 +48,7 @@ from app.compliance.models import (
 )
 from app.compliance.schemas import (
     AIAssessmentCreate,
+    AIAssessmentDetailOut,
     AIAssessmentOut,
     AIIncidentCreate,
     AIIncidentOut,
@@ -50,6 +56,7 @@ from app.compliance.schemas import (
     AISystemCreate,
     AISystemDetailOut,
     AISystemOut,
+    AISystemProfileUpdate,
     AISystemStatusUpdate,
     AuditCreate,
     AuditDetailOut,
@@ -74,6 +81,7 @@ from app.compliance.schemas import (
     DSARCreate,
     DSAROut,
     DSARStatusUpdate,
+    EuAiActScreeningRequest,
     EvidenceCreate,
     EvidenceOut,
     FrameworkActivationOut,
@@ -86,6 +94,7 @@ from app.compliance.schemas import (
     PolicyCreate,
     PolicyOut,
     PolicyStatusUpdate,
+    PrivacyAssessmentRequest,
     ProcessingActivityCreate,
     ProcessingActivityOut,
     QuestionnaireAnswerOut,
@@ -101,6 +110,7 @@ from app.compliance.schemas import (
     RequirementOut,
     RiskCreate,
     RiskOut,
+    RiskResidualUpdate,
     RiskUpdate,
     SecurityReviewCreate,
     SecurityReviewDetailOut,
@@ -911,6 +921,19 @@ async def _get_org_ai_system(
     return system
 
 
+@router.get("/ai-systems/indicator-catalog")
+async def get_indicator_catalog(
+    context: OrgContext = Depends(get_org_context),
+) -> dict[str, object]:
+    """The EU AI Act indicator list and privacy questions.
+
+    Served rather than duplicated in the form component, so the questions
+    and the rules that read them cannot drift apart. Declared before the
+    `{ai_system_id}` routes so the literal path wins.
+    """
+    return indicator_catalog()
+
+
 @router.get("/ai-systems/{ai_system_id}", response_model=AISystemDetailOut)
 async def get_ai_system(
     ai_system_id: uuid.UUID,
@@ -948,6 +971,134 @@ async def update_ai_system_status(
     await db.commit()
     await db.refresh(system)
     return system
+
+
+@router.patch("/ai-systems/{ai_system_id}/profile", response_model=AISystemOut)
+async def update_ai_system_profile(
+    ai_system_id: uuid.UUID,
+    payload: AISystemProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AISystem:
+    """Fill in the inventory detail — users, affected people, data
+    categories, and the three accountable owners."""
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    before = {
+        "internal_users": list(system.internal_users or []),
+        "affected_users": list(system.affected_users or []),
+    }
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(system, field, value)
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.ai_system.profile_updated",
+        object_type="ai_system",
+        object_id=str(system.id),
+        before_state=before,
+        after_state={
+            "internal_users": list(system.internal_users or []),
+            "affected_users": list(system.affected_users or []),
+        },
+    )
+    await db.commit()
+    await db.refresh(system)
+    return system
+
+
+@router.post(
+    "/ai-systems/{ai_system_id}/eu-ai-act-screening",
+    response_model=AIAssessmentDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def screen_ai_system(
+    ai_system_id: uuid.UUID,
+    payload: EuAiActScreeningRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AIAssessment:
+    """Screen a system against the EU AI Act's own indicators.
+
+    The tier always arrives with the facts it was drawn from, what remains
+    uncertain, and whether a human must confirm — see
+    `app.compliance.ai_governance` for why this must not be a model call.
+    """
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    assessment, _ = await record_eu_ai_act_assessment(
+        db,
+        organization_id=context.organization_id,
+        ai_system=system,
+        indicators=payload.indicators,
+        assessed_by=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment
+
+
+@router.post(
+    "/ai-systems/{ai_system_id}/privacy-assessment",
+    response_model=AIAssessmentDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def assess_ai_system_privacy(
+    ai_system_id: uuid.UUID,
+    payload: PrivacyAssessmentRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> AIAssessment:
+    """Record the privacy assessment, including which questions nobody
+    answered — "no transfer happens" and "nobody checked" are different
+    answers and a DPO needs to tell them apart."""
+    system = await _get_org_ai_system(db, ai_system_id, context.organization_id)
+    assessment = await record_privacy_assessment(
+        db,
+        organization_id=context.organization_id,
+        ai_system=system,
+        answers=payload.answers,
+        assessed_by=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(assessment)
+    return assessment
+
+
+@router.patch("/risks/{risk_id}/residual", response_model=RiskOut)
+async def update_risk_residual(
+    risk_id: uuid.UUID,
+    payload: RiskResidualUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.risks.manage")),
+) -> Risk:
+    """Record the risk remaining after mitigation.
+
+    Kept distinct from the inherent rating rather than overwriting it: the
+    point of a residual rating is the comparison, and a register that only
+    stores the current number cannot show that a control did anything.
+    """
+    risk = await db.get(Risk, risk_id)
+    if risk is None or risk.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Risk not found")
+    before = {"likelihood": risk.likelihood, "impact": risk.impact}
+    risk.residual_likelihood = payload.residual_likelihood
+    risk.residual_impact = payload.residual_impact
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.risk.residual_recorded",
+        object_type="risk",
+        object_id=str(risk.id),
+        before_state=before,
+        after_state={
+            "residual_likelihood": payload.residual_likelihood,
+            "residual_impact": payload.residual_impact,
+        },
+    )
+    await db.commit()
+    await db.refresh(risk)
+    return risk
 
 
 @router.post(
