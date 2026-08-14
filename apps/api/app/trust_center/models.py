@@ -35,10 +35,11 @@ build (spec §80), here applied to a request with no authenticated actor.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import Uuid
+from sqlalchemy.types import DateTime, Uuid
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -74,7 +75,26 @@ class TrustCenterItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     content: Mapped[str | None] = mapped_column(String(4000), nullable=True)
     # planned | in_progress | implemented | independently_assessed | certified
+    #
+    # The top two are claims about what a third party concluded, not about
+    # what we built, and they are the only statements on this page a buyer
+    # cannot verify for themselves. Publishing "ISO 27001 certified"
+    # without a certificate is the single most damaging thing this product
+    # could do for a customer, so those two states require an attestation
+    # document and a named person — see app.trust_center.service.
     status: Mapped[str] = mapped_column(String(30), default="planned")
+    # The certificate or audit report behind an `independently_assessed`
+    # or `certified` claim.
+    attestation_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    attestation_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    attested_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    attested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_public: Mapped[bool] = mapped_column(default=False)
     policy_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("policies.id"), nullable=True

@@ -526,6 +526,11 @@ describe("CompliancePage — Trust Center section", () => {
           content: null,
           status: "planned",
           is_public: false,
+          // Sent as null for ordinary statuses. Only
+          // independently_assessed and certified require them, and the
+          // API refuses those without an attestation.
+          attestation_file_id: null,
+          attestation_note: null,
         },
       }),
     );

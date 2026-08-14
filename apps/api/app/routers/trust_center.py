@@ -22,6 +22,7 @@ from app.trust_center.schemas import (
     TrustCenterPublicPolicyOut,
 )
 from app.trust_center.service import (
+    TrustCenterClaimError,
     create_evidence_request,
     fulfill_evidence_request,
     upsert_trust_center_item,
@@ -123,18 +124,28 @@ async def set_trust_center_item(
         policy = await db.get(Policy, payload.policy_id)
         if policy is None or policy.organization_id != context.organization_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
-    item = await upsert_trust_center_item(
-        db,
-        organization_id=context.organization_id,
-        category=payload.category,
-        title=payload.title,
-        content=payload.content,
-        status=payload.status,
-        is_public=payload.is_public,
-        policy_id=payload.policy_id,
-        owner_id=payload.owner_id,
-        actor_user_id=context.user.id,
-    )
+    try:
+        item = await upsert_trust_center_item(
+            db,
+            organization_id=context.organization_id,
+            category=payload.category,
+            title=payload.title,
+            content=payload.content,
+            status=payload.status,
+            is_public=payload.is_public,
+            policy_id=payload.policy_id,
+            owner_id=payload.owner_id,
+            actor_user_id=context.user.id,
+            attestation_file_id=payload.attestation_file_id,
+            attestation_note=payload.attestation_note,
+        )
+    except TrustCenterClaimError as exc:
+        # 422, not 403: the caller may publish Trust Center content, but
+        # not this particular claim in this state. The message says what
+        # is missing so it reads as a correction rather than a wall.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     await db.commit()
     await db.refresh(item)
     return item

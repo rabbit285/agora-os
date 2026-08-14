@@ -19,6 +19,11 @@ class TrustCenterItemUpsert(BaseModel):
     is_public: bool = False
     policy_id: uuid.UUID | None = None
     owner_id: uuid.UUID | None = None
+    # Required when status is independently_assessed or certified: those
+    # assert an external party's conclusion, which cannot be inferred from
+    # anything else in the product.
+    attestation_file_id: uuid.UUID | None = None
+    attestation_note: str | None = Field(default=None, max_length=1000)
 
 
 class TrustCenterItemOut(BaseModel):
@@ -30,6 +35,9 @@ class TrustCenterItemOut(BaseModel):
     is_public: bool
     policy_id: uuid.UUID | None
     owner_id: uuid.UUID | None
+    attestation_file_id: uuid.UUID | None = None
+    attestation_note: str | None = None
+    attested_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
