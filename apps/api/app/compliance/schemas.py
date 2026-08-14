@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -132,6 +133,10 @@ class RiskCreate(BaseModel):
     likelihood: str = Field(pattern="^(low|medium|high)$")
     impact: str = Field(pattern="^(low|medium|high)$")
     control_id: uuid.UUID | None = None
+    # What the risk is about. A register that cannot say this forces every
+    # reader to re-derive it from the title.
+    ai_system_id: uuid.UUID | None = None
+    dpia_id: uuid.UUID | None = None
     owner_id: uuid.UUID | None = None
 
 
@@ -148,6 +153,13 @@ class RiskOut(BaseModel):
     impact: str
     status: str
     control_id: uuid.UUID | None
+    ai_system_id: uuid.UUID | None = None
+    dpia_id: uuid.UUID | None = None
+    # Null until the mitigation has actually been assessed — deliberately
+    # not defaulted to the inherent rating, so "not yet reassessed" stays
+    # distinguishable from "reassessed and unchanged".
+    residual_likelihood: str | None = None
+    residual_impact: str | None = None
     owner_id: uuid.UUID | None
     created_at: datetime
 
@@ -196,6 +208,15 @@ class AISystemOut(BaseModel):
     vendor: str | None
     vendor_id: uuid.UUID | None
     purpose: str
+    description: str | None = None
+    model_name: str | None = None
+    internal_users: list[str] = []
+    affected_users: list[str] = []
+    processed_data: list[dict[str, str]] = []
+    business_owner_id: uuid.UUID | None = None
+    technical_owner_id: uuid.UUID | None = None
+    governance_owner_id: uuid.UUID | None = None
+    last_reviewed_at: datetime | None = None
     risk_classification: str
     status: str
     owner_id: uuid.UUID | None
@@ -213,8 +234,13 @@ class AIAssessmentCreate(BaseModel):
 class AIAssessmentOut(BaseModel):
     id: uuid.UUID
     ai_system_id: uuid.UUID
+    # Which assessment this is. Without it a reader cannot tell an EU AI
+    # Act screening from a privacy review from an ad-hoc note, and any UI
+    # trying to show "the latest screening" has nothing to filter on.
+    assessment_type: str = "general"
     status: str
     notes: str | None
+    findings: dict[str, Any] | None = None
     assessed_by: uuid.UUID | None
     created_at: datetime
 
@@ -640,3 +666,54 @@ class CreateGapTaskRequest(BaseModel):
     assignee_id: uuid.UUID | None = None
     priority: str = Field(default="high", pattern="^(low|medium|high|urgent)$")
     due_in_days: int = Field(default=7, ge=1, le=365)
+
+
+class AISystemProfileUpdate(BaseModel):
+    """The inventory detail an EU AI Act record is expected to carry.
+
+    Separate from AISystemCreate so an existing system can be enriched
+    without re-stating everything, which is how these records are actually
+    built up — the person who registers a tool rarely knows every field on
+    day one.
+    """
+
+    description: str | None = Field(default=None, max_length=2000)
+    model_name: str | None = Field(default=None, max_length=200)
+    internal_users: list[str] | None = None
+    affected_users: list[str] | None = None
+    processed_data: list[dict[str, str]] | None = None
+    business_owner_id: uuid.UUID | None = None
+    technical_owner_id: uuid.UUID | None = None
+    governance_owner_id: uuid.UUID | None = None
+
+
+class EuAiActScreeningRequest(BaseModel):
+    """Indicator answers, keyed by the catalog at
+    GET /ai-systems/indicator-catalog. Anything omitted is reported as
+    unanswered rather than assumed false."""
+
+    indicators: dict[str, bool]
+
+
+class PrivacyAssessmentRequest(BaseModel):
+    answers: dict[str, str]
+
+
+class AIAssessmentDetailOut(BaseModel):
+    id: uuid.UUID
+    ai_system_id: uuid.UUID
+    assessment_type: str
+    status: str
+    notes: str | None
+    findings: dict[str, Any] | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RiskResidualUpdate(BaseModel):
+    """Risk remaining after mitigating controls. Both are required
+    together — half a residual rating is not a rating."""
+
+    residual_likelihood: str = Field(pattern="^(low|medium|high)$")
+    residual_impact: str = Field(pattern="^(low|medium|high)$")

@@ -526,6 +526,20 @@ export type AISystem = {
   vendor: string | null;
   vendor_id: string | null;
   purpose: string;
+  description: string | null;
+  /** The specific model, recorded separately from the vendor: "Anthropic"
+   * and "claude-opus-4" are different facts, and an inventory that
+   * conflates them cannot answer which model is actually in production. */
+  model_name: string | null;
+  internal_users: string[];
+  /** People affected by the system without using it — the group the EU AI
+   * Act cares most about, and the one an owner-only record loses. */
+  affected_users: string[];
+  processed_data: { name: string; classification: string }[];
+  business_owner_id: string | null;
+  technical_owner_id: string | null;
+  governance_owner_id: string | null;
+  last_reviewed_at: string | null;
   risk_classification: AIRiskClassification;
   status: AISystemStatus;
   owner_id: string | null;
@@ -1780,5 +1794,38 @@ export type AuditEvent = {
   actor_user_id: string | null;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type IndicatorCatalog = {
+  prohibited: Record<string, string>;
+  high_risk: Record<string, string>;
+  transparency: Record<string, string>;
+  privacy_questions: Record<string, string>;
+};
+
+/** An EU AI Act screening or privacy assessment. `findings` carries the
+ * reasoning — which indicators were relied on, what is still unanswered,
+ * and whether a human must confirm. A classification without its basis is
+ * an assertion, so the UI always renders the basis alongside it. */
+export type AIAssessmentDetail = {
+  id: string;
+  ai_system_id: string;
+  assessment_type: "eu_ai_act" | "privacy" | "general";
+  status: string;
+  notes: string | null;
+  findings: {
+    classification?: string;
+    rationale?: string;
+    facts_relied_on?: string[];
+    uncertainties?: string[];
+    requires_human_review?: boolean;
+    indicators_answered?: Record<string, boolean>;
+    indicators_unanswered?: string[];
+    questions?: Record<string, string>;
+    answers?: Record<string, string>;
+    unanswered?: string[];
+    dpia_indicated?: boolean;
+  } | null;
   created_at: string;
 };
