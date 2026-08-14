@@ -448,6 +448,21 @@ class DPIA(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # low | medium | high — DPIA's own concluded risk level, not necessarily
     # the same scale as AISystem.risk_classification
     risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    # Article 35(7)'s required content. Held as named sections rather than
+    # one `findings` blob because each is separately assessable and a DPO
+    # reviewing one needs to see what is missing, not read prose looking
+    # for whether necessity was addressed at all.
+    processing_description: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    necessity_assessment: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    proportionality_assessment: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    consultation_notes: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # Derived from the risks raised against this DPIA once they have been
+    # reassessed — see app.compliance.dpia_screening.recalculate_residual_risk.
+    residual_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # What the screening concluded, and on what basis. Kept so the
+    # decision to carry out (or skip) the DPIA is itself auditable.
+    screening_outcome: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    screening_findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     # draft | in_review | approved | rejected
     status: Mapped[str] = mapped_column(String(20), default="draft")
     findings: Mapped[str | None] = mapped_column(String(2000), nullable=True)

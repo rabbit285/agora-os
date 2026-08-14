@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/page-header";
+import { DpiaSections } from "@/components/compliance/dpia-sections";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,6 +77,8 @@ export default function DPIADetailPage({ params }: { params: Promise<{ id: strin
           <span className="text-xs text-[var(--critical-600)]">{(updateStatus.error as Error).message}</span>
         )}
       </div>
+
+      <DpiaSections dpia={dpia} />
 
       {dpia.approval_id && (
         <Card className="mb-6">

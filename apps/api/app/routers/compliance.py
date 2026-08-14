@@ -19,6 +19,12 @@ from app.compliance.assessment import (
     run_framework_assessment,
     set_framework_activation,
 )
+from app.compliance.dpia_screening import (
+    EDPB_CRITERIA,
+    MANDATORY_CRITERIA,
+    recalculate_residual_risk,
+    record_dpia_screening,
+)
 from app.compliance.models import (
     DPIA,
     DSAR,
@@ -77,6 +83,9 @@ from app.compliance.schemas import (
     DataTransferStatusUpdate,
     DPIACreate,
     DPIAOut,
+    DpiaScreeningRequest,
+    DpiaScreeningResultOut,
+    DPIASectionsUpdate,
     DPIAStatusUpdate,
     DSARCreate,
     DSAROut,
@@ -740,6 +749,17 @@ async def create_risk(
 ) -> Risk:
     if payload.control_id is not None:
         await _get_org_control(db, payload.control_id, context.organization_id)
+    # Validated here rather than left to the foreign key. An unknown id
+    # reaching the database surfaces as an opaque 500, which tells the
+    # caller nothing and looks like a server fault rather than their typo.
+    # The org check also stops a risk being attached to another tenant's
+    # AI system or DPIA by guessing an id.
+    if payload.ai_system_id is not None:
+        await _get_org_ai_system(db, payload.ai_system_id, context.organization_id)
+    if payload.dpia_id is not None:
+        dpia = await db.get(DPIA, payload.dpia_id)
+        if dpia is None or dpia.organization_id != context.organization_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
 
     risk = Risk(organization_id=context.organization_id, **payload.model_dump())
     db.add(risk)
@@ -1174,6 +1194,112 @@ async def _get_org_processing_activity(
             status_code=status.HTTP_404_NOT_FOUND, detail="Processing activity not found"
         )
     return activity
+
+
+@router.get("/dpias/screening-criteria")
+async def get_dpia_screening_criteria(
+    context: OrgContext = Depends(get_org_context),
+) -> dict[str, object]:
+    """Article 35(3)'s named cases and the EDPB's nine criteria.
+
+    Declared before `/dpias/{dpia_id}` so the literal path wins — FastAPI
+    matches in definition order and a UUID parameter would swallow it.
+    """
+    return {"mandatory": MANDATORY_CRITERIA, "edpb": EDPB_CRITERIA}
+
+
+@router.post("/dpias/screening", response_model=DpiaScreeningResultOut)
+async def run_dpia_screening(
+    payload: DpiaScreeningRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaScreeningResultOut:
+    """Decide whether a processing activity needs a DPIA.
+
+    Counts the criteria the controller reported; it does not judge the
+    processing. Two or more EDPB criteria, or any Article 35(3) case,
+    indicates one is required — see `app.compliance.dpia_screening`.
+    """
+    activity = await db.get(ProcessingActivity, payload.processing_activity_id)
+    if activity is None or activity.organization_id != context.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Processing activity not found"
+        )
+    result = await record_dpia_screening(
+        db,
+        organization_id=context.organization_id,
+        activity=activity,
+        answers=payload.answers,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    return DpiaScreeningResultOut(
+        outcome=result.outcome,
+        rationale=result.rationale,
+        criteria_met=result.criteria_met,
+        mandatory_triggers=result.mandatory_triggers,
+        unanswered=result.unanswered,
+    )
+
+
+@router.patch("/dpias/{dpia_id}/sections", response_model=DPIAOut)
+async def update_dpia_sections(
+    dpia_id: uuid.UUID,
+    payload: DPIASectionsUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DPIA:
+    """Fill in Article 35(7)'s required content."""
+    dpia = await db.get(DPIA, dpia_id)
+    if dpia is None or dpia.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(dpia, field, value)
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.dpia.sections_updated",
+        object_type="dpia",
+        object_id=str(dpia.id),
+        after_state={"sections": sorted(payload.model_dump(exclude_unset=True).keys())},
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return dpia
+
+
+@router.post("/dpias/{dpia_id}/recalculate-residual", response_model=DPIAOut)
+async def recalculate_dpia_residual(
+    dpia_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DPIA:
+    """Recompute the residual level from the risks raised against this DPIA.
+
+    A risk with no residual rating counts at its inherent level, so the
+    DPIA cannot improve merely because nobody reassessed it.
+    """
+    dpia = await db.get(DPIA, dpia_id)
+    if dpia is None or dpia.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
+    before = dpia.residual_risk_level
+    level = await recalculate_residual_risk(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.dpia.residual_recalculated",
+        object_type="dpia",
+        object_id=str(dpia.id),
+        before_state={"residual_risk_level": before},
+        after_state={"residual_risk_level": level},
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return dpia
 
 
 @router.get("/dpias", response_model=list[DPIAOut])
