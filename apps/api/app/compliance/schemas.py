@@ -234,8 +234,13 @@ class AIAssessmentCreate(BaseModel):
 class AIAssessmentOut(BaseModel):
     id: uuid.UUID
     ai_system_id: uuid.UUID
+    # Which assessment this is. Without it a reader cannot tell an EU AI
+    # Act screening from a privacy review from an ad-hoc note, and any UI
+    # trying to show "the latest screening" has nothing to filter on.
+    assessment_type: str = "general"
     status: str
     notes: str | None
+    findings: dict[str, Any] | None = None
     assessed_by: uuid.UUID | None
     created_at: datetime
 

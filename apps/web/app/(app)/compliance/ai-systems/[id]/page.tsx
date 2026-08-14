@@ -10,7 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { Approval, AISystemDetail, AISystemStatus } from "@/lib/types";
+import { AiPrivacyAssessment } from "@/components/compliance/ai-privacy-assessment";
+import { EuAiActScreening } from "@/components/compliance/eu-ai-act-screening";
+import type {
+  AIAssessmentDetail,
+  Approval,
+  AISystemDetail,
+  AISystemStatus,
+} from "@/lib/types";
 
 const selectClassName =
   "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
@@ -56,6 +63,14 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
 
   const linkedApproval = approvals?.find((a) => a.id === system.approval_id);
 
+  // Typed assessments are picked out by kind rather than by position:
+  // the EU AI Act screening and the privacy review are different records
+  // answering to different regulators, and each panel shows its own
+  // latest. `assessments` arrives newest-first from the API.
+  const typed = system.assessments as unknown as AIAssessmentDetail[];
+  const latestScreening = typed.find((a) => a.assessment_type === "eu_ai_act");
+  const latestPrivacy = typed.find((a) => a.assessment_type === "privacy");
+
   return (
     <div>
       <PageHeader
@@ -86,6 +101,12 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
           </span>
         )}
       </div>
+
+      <AiSystemProfile system={system} />
+
+      <EuAiActScreening aiSystemId={id} latest={latestScreening} />
+
+      <AiPrivacyAssessment aiSystemId={id} latest={latestPrivacy} />
 
       {system.approval_id && (
         <Card className="mb-6">
@@ -156,6 +177,133 @@ export default function AISystemDetailPage({ params }: { params: Promise<{ id: s
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** The inventory detail the EU AI Act expects: who operates the system,
+ * who is affected by it without operating it, what data it touches, and
+ * the specific model behind it.
+ *
+ * Editable inline rather than behind a separate screen, because these
+ * fields are filled in over time by different people — the person who
+ * registers a tool on Monday rarely knows the retention story yet. Empty
+ * states say "not recorded" rather than rendering nothing, so a reader
+ * can tell the difference between "none" and "nobody has said".
+ */
+function AiSystemProfile({ system }: { system: AISystemDetail }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [modelName, setModelName] = useState(system.model_name ?? "");
+  const [internal, setInternal] = useState((system.internal_users ?? []).join(", "));
+  const [affected, setAffected] = useState((system.affected_users ?? []).join(", "));
+
+  const save = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/v1/compliance/ai-systems/${system.id}/profile`, {
+        method: "PATCH",
+        body: {
+          model_name: modelName || null,
+          internal_users: internal
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          affected_users: affected
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: ["compliance", "ai-systems", system.id] });
+    },
+  });
+
+  return (
+    <Card className="mb-6">
+      <CardContent className="pt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium text-[var(--fg-default)]">System profile</h2>
+          <Button size="sm" variant="outline" onClick={() => setEditing(!editing)}>
+            {editing ? "Cancel" : "Edit"}
+          </Button>
+        </div>
+
+        {editing ? (
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-[var(--fg-default)]">Model</span>
+              <Input
+                value={modelName}
+                placeholder="e.g. claude-opus-4, or 'Demo model — no provider configured'"
+                onChange={(e) => setModelName(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-[var(--fg-default)]">Internal users (comma separated)</span>
+              <Input value={internal} onChange={(e) => setInternal(e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-[var(--fg-default)]">
+                Affected people who do not use it (comma separated)
+              </span>
+              <Input value={affected} onChange={(e) => setAffected(e.target.value)} />
+            </label>
+            <div>
+              <Button disabled={save.isPending} onClick={() => save.mutate()}>
+                {save.isPending ? "Saving…" : "Save profile"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <ProfileField label="Model" value={system.model_name} />
+            <ProfileField
+              label="Last reviewed"
+              value={
+                system.last_reviewed_at
+                  ? new Date(system.last_reviewed_at).toLocaleDateString()
+                  : null
+              }
+            />
+            <ProfileField label="Internal users" value={(system.internal_users ?? []).join(", ")} />
+            <ProfileField
+              label="Affected people"
+              value={(system.affected_users ?? []).join(", ")}
+            />
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-medium text-[var(--fg-subtle)]">Data processed</dt>
+              <dd className="mt-1 flex flex-wrap gap-2">
+                {(system.processed_data ?? []).length === 0 ? (
+                  <span className="text-sm text-[var(--fg-subtle)]">Not recorded</span>
+                ) : (
+                  (system.processed_data ?? []).map((item) => (
+                    <span
+                      key={item.name}
+                      className="rounded-full border border-[var(--border-default)] px-2.5 py-0.5 text-xs text-[var(--fg-muted)]"
+                    >
+                      {item.name}
+                      <span className="ml-1 text-[var(--fg-subtle)]">· {item.classification}</span>
+                    </span>
+                  ))
+                )}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfileField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-[var(--fg-subtle)]">{label}</dt>
+      <dd className="text-sm text-[var(--fg-muted)]">
+        {value || <span className="text-[var(--fg-subtle)]">Not recorded</span>}
+      </dd>
     </div>
   );
 }
