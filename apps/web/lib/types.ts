@@ -1724,3 +1724,61 @@ export type SearchResponse = {
   query: string;
   results: SearchResult[];
 };
+
+export type FrameworkActivation = {
+  framework_id: string;
+  status: "active" | "inactive";
+  activated_at: string | null;
+};
+
+export type ComplianceGap = {
+  id: string;
+  framework_id: string;
+  requirement_id: string;
+  control_id: string | null;
+  kind: "no_control" | "evidence_missing" | "evidence_partial" | "assessment_failed";
+  status: "open" | "remediating" | "resolved";
+  severity: "low" | "medium" | "high";
+  summary: string;
+  recommendation: string | null;
+  task_id: string | null;
+  created_at: string;
+};
+
+/** One requirement's assessed position. `evidence_count` and
+ * `latest_assessment_status` travel with the status deliberately — the
+ * reader can see what the conclusion was computed from rather than being
+ * asked to trust it. */
+export type RequirementEvaluation = {
+  requirement_id: string;
+  reference_code: string;
+  title: string;
+  status: "not_assessed" | "evidence_missing" | "needs_review" | "partial" | "satisfied";
+  control_ids: string[];
+  evidence_count: number;
+  latest_assessment_status: string | null;
+  summary: string;
+  gap_id: string | null;
+};
+
+export type FrameworkAssessmentResult = {
+  framework_id: string;
+  assessed_at: string;
+  requirements: RequirementEvaluation[];
+  satisfied_count: number;
+  gap_count: number;
+  /** Requirements actually backed by evidence — the number that must not
+   * move when an unrelated document is uploaded. */
+  evidence_coverage_percent: number;
+};
+
+export type AuditEvent = {
+  id: string;
+  action: string;
+  object_type: string;
+  object_id: string | null;
+  actor_user_id: string | null;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  created_at: string;
+};

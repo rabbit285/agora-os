@@ -38,6 +38,7 @@ PERMISSIONS: dict[str, str] = {
     "core.tasks.manage": "Create, assign, and update tasks",
     "core.approvals.decide": "Approve or reject pending approvals",
     "org.settings.manage": "Manage organization profile and settings",
+    "audit.read": "Read the organization's append-only audit trail",
     "org.users.manage": "Invite, suspend, and manage user memberships and roles",
     "org.entities.manage": "Create and archive legal entities and teams",
     "compliance.controls.manage": "Create controls, map requirements, record assessments",
@@ -88,6 +89,9 @@ PERMISSIONS: dict[str, str] = {
 }
 
 COMPLIANCE_PERMISSIONS = [
+    # Reading the trail is a compliance function: an append-only log
+    # nobody can inspect provides assurance to no one.
+    "audit.read",
     "compliance.controls.manage",
     "compliance.frameworks.manage",
     "compliance.evidence.manage",
@@ -105,10 +109,12 @@ AI_GOVERNANCE_PERMISSIONS = [
 ]
 
 PRIVACY_PERMISSIONS = [
+    "audit.read",
     "compliance.privacy.manage",
 ]
 
 SECURITY_PERMISSIONS = [
+    "audit.read",
     "security.assets.manage",
     "security.findings.manage",
     "security.alerts.manage",
@@ -275,7 +281,7 @@ ROLE_PERMISSION_GRANTS: dict[str, list[str]] = {
         AUTOMATION_PERMISSIONS + INTEGRATIONS_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS
     ),
     "legal": PRIVACY_PERMISSIONS + _CROSS_CUTTING_PERMISSIONS,
-    "auditor": ["compliance.audits.manage", *_CROSS_CUTTING_PERMISSIONS],
+    "auditor": ["audit.read", "compliance.audits.manage", *_CROSS_CUTTING_PERMISSIONS],
     "employee": ["core.tasks.manage", *_CROSS_CUTTING_PERMISSIONS],
 }
 

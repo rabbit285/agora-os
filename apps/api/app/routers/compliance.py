@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance.assessment import (
+    create_task_from_gap,
+    generate_remediation,
+    run_framework_assessment,
+    set_framework_activation,
+)
 from app.compliance.models import (
     DPIA,
     DSAR,
@@ -15,12 +22,14 @@ from app.compliance.models import (
     AISystem,
     Audit,
     AuditFinding,
+    ComplianceGap,
     Control,
     ControlAssessment,
     ControlMapping,
     DataTransfer,
     Evidence,
     Framework,
+    FrameworkActivation,
     Policy,
     ProcessingActivity,
     Questionnaire,
@@ -49,11 +58,13 @@ from app.compliance.schemas import (
     AuditFindingStatusUpdate,
     AuditOut,
     AuditStatusUpdate,
+    ComplianceGapOut,
     ControlAssessmentCreate,
     ControlAssessmentOut,
     ControlCreate,
     ControlDetailOut,
     ControlOut,
+    CreateGapTaskRequest,
     DataTransferCreate,
     DataTransferOut,
     DataTransferStatusUpdate,
@@ -65,6 +76,8 @@ from app.compliance.schemas import (
     DSARStatusUpdate,
     EvidenceCreate,
     EvidenceOut,
+    FrameworkActivationOut,
+    FrameworkAssessmentResultOut,
     FrameworkCreate,
     FrameworkDashboardControlOut,
     FrameworkDashboardOut,
@@ -84,6 +97,7 @@ from app.compliance.schemas import (
     QuestionnaireQuestionDetailOut,
     QuestionnaireQuestionOut,
     QuestionnaireStatusUpdate,
+    RequirementEvaluationOut,
     RequirementOut,
     RiskCreate,
     RiskOut,
@@ -93,6 +107,7 @@ from app.compliance.schemas import (
     SecurityReviewOut,
     SecurityReviewStatusUpdate,
     SecurityReviewSyncResult,
+    SetFrameworkActivationRequest,
     VendorAssessmentCreate,
     VendorAssessmentOut,
     VendorCreate,
@@ -125,8 +140,9 @@ from app.compliance.service import (
     update_questionnaire_answer,
     update_security_review_status,
 )
-from app.core.models import Approval, File
+from app.core.models import Approval, File, Task
 from app.core.pagination import Pagination, paginate, pagination_params
+from app.core.schemas import TaskOut
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -219,6 +235,196 @@ async def list_requirements(
         .order_by(Requirement.reference_code)
     )
     return list(result.scalars().all())
+
+
+@router.get("/frameworks/activations", response_model=list[FrameworkActivationOut])
+async def list_framework_activations(
+    db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
+) -> list[FrameworkActivation]:
+    """Which frameworks this organization has adopted.
+
+    Declared before `/frameworks/{framework_id}/...` so the literal path
+    is matched first — FastAPI resolves routes in definition order, and a
+    UUID path parameter would otherwise swallow "activations".
+    """
+    result = await db.execute(
+        select(FrameworkActivation).where(
+            FrameworkActivation.organization_id == context.organization_id
+        )
+    )
+    return list(result.scalars().all())
+
+
+@router.put("/frameworks/{framework_id}/activation", response_model=FrameworkActivationOut)
+async def set_activation(
+    framework_id: uuid.UUID,
+    payload: SetFrameworkActivationRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.frameworks.manage")),
+) -> FrameworkActivation:
+    """Adopt a framework, or stand it down.
+
+    Deactivating keeps every control, evidence item, assessment and gap
+    built against the framework — switching GDPR off and on again must
+    not discard the organization's own work.
+    """
+    framework = await _get_visible_framework(db, framework_id, context.organization_id)
+    activation = await set_framework_activation(
+        db,
+        organization_id=context.organization_id,
+        framework=framework,
+        active=payload.active,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(activation)
+    return activation
+
+
+@router.post("/frameworks/{framework_id}/assess", response_model=FrameworkAssessmentResultOut)
+async def assess_framework(
+    framework_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.controls.manage")),
+) -> FrameworkAssessmentResultOut:
+    """Run (or re-run) the assessment for a whole framework.
+
+    Deterministic: every status is computed from mapped controls,
+    attached evidence and recorded assessments — see
+    `app.compliance.assessment` for why this must not be a model call.
+    Re-running reconciles gaps rather than duplicating them, which is what
+    makes remediate-then-reassess a real loop.
+    """
+    framework = await _get_visible_framework(db, framework_id, context.organization_id)
+    evaluations = await run_framework_assessment(
+        db,
+        organization_id=context.organization_id,
+        framework=framework,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+
+    gaps = {
+        gap.requirement_id: gap
+        for gap in (
+            await db.execute(
+                select(ComplianceGap).where(
+                    ComplianceGap.organization_id == context.organization_id,
+                    ComplianceGap.framework_id == framework_id,
+                    ComplianceGap.status != "resolved",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+
+    rows = [
+        RequirementEvaluationOut(
+            requirement_id=e.requirement.id,
+            reference_code=e.requirement.reference_code,
+            title=e.requirement.title,
+            status=e.status,
+            control_ids=e.control_ids,
+            evidence_count=e.evidence_count,
+            latest_assessment_status=e.latest_assessment_status,
+            summary=e.summary,
+            gap_id=gaps[e.requirement.id].id if e.requirement.id in gaps else None,
+        )
+        for e in evaluations
+    ]
+    satisfied = sum(1 for e in evaluations if e.status == "satisfied")
+    # Distinct from the dashboard's control coverage: this counts
+    # requirements actually backed by evidence, which is the number that
+    # must not move when an unrelated document is uploaded.
+    with_evidence = sum(1 for e in evaluations if e.evidence_count > 0)
+    return FrameworkAssessmentResultOut(
+        framework_id=framework_id,
+        assessed_at=datetime.now(UTC),
+        requirements=rows,
+        satisfied_count=satisfied,
+        gap_count=len(gaps),
+        evidence_coverage_percent=(
+            round(100 * with_evidence / len(evaluations), 1) if evaluations else 0.0
+        ),
+    )
+
+
+@router.get("/gaps", response_model=list[ComplianceGapOut])
+async def list_gaps(
+    framework_id: uuid.UUID | None = None,
+    status_filter: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[ComplianceGap]:
+    stmt = select(ComplianceGap).where(
+        ComplianceGap.organization_id == context.organization_id
+    )
+    if framework_id is not None:
+        stmt = stmt.where(ComplianceGap.framework_id == framework_id)
+    if status_filter is not None:
+        stmt = stmt.where(ComplianceGap.status == status_filter)
+    result = await db.execute(stmt.order_by(ComplianceGap.created_at.desc()))
+    return list(result.scalars().all())
+
+
+async def _get_gap(db: AsyncSession, gap_id: uuid.UUID, organization_id: uuid.UUID) -> ComplianceGap:
+    gap = await db.get(ComplianceGap, gap_id)
+    if gap is None or gap.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gap not found")
+    return gap
+
+
+@router.get("/gaps/{gap_id}", response_model=ComplianceGapOut)
+async def get_gap(
+    gap_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ComplianceGap:
+    return await _get_gap(db, gap_id, context.organization_id)
+
+
+@router.post("/gaps/{gap_id}/remediation", response_model=ComplianceGapOut)
+async def generate_gap_remediation(
+    gap_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.controls.manage")),
+) -> ComplianceGap:
+    """Write a concrete recommendation onto the gap, drawn from the
+    regulation's own text rather than generated."""
+    gap = await _get_gap(db, gap_id, context.organization_id)
+    await generate_remediation(
+        db, organization_id=context.organization_id, gap=gap, actor_user_id=context.user.id
+    )
+    await db.commit()
+    await db.refresh(gap)
+    return gap
+
+
+@router.post("/gaps/{gap_id}/task", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+async def create_gap_task(
+    gap_id: uuid.UUID,
+    payload: CreateGapTaskRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.controls.manage")),
+) -> Task:
+    """Raise a remediation Task pointing back at this gap, so the Tasks
+    module can answer "why does this exist?" without re-reading the
+    title."""
+    gap = await _get_gap(db, gap_id, context.organization_id)
+    task = await create_task_from_gap(
+        db,
+        organization_id=context.organization_id,
+        gap=gap,
+        actor_user_id=context.user.id,
+        title=payload.title,
+        assignee_id=payload.assignee_id,
+        priority=payload.priority,
+        due_in_days=payload.due_in_days,
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
 
 
 @router.get("/frameworks/{framework_id}/dashboard", response_model=FrameworkDashboardOut)
@@ -366,6 +572,14 @@ async def get_control(
         .where(ControlAssessment.control_id == control.id)
         .order_by(ControlAssessment.created_at.desc())
     )
+    evidence_result = await db.execute(
+        select(Evidence)
+        .where(
+            Evidence.control_id == control.id,
+            Evidence.organization_id == context.organization_id,
+        )
+        .order_by(Evidence.created_at.desc())
+    )
 
     return ControlDetailOut(
         **ControlOut.model_validate(control).model_dump(),
@@ -375,6 +589,7 @@ async def get_control(
         assessments=[
             ControlAssessmentOut.model_validate(a) for a in assessments_result.scalars().all()
         ],
+        evidence=[EvidenceOut.model_validate(e) for e in evidence_result.scalars().all()],
     )
 
 
@@ -478,7 +693,14 @@ async def create_evidence(
         action="compliance.evidence.created",
         object_type="evidence",
         object_id=str(evidence.id),
-        after_state={"title": evidence.title},
+        # What it was attached to, not just that it exists — an auditor
+        # tracing a requirement needs the mapping, and "evidence created"
+        # alone does not say which control it now supports.
+        after_state={
+            "title": evidence.title,
+            "control_id": str(evidence.control_id) if evidence.control_id else None,
+            "vendor_id": str(evidence.vendor_id) if evidence.vendor_id else None,
+        },
     )
     await db.commit()
     await db.refresh(evidence)

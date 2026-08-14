@@ -92,11 +92,6 @@ class ControlAssessmentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ControlDetailOut(ControlOut):
-    requirements: list[RequirementOut]
-    assessments: list[ControlAssessmentOut]
-
-
 class EvidenceCreate(BaseModel):
     file_id: uuid.UUID
     title: str = Field(min_length=1, max_length=300)
@@ -117,6 +112,17 @@ class EvidenceOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ControlDetailOut(ControlOut):
+    requirements: list[RequirementOut]
+    assessments: list[ControlAssessmentOut]
+    # Without this the Requirement -> Control -> Evidence -> Document
+    # chain could be built but never followed: evidence was linkable to a
+    # control and listable org-wide, but not reachable *from* the control
+    # it belonged to, which is the direction anyone auditing a requirement
+    # actually walks.
+    evidence: list[EvidenceOut] = []
 
 
 class RiskCreate(BaseModel):
@@ -574,3 +580,63 @@ class DataTransferOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class FrameworkActivationOut(BaseModel):
+    framework_id: uuid.UUID
+    status: str
+    activated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SetFrameworkActivationRequest(BaseModel):
+    active: bool
+
+
+class ComplianceGapOut(BaseModel):
+    id: uuid.UUID
+    framework_id: uuid.UUID
+    requirement_id: uuid.UUID
+    control_id: uuid.UUID | None
+    kind: str
+    status: str
+    severity: str
+    summary: str
+    recommendation: str | None
+    task_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RequirementEvaluationOut(BaseModel):
+    """One requirement's assessed position plus the counts behind it, so a
+    reader can see what the status was computed from rather than being
+    asked to trust it."""
+
+    requirement_id: uuid.UUID
+    reference_code: str
+    title: str
+    status: str
+    control_ids: list[uuid.UUID]
+    evidence_count: int
+    latest_assessment_status: str | None
+    summary: str
+    gap_id: uuid.UUID | None = None
+
+
+class FrameworkAssessmentResultOut(BaseModel):
+    framework_id: uuid.UUID
+    assessed_at: datetime
+    requirements: list[RequirementEvaluationOut]
+    satisfied_count: int
+    gap_count: int
+    evidence_coverage_percent: float
+
+
+class CreateGapTaskRequest(BaseModel):
+    title: str | None = None
+    assignee_id: uuid.UUID | None = None
+    priority: str = Field(default="high", pattern="^(low|medium|high|urgent)$")
+    due_in_days: int = Field(default=7, ge=1, le=365)

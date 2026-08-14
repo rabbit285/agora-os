@@ -37,6 +37,7 @@ from app.identity.router import router as auth_router
 from app.routers import (
     ai,
     approvals,
+    audit,
     automation,
     billing,
     briefing,
@@ -289,6 +290,7 @@ async def billing_error_handler(request: Request, exc: BillingError) -> JSONResp
 app.include_router(health.router)
 app.include_router(auth_router)
 app.include_router(organizations.router)
+app.include_router(audit.router)
 app.include_router(billing.router)
 app.include_router(onboarding.router)
 app.include_router(tasks.router)
