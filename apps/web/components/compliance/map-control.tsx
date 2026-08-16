@@ -114,7 +114,7 @@ export function MapControl({
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" className="mt-3" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Link2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
         Map control
       </Button>
@@ -122,7 +122,7 @@ export function MapControl({
   }
 
   return (
-    <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-app)] p-4">
+    <div className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-app)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-[var(--fg-default)]">
           Map a control to {requirementCode}
