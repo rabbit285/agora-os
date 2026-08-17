@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { EvidenceReview } from "@/components/compliance/evidence-review";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
 import { StatusBadge } from "@/components/status-badge";
@@ -1552,6 +1553,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
     label: "Controls & Risk",
     render: () => (
       <>
+        <EvidenceReview />
         <ControlsSection />
         <RisksSection />
         <EvidenceLibrarySection />

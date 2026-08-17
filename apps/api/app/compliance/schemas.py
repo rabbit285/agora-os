@@ -833,3 +833,39 @@ class ControlRequirementMapping(BaseModel):
     """
 
     requirement_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class EvidenceSuggestionOut(BaseModel):
+    """A proposal, not evidence. `quote_verified` is the field that
+    matters: it says the quoted passage was found in the document, which
+    is what separates a citation from an assertion."""
+
+    id: uuid.UUID
+    file_id: uuid.UUID
+    control_id: uuid.UUID
+    status: str
+    confidence: float | None
+    rationale: str | None
+    quoted_passage: str | None
+    quote_verified: bool
+    evidence_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AnalyzeDocumentRequest(BaseModel):
+    file_id: uuid.UUID
+
+
+class AnalyzeDocumentResult(BaseModel):
+    suggestions: list[EvidenceSuggestionOut]
+    controls_considered: int
+    # How many proposals were dropped because their quote could not be
+    # found in the document. Surfaced rather than hidden — it is the
+    # honest measure of how much the model made up on this run.
+    unverifiable_count: int
+
+
+class ApproveSuggestionRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=300)

@@ -31,6 +31,13 @@ from app.compliance.dsar import (
     run_data_discovery,
     verify_identity,
 )
+from app.compliance.evidence_ai import (
+    SuggestionDecisionError,
+    UnsupportedFormatError,
+    approve_suggestion,
+    reject_suggestion,
+    suggest_evidence_mappings,
+)
 from app.compliance.models import (
     DPIA,
     DSAR,
@@ -45,6 +52,7 @@ from app.compliance.models import (
     ControlMapping,
     DataTransfer,
     Evidence,
+    EvidenceSuggestion,
     Framework,
     FrameworkActivation,
     Policy,
@@ -70,6 +78,9 @@ from app.compliance.schemas import (
     AISystemOut,
     AISystemProfileUpdate,
     AISystemStatusUpdate,
+    AnalyzeDocumentRequest,
+    AnalyzeDocumentResult,
+    ApproveSuggestionRequest,
     AuditCreate,
     AuditDetailOut,
     AuditFindingCreate,
@@ -102,6 +113,7 @@ from app.compliance.schemas import (
     EuAiActScreeningRequest,
     EvidenceCreate,
     EvidenceOut,
+    EvidenceSuggestionOut,
     FrameworkActivationOut,
     FrameworkAssessmentResultOut,
     FrameworkCreate,
@@ -179,6 +191,7 @@ from app.compliance.vendor_review import (
 from app.core.models import Approval, File, Task
 from app.core.pagination import Pagination, paginate, pagination_params
 from app.core.schemas import TaskOut
+from app.core.storage import download_object
 from app.db.base import utcnow
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -785,6 +798,141 @@ async def create_assessment(
     await db.commit()
     await db.refresh(assessment)
     return assessment
+
+
+@router.post("/evidence/analyze", response_model=AnalyzeDocumentResult)
+async def analyze_document_for_evidence(
+    payload: AnalyzeDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.evidence.manage")),
+) -> AnalyzeDocumentResult:
+    """Read an uploaded document and propose which controls it evidences.
+
+    Proposals are not evidence: they land in a review queue, the
+    assessment ignores them, and approving one is what creates the
+    evidence row. Every proposal must quote the document, and the quote
+    is checked against the extracted text before it is offered — see
+    `app.compliance.evidence_ai` for why that check is the load-bearing
+    part of this feature.
+    """
+    file_record = await db.get(File, payload.file_id)
+    if file_record is None or file_record.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    try:
+        file_bytes = download_object(file_record.storage_key)
+    except Exception as exc:  # noqa: BLE001 - storage faults must not read as AI faults
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The document could not be read from storage.",
+        ) from exc
+
+    try:
+        outcome = await suggest_evidence_mappings(
+            db,
+            organization_id=context.organization_id,
+            file_record=file_record,
+            file_bytes=file_bytes,
+            actor_user_id=context.user.id,
+        )
+    except UnsupportedFormatError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"This file type cannot be read for evidence analysis: {exc}",
+        ) from exc
+    # AI provider failures propagate untouched — app.main's handler turns
+    # them into an actionable status rather than an opaque 500, and a
+    # provider outage must never be reported as "no matches found".
+
+    await db.commit()
+    return AnalyzeDocumentResult(
+        suggestions=[EvidenceSuggestionOut.model_validate(s) for s in outcome.suggestions],
+        controls_considered=outcome.considered_controls,
+        unverifiable_count=outcome.unverifiable_count,
+    )
+
+
+@router.get("/evidence/suggestions", response_model=list[EvidenceSuggestionOut])
+async def list_evidence_suggestions(
+    status_filter: str | None = None,
+    file_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[EvidenceSuggestion]:
+    stmt = select(EvidenceSuggestion).where(
+        EvidenceSuggestion.organization_id == context.organization_id
+    )
+    if status_filter:
+        stmt = stmt.where(EvidenceSuggestion.status == status_filter)
+    if file_id:
+        stmt = stmt.where(EvidenceSuggestion.file_id == file_id)
+    result = await db.execute(stmt.order_by(EvidenceSuggestion.created_at.desc()))
+    return list(result.scalars().all())
+
+
+async def _get_org_suggestion(
+    db: AsyncSession, suggestion_id: uuid.UUID, organization_id: uuid.UUID
+) -> EvidenceSuggestion:
+    suggestion = await db.get(EvidenceSuggestion, suggestion_id)
+    if suggestion is None or suggestion.organization_id != organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found")
+    return suggestion
+
+
+@router.post(
+    "/evidence/suggestions/{suggestion_id}/approve",
+    response_model=EvidenceOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def approve_evidence_suggestion(
+    suggestion_id: uuid.UUID,
+    payload: ApproveSuggestionRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.evidence.manage")),
+) -> Evidence:
+    """Accept a proposal and create the evidence.
+
+    The moment a person takes responsibility for the link. An
+    unverifiable suggestion cannot reach here — approving a citation that
+    is not in the document would put a fabricated quote into the evidence
+    record under a human's name.
+    """
+    suggestion = await _get_org_suggestion(db, suggestion_id, context.organization_id)
+    try:
+        evidence = await approve_suggestion(
+            db,
+            organization_id=context.organization_id,
+            suggestion=suggestion,
+            title=payload.title,
+            actor_user_id=context.user.id,
+        )
+    except SuggestionDecisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await db.commit()
+    await db.refresh(evidence)
+    return evidence
+
+
+@router.post(
+    "/evidence/suggestions/{suggestion_id}/reject", response_model=EvidenceSuggestionOut
+)
+async def reject_evidence_suggestion(
+    suggestion_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.evidence.manage")),
+) -> EvidenceSuggestion:
+    suggestion = await _get_org_suggestion(db, suggestion_id, context.organization_id)
+    await reject_suggestion(
+        db,
+        organization_id=context.organization_id,
+        suggestion=suggestion,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(suggestion)
+    return suggestion
 
 
 @router.get("/evidence", response_model=list[EvidenceOut])

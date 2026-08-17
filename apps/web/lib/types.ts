@@ -1905,3 +1905,24 @@ export type AIAssessmentDetail = {
   } | null;
   created_at: string;
 };
+
+/** An AI proposal that a document evidences a control. Deliberately not
+ * Evidence: the assessment ignores these entirely, and approving one is
+ * what creates the real evidence row. */
+export type EvidenceSuggestion = {
+  id: string;
+  file_id: string;
+  control_id: string;
+  status: "proposed" | "approved" | "rejected" | "unverifiable";
+  /** The model's own confidence. Displayed, never used to decide
+   * anything — a number a model assigns to its own output is not a
+   * measurement. */
+  confidence: number | null;
+  rationale: string | null;
+  quoted_passage: string | null;
+  /** Whether the quoted passage was actually found in the document. The
+   * difference between a citation and an assertion. */
+  quote_verified: boolean;
+  evidence_id: string | null;
+  created_at: string;
+};
