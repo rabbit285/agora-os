@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
+import { AttachEvidence } from "@/components/compliance/attach-evidence";
 import type { ControlAssessment, ControlDetail, Evidence } from "@/lib/types";
 
 const ASSESSMENT_STATUSES: ControlAssessment["status"][] = ["pass", "fail", "partial", "not_assessed"];
@@ -129,16 +130,32 @@ export default function ControlDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-          Evidence
-        </h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
+            Evidence
+          </h2>
+          <AttachEvidence
+            controlId={control.id}
+            onAttached={() =>
+              queryClient.invalidateQueries({ queryKey: ["compliance", "evidence"] })
+            }
+          />
+        </div>
         {controlEvidence.length === 0 && (
-          <p className="text-sm text-[var(--fg-muted)]">No evidence attached.</p>
+          <p className="text-sm text-[var(--fg-muted)]">
+            No evidence attached. Until something is attached, this control cannot be shown as
+            demonstrated from within Veyntra.
+          </p>
         )}
         <div className="flex flex-col gap-2">
           {controlEvidence.map((item) => (
             <Card key={item.id}>
-              <CardContent className="pt-6 text-sm text-[var(--fg-muted)]">{item.title}</CardContent>
+              <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-6 text-sm text-[var(--fg-muted)]">
+                <span>{item.title}</span>
+                <span className="text-xs text-[var(--fg-subtle)]">
+                  attached {new Date(item.created_at).toLocaleDateString()}
+                </span>
+              </CardContent>
             </Card>
           ))}
         </div>

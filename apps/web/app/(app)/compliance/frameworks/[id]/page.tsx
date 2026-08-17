@@ -5,6 +5,7 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, Info } from "lucide-react";
 
+import { AttachEvidence } from "@/components/compliance/attach-evidence";
 import { MapControl } from "@/components/compliance/map-control";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -217,12 +218,35 @@ export default function FrameworkDashboardPage({
                   </p>
                 )}
 
-                <MapControl
-                  requirementId={requirement.id}
-                  requirementCode={requirement.reference_code}
-                  frameworkId={id}
-                  mappedControlIds={requirement.controls.map((c) => c.id)}
-                />
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <MapControl
+                    requirementId={requirement.id}
+                    requirementCode={requirement.reference_code}
+                    frameworkId={id}
+                    mappedControlIds={requirement.controls.map((c) => c.id)}
+                  />
+                  {/* Offered per mapped control rather than once per
+                      requirement: evidence attaches to a control, and a
+                      requirement answered by two controls needs to say
+                      which one a document supports. */}
+                  {requirement.controls.map((control) => (
+                    <AttachEvidence
+                      key={control.id}
+                      controlId={control.id}
+                      label={
+                        requirement.controls.length > 1
+                          ? `Attach evidence to ${control.title}`
+                          : "Attach evidence"
+                      }
+                      compact
+                      onAttached={() => {
+                        void queryClient.invalidateQueries({
+                          queryKey: ["compliance", "frameworks", id, "dashboard"],
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
 
                 {gap && gap.status !== "resolved" && (
                   <GapPanel gap={gap} frameworkId={id} />

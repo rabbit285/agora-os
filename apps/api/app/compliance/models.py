@@ -117,7 +117,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -949,3 +949,54 @@ class ComplianceGap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A proposed link between an uploaded document and a control.
+
+    The whole point of this table is that it is *not* Evidence. A model
+    reading a policy and concluding "this demonstrates your breach
+    procedure" is a suggestion, and a compliance record built from
+    unreviewed suggestions is worth nothing to an auditor — the value of
+    the evidence chain comes from a person having stood behind each link.
+    So suggestions accumulate here, the assessment ignores them entirely,
+    and approving one is what creates the real Evidence row.
+
+    `quoted_passage` and `quote_verified` are the anti-fabrication
+    mechanism. The model must quote the passage it relied on, and that
+    quote is checked against the extracted document text before the
+    suggestion is ever offered for approval. A quote that cannot be found
+    in the source is recorded as `unverifiable` and never shown as
+    something to approve — which turns "the AI might be making it up"
+    from a worry into a measurement.
+    """
+
+    __tablename__ = "evidence_suggestions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True
+    )
+    control_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=False, index=True
+    )
+    # proposed | approved | rejected | unverifiable
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed")
+    # The model's own stated confidence. Displayed, never used to decide
+    # anything — a number a model assigns to its own output is not a
+    # measurement, and auto-approving above a threshold would reintroduce
+    # exactly the unreviewed evidence this table exists to prevent.
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    quoted_passage: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    quote_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Set when approved — the Evidence row this became.
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("evidence.id"), nullable=True
+    )
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
