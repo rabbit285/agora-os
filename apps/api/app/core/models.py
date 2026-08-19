@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -285,6 +285,33 @@ class File(UUIDPrimaryKeyMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # --- Document intelligence lifecycle -------------------------------
+    # not_analyzed -> uploaded -> parsing -> analyzing -> ready
+    #
+    # `not_analyzed` is the resting state and the default, because most
+    # files in an organization are attachments from other modules that
+    # were never submitted for compliance analysis. Without it they would
+    # all sit at "uploaded" and render as permanently mid-pipeline, and
+    # the UI would poll them forever waiting for a run that was never
+    # started.
+    #
+    # Terminal states are `failed` (we tried and could not) and
+    # `unsupported` (we can never read this content type) — kept distinct
+    # because the first is worth retrying and the second never is.
+    processing_status: Mapped[str] = mapped_column(String(20), default="not_analyzed", index=True)
+    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Recorded so "ready" can never be claimed over an empty extraction —
+    # a document that parsed to nothing is a failure that would otherwise
+    # look like success with no matching controls.
+    extracted_characters: Mapped[int | None] = mapped_column(nullable=True)
+    # What the model thinks this document *is*, kept separate from
+    # `classification` above (which is the security label: internal,
+    # confidential…). Nullable because classification is a proposal, and
+    # a document we could not read has none.
+    document_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    document_domain: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 class Notification(UUIDPrimaryKeyMixin, Base):

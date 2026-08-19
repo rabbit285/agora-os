@@ -37,7 +37,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const MODULES = ["Compliance", "Security", "Sales", "Customer Support", "Automation", "AI Governance"];
+const MODULES = [
+  "Compliance",
+  "Security",
+  "Document Intelligence",
+  "Privacy & Data Requests",
+  "Vendor Assurance",
+  "AI Governance",
+];
 
 function region() {
   return screen.getByRole("region", { name: "Product modules" });
@@ -62,7 +69,7 @@ describe("ModuleCarousel", () => {
       screen.getByRole("heading", { name: "Turn compliance work into clear, auditable action." }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Manage controls, evidence, policies, privacy workflows/),
+      screen.getByText(/Adopt GDPR, the EU AI Act, ISO 27001/),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Explore Compliance/ })).toHaveAttribute(
       "href",
@@ -94,9 +101,9 @@ describe("ModuleCarousel", () => {
     const expected = [
       ["Explore Compliance", "/features#compliance"],
       ["Explore Security", "/features#security"],
-      ["Explore Sales", "/features#sales"],
-      ["Explore Support", "/features#support"],
-      ["Explore Automation", "/features#automation"],
+      ["Explore Document Intelligence", "/features#document-intelligence"],
+      ["Explore Privacy", "/features#privacy"],
+      ["Explore Vendor Assurance", "/features#vendors"],
       ["Explore AI Governance", "/features#ai-governance"],
     ] as const;
     for (const [name, href] of expected) {
@@ -145,9 +152,9 @@ describe("ModuleCarousel", () => {
   it("jumps directly to a slide via its pagination dot", async () => {
     const user = userEvent.setup();
     render(<ModuleCarousel />);
-    await user.click(screen.getByRole("button", { name: "Go to Sales slide" }));
+    await user.click(screen.getByRole("button", { name: "Go to Document Intelligence slide" }));
     expect(await screen.findByText("3 / 6")).toBeInTheDocument();
-    const dot = screen.getByRole("button", { name: "Go to Sales slide" });
+    const dot = screen.getByRole("button", { name: "Go to Document Intelligence slide" });
     expect(dot).toHaveAttribute("aria-current", "true");
   });
 

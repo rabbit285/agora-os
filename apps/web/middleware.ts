@@ -24,6 +24,22 @@ const PUBLIC_MARKETING_PATHS = new Set([
 // there's no reason to show them the login/signup form again.
 const AUTH_ONLY_PATHS = new Set(["/login", "/signup"]);
 
+// Modules removed from the product. Prefix-matched, so every child route
+// goes with the parent.
+const RETIRED_MODULE_PREFIXES = [
+  "/sales",
+  "/support",
+  "/automation",
+  "/knowledge",
+  // /integrations is the compliance monitoring catalog and is part
+  // of the product. The old /settings/integrations screen belonged to
+  // the withdrawn module and stays gone.
+  "/settings/integrations",
+  "/recommendations",
+  "/briefing",
+  "/reports",
+];
+
 // Never redirected either direction: a signed-in user may legitimately
 // need to reset a different password, verify a second email, accept an
 // invitation into another organization, or complete a pending MFA
@@ -65,6 +81,16 @@ export function middleware(request: NextRequest) {
 
   if (AUTH_NEUTRAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
+  }
+
+  // Veyntra ships as a compliance platform. These modules' code is still
+  // in the repository — DSAR data discovery reads the sales and support
+  // tables, because that is where personal data lives — but they are not
+  // part of the product, so their screens must not be reachable. Rewritten
+  // to a 404 rather than redirected: a stale bookmark should report that
+  // the page does not exist, not silently land somewhere unrelated.
+  if (RETIRED_MODULE_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return NextResponse.rewrite(new URL("/not-found", request.url));
   }
 
   // Everything else is an authenticated app route.

@@ -1,0 +1,268 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Upload,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ApiError, apiFetch } from "@/lib/api";
+import { uploadFile } from "@/lib/upload";
+import type { ComplianceDocument } from "@/lib/types";
+
+/** Upload a document and watch Veyntra read it.
+ *
+ * The whole point of this screen is that uploading is the only action.
+ * Parsing, classification and control matching happen without being
+ * asked for, and the pipeline is shown stage by stage because a product
+ * that claims to be doing work owes the user visible evidence that it
+ * is. A spinner with no stages is indistinguishable from a hang.
+ */
+
+const STAGES: { key: string; label: string }[] = [
+  { key: "uploaded", label: "Uploaded" },
+  { key: "parsing", label: "Reading" },
+  { key: "analyzing", label: "Matching controls" },
+  { key: "ready", label: "Ready" },
+];
+
+// `not_analyzed` is deliberately absent: it is a resting state, not a
+// stage. Including it would make every unrelated attachment in the
+// organization render as mid-pipeline and poll forever.
+const IN_FLIGHT = new Set(["uploaded", "parsing", "analyzing"]);
+
+function ProcessingTrail({ status }: { status: string }) {
+  const currentIndex = STAGES.findIndex((s) => s.key === status);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {STAGES.map((stage, index) => {
+        const done = currentIndex > index || status === "ready";
+        const active = currentIndex === index && status !== "ready";
+        return (
+          <span key={stage.key} className="flex items-center gap-1.5">
+            <span
+              className={
+                done
+                  ? "text-xs text-[var(--success-700)]"
+                  : active
+                    ? "flex items-center gap-1 text-xs font-medium text-[var(--fg-default)]"
+                    : "text-xs text-[var(--fg-subtle)]"
+              }
+            >
+              {active && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+              {stage.label}
+            </span>
+            {index < STAGES.length - 1 && (
+              <span className="text-xs text-[var(--fg-subtle)]" aria-hidden="true">
+                →
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+export function DocumentLibrary() {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const { data: documents } = useQuery<ComplianceDocument[]>({
+    queryKey: ["compliance", "documents"],
+    queryFn: () => apiFetch<ComplianceDocument[]>("/api/v1/compliance/documents"),
+    // Poll only while something is actually moving. A fixed interval
+    // would keep hitting the API forever on an idle library.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((d) => IN_FLIGHT.has(d.processing_status)) ? 2000 : false,
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["compliance", "documents"] });
+    void queryClient.invalidateQueries({ queryKey: ["compliance", "evidence-suggestions"] });
+    // The readiness panel is the visible end of this chain, so it has
+    // to move when evidence does.
+    void queryClient.invalidateQueries({ queryKey: ["compliance", "overview"] });
+  };
+
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const fileId = await uploadFile(file, { classification: "confidential" });
+      // Processing starts here, not on a second click by the user. This
+      // one call is what makes "upload once" true.
+      return apiFetch("/api/v1/compliance/documents/process", {
+        method: "POST",
+        body: { file_id: fileId },
+      });
+    },
+    onSuccess: () => {
+      setUploadError(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      refresh();
+    },
+    onError: (error) =>
+      setUploadError(error instanceof ApiError ? error.message : (error as Error).message),
+  });
+
+  const reprocess = useMutation({
+    mutationFn: (fileId: string) =>
+      apiFetch("/api/v1/compliance/documents/process", {
+        method: "POST",
+        body: { file_id: fileId },
+      }),
+    onSuccess: refresh,
+  });
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
+        Document intelligence
+      </h2>
+
+      <Card className="mb-4">
+        <CardContent className="pt-6">
+          <p className="mb-3 text-sm leading-relaxed text-[var(--fg-muted)]">
+            Upload a policy, notice or procedure. Veyntra reads it, works out what it is, and
+            proposes which of your controls it evidences — you do not need to map anything by
+            hand. Proposals appear below for your review; nothing reaches your compliance
+            status until you approve it.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="text-sm text-[var(--fg-muted)] file:mr-3 file:rounded-[var(--radius-md)] file:border file:border-[var(--border-default)] file:bg-[var(--bg-surface)] file:px-3 file:py-1.5 file:text-sm file:text-[var(--fg-default)]"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) upload.mutate(file);
+            }}
+          />
+          {upload.isPending && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              Uploading…
+            </p>
+          )}
+          {uploadError && (
+            <p className="mt-2 text-sm text-[var(--critical-600)]">{uploadError}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {documents?.length === 0 && (
+        <p className="text-sm text-[var(--fg-muted)]">No documents uploaded yet.</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {(documents ?? []).map((doc) => (
+          <Card key={doc.id}>
+            <CardContent className="py-4">
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                <span className="flex items-center gap-2 font-medium text-[var(--fg-default)]">
+                  <FileText className="h-4 w-4 text-[var(--fg-subtle)]" aria-hidden="true" />
+                  {doc.original_filename}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {doc.document_domain && <Badge variant="outline">{doc.document_domain}</Badge>}
+                  {doc.processing_status === "ready" && (
+                    <Badge variant="success" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                      Ready
+                    </Badge>
+                  )}
+                  {(doc.processing_status === "failed" ||
+                    doc.processing_status === "unsupported") && (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                      {doc.processing_status === "unsupported" ? "Cannot read" : "Failed"}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {IN_FLIGHT.has(doc.processing_status) && (
+                <ProcessingTrail status={doc.processing_status} />
+              )}
+
+              {/* Files that arrived from elsewhere in Veyntra were never
+                  submitted for compliance analysis. Offering the action
+                  is honest; showing a stalled progress trail is not. */}
+              {doc.processing_status === "not_analyzed" && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-[var(--fg-muted)]">Not analyzed yet.</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={reprocess.isPending}
+                    onClick={() => reprocess.mutate(doc.id)}
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    Analyze for evidence
+                  </Button>
+                </div>
+              )}
+
+              {doc.processing_status === "ready" && (
+                <div className="text-sm text-[var(--fg-muted)]">
+                  {doc.document_type && (
+                    <span className="text-[var(--fg-default)]">{doc.document_type}</span>
+                  )}
+                  {/* Shown so "Ready" is backed by a number: a document
+                      that parsed to nothing can never look like one that
+                      simply matched no controls. */}
+                  {doc.extracted_characters !== null && (
+                    <span> · {doc.extracted_characters.toLocaleString()} characters read</span>
+                  )}
+                  <span>
+                    {" · "}
+                    {doc.proposed_count > 0
+                      ? `${doc.proposed_count} proposal${doc.proposed_count === 1 ? "" : "s"} awaiting review`
+                      : doc.approved_count > 0
+                        ? `${doc.approved_count} approved as evidence`
+                        : "no control matches proposed"}
+                  </span>
+                  {doc.unverifiable_count > 0 && (
+                    <span className="text-[var(--warning-700)]">
+                      {" · "}
+                      {doc.unverifiable_count} discarded as unverifiable
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {(doc.processing_status === "failed" ||
+                doc.processing_status === "unsupported") && (
+                <div>
+                  <p className="text-sm text-[var(--warning-700)]">{doc.processing_error}</p>
+                  {/* Only `failed` is retryable — an unsupported content
+                      type will fail identically every time, so offering a
+                      retry there would just waste the user's time. */}
+                  {doc.processing_status === "failed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      disabled={reprocess.isPending}
+                      onClick={() => reprocess.mutate(doc.id)}
+                    >
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Try again
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}

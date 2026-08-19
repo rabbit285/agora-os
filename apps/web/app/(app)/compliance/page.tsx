@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DocumentLibrary } from "@/components/compliance/document-library";
+import { FrameworkApplicability } from "@/components/compliance/framework-applicability";
+import { ReadinessPanel } from "@/components/compliance/readiness-panel";
 import { EvidenceReview } from "@/components/compliance/evidence-review";
 import { PageHeader } from "@/components/page-header";
 import { SeverityBadge } from "@/components/severity-badge";
@@ -1548,11 +1551,15 @@ function FrameworksSection() {
   );
 }
 
-const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
+const COMPLIANCE_GROUPS: { label: string; slug: string; render: () => React.ReactNode }[] = [
   {
     label: "Controls & Risk",
+    slug: "controls",
     render: () => (
       <>
+        <ReadinessPanel />
+        <FrameworkApplicability />
+        <DocumentLibrary />
         <EvidenceReview />
         <ControlsSection />
         <RisksSection />
@@ -1563,6 +1570,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
   },
   {
     label: "Assessments",
+    slug: "assessments",
     render: () => (
       <>
         <QuestionnairesSection />
@@ -1573,6 +1581,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
   },
   {
     label: "AI Governance",
+    slug: "ai-governance",
     render: () => (
       <>
         <AISystemsSection />
@@ -1582,6 +1591,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
   },
   {
     label: "Privacy",
+    slug: "privacy",
     render: () => (
       <>
         <ProcessingActivitiesSection />
@@ -1593,6 +1603,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
   },
   {
     label: "Vendors & Trust",
+    slug: "vendors",
     render: () => (
       <>
         <VendorsSection />
@@ -1600,7 +1611,7 @@ const COMPLIANCE_GROUPS: { label: string; render: () => React.ReactNode }[] = [
       </>
     ),
   },
-  { label: "Frameworks", render: () => <FrameworksSection /> },
+  { label: "Frameworks", slug: "frameworks", render: () => <FrameworksSection /> },
 ];
 
 export default function CompliancePage() {
@@ -1612,7 +1623,11 @@ export default function CompliancePage() {
       />
       <div className="flex flex-col gap-10">
         {COMPLIANCE_GROUPS.map((group) => (
-          <section key={group.label}>
+          // `scroll-mt` keeps the heading clear of the sticky top bar when
+          // the sidebar links here by anchor — without it the section
+          // title lands underneath the header and looks like the wrong
+          // section opened.
+          <section key={group.label} id={group.slug} className="scroll-mt-24">
             <h2 className="mb-4 border-b border-[var(--border-default)] pb-2 text-sm font-semibold text-[var(--fg-default)]">
               {group.label}
             </h2>

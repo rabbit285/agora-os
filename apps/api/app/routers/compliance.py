@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
@@ -13,12 +13,24 @@ from app.compliance.ai_governance import (
     record_eu_ai_act_assessment,
     record_privacy_assessment,
 )
+from app.compliance.ai_system_governance import assess_ai_system
 from app.compliance.assessment import (
     create_task_from_gap,
+    evaluate_framework,
     generate_remediation,
+    reassess_frameworks_for_control,
     run_framework_assessment,
     set_framework_activation,
+    summarize_readiness,
 )
+from app.compliance.framework_applicability import (
+    CompanyFacts,
+    applicable_framework_keys,
+    recommend_frameworks,
+)
+from app.compliance.connectors import CONNECTORS, list_evidence_events
+from app.compliance.dashboard import build_dashboard
+from app.compliance.review_center import build_review_center
 from app.compliance.dpia_screening import (
     EDPB_CRITERIA,
     MANDATORY_CRITERIA,
@@ -35,6 +47,7 @@ from app.compliance.evidence_ai import (
     SuggestionDecisionError,
     UnsupportedFormatError,
     approve_suggestion,
+    process_document,
     reject_suggestion,
     suggest_evidence_mappings,
 )
@@ -52,6 +65,7 @@ from app.compliance.models import (
     ControlMapping,
     DataTransfer,
     Evidence,
+    EvidenceEvent,
     EvidenceSuggestion,
     Framework,
     FrameworkActivation,
@@ -80,7 +94,18 @@ from app.compliance.schemas import (
     AISystemStatusUpdate,
     AnalyzeDocumentRequest,
     AnalyzeDocumentResult,
+    AISystemGovernanceOut,
+    AISystemGovernanceUpdate,
+    AdoptRecommendedRequest,
     ApproveSuggestionRequest,
+    ComplianceDocumentOut,
+    AIGovernanceOverviewOut,
+    ComplianceDashboardOut,
+    ConnectorCatalogOut,
+    ConnectorOut,
+    EvidenceEventOut,
+    ComplianceOverviewOut,
+    CompanyFactsUpdate,
     AuditCreate,
     AuditDetailOut,
     AuditFindingCreate,
@@ -116,6 +141,9 @@ from app.compliance.schemas import (
     EvidenceSuggestionOut,
     FrameworkActivationOut,
     FrameworkAssessmentResultOut,
+    FrameworkReadinessOut,
+    FrameworkRecommendationOut,
+    FrameworkRecommendationsOut,
     FrameworkCreate,
     FrameworkDashboardControlOut,
     FrameworkDashboardOut,
@@ -125,6 +153,7 @@ from app.compliance.schemas import (
     PolicyOut,
     PolicyStatusUpdate,
     PrivacyAssessmentRequest,
+    ProcessDocumentRequest,
     ProcessingActivityCreate,
     ProcessingActivityOut,
     QuestionnaireAnswerOut,
@@ -136,6 +165,10 @@ from app.compliance.schemas import (
     QuestionnaireQuestionDetailOut,
     QuestionnaireQuestionOut,
     QuestionnaireStatusUpdate,
+    ReadinessBreakdownOut,
+    ReviewCategoryOut,
+    ReviewCenterOut,
+    ReviewItemOut,
     RequirementEvaluationOut,
     RequirementOut,
     RiskCreate,
@@ -188,6 +221,7 @@ from app.compliance.vendor_review import (
     run_privacy_review,
     run_security_review,
 )
+from app.onboarding.models import OnboardingProfile
 from app.core.models import Approval, File, Task
 from app.core.pagination import Pagination, paginate, pagination_params
 from app.core.schemas import TaskOut
@@ -351,6 +385,19 @@ async def assess_framework(
         framework=framework,
         actor_user_id=context.user.id,
     )
+
+    # This framework's controls have now been reassessed against whatever
+    # evidence is currently attached, so the "stale" prompt is answered.
+    assessed_control_ids = {cid for e in evaluations for cid in e.control_ids}
+    if assessed_control_ids:
+        await db.execute(
+            update(Control)
+            .where(
+                Control.id.in_(assessed_control_ids),
+                Control.organization_id == context.organization_id,
+            )
+            .values(needs_reassessment=False)
+        )
     await db.commit()
 
     gaps = {
@@ -396,6 +443,7 @@ async def assess_framework(
         evidence_coverage_percent=(
             round(100 * with_evidence / len(evaluations), 1) if evaluations else 0.0
         ),
+        readiness=ReadinessBreakdownOut.model_validate(summarize_readiness(evaluations)),
     )
 
 
@@ -800,6 +848,461 @@ async def create_assessment(
     return assessment
 
 
+async def _company_facts(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> tuple[CompanyFacts, bool]:
+    """Load declared facts. Second value is whether anything was declared."""
+    profile = (
+        await db.execute(
+            select(OnboardingProfile).where(
+                OnboardingProfile.organization_id == organization_id
+            )
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        return CompanyFacts(), False
+
+    facts = CompanyFacts(
+        operates_in_eu=profile.operates_in_eu,
+        sells_to_eu_customers=profile.sells_to_eu_customers,
+        processes_personal_data=profile.processes_personal_data,
+        processes_special_category_data=profile.processes_special_category_data,
+        uses_third_party_ai=profile.uses_third_party_ai,
+        builds_ai_features=profile.builds_ai_features,
+        is_data_processor=profile.is_data_processor,
+        sells_to_enterprise=profile.sells_to_enterprise,
+        sector=profile.sector,
+        employee_count_range=profile.employee_count_range,
+    )
+    declared = any(
+        [
+            facts.operates_in_eu,
+            facts.sells_to_eu_customers,
+            facts.processes_personal_data,
+            facts.uses_third_party_ai,
+            facts.builds_ai_features,
+            facts.is_data_processor,
+            facts.sells_to_enterprise,
+            facts.sector is not None,
+        ]
+    )
+    return facts, declared
+
+
+async def _build_recommendations(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> FrameworkRecommendationsOut:
+    facts, declared = await _company_facts(db, organization_id)
+    recommendations = recommend_frameworks(facts)
+
+    frameworks = {
+        f.key: f
+        for f in (
+            await db.execute(
+                select(Framework).where(Framework.organization_id.is_(None))
+            )
+        )
+        .scalars()
+        .all()
+    }
+    active_keys = set(
+        (
+            await db.execute(
+                select(Framework.key)
+                .join(FrameworkActivation, FrameworkActivation.framework_id == Framework.id)
+                .where(
+                    FrameworkActivation.organization_id == organization_id,
+                    FrameworkActivation.status == "active",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    rows: list[FrameworkRecommendationOut] = []
+    for recommendation in recommendations:
+        framework = frameworks.get(recommendation.framework_key)
+        rows.append(
+            FrameworkRecommendationOut(
+                framework_key=recommendation.framework_key,
+                framework_id=framework.id if framework else None,
+                framework_name=framework.name if framework else None,
+                applicability=recommendation.applicability,
+                reasons=recommendation.reasons,
+                uncertainties=recommendation.uncertainties,
+                requires_legal_review=recommendation.requires_legal_review,
+                already_active=recommendation.framework_key in active_keys,
+            )
+        )
+    return FrameworkRecommendationsOut(recommendations=rows, facts_declared=declared)
+
+
+@router.put("/company-facts", response_model=FrameworkRecommendationsOut)
+async def declare_company_facts(
+    payload: CompanyFactsUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.frameworks.manage")),
+) -> FrameworkRecommendationsOut:
+    """Record what the organization is, and answer what applies to it."""
+    profile = (
+        await db.execute(
+            select(OnboardingProfile).where(
+                OnboardingProfile.organization_id == context.organization_id
+            )
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        profile = OnboardingProfile(organization_id=context.organization_id)
+        db.add(profile)
+
+    for field_name, value in payload.model_dump().items():
+        setattr(profile, field_name, value)
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.company_facts.declared",
+        object_type="organization",
+        object_id=str(context.organization_id),
+        after_state=payload.model_dump(),
+    )
+    await db.commit()
+    return await _build_recommendations(db, context.organization_id)
+
+
+@router.get("/framework-recommendations", response_model=FrameworkRecommendationsOut)
+async def get_framework_recommendations(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> FrameworkRecommendationsOut:
+    """Which frameworks this organization has to satisfy, and why.
+
+    Computed from declared facts by rules, never by a model — see
+    app.compliance.framework_applicability for why applicability in
+    particular has to be arguable rather than generated.
+    """
+    return await _build_recommendations(db, context.organization_id)
+
+
+@router.post("/frameworks/adopt-recommended", response_model=list[FrameworkActivationOut])
+async def adopt_recommended_frameworks(
+    payload: AdoptRecommendedRequest,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.frameworks.manage")),
+) -> list[FrameworkActivation]:
+    """Adopt several frameworks at once, scaffolding each one controls.
+
+    Takes an explicit list rather than adopting everything recommended:
+    adopting a framework commits the organization to evidencing it, and
+    that stays a decision they made rather than one the product made for
+    them.
+    """
+    frameworks = list(
+        (
+            await db.execute(
+                select(Framework).where(
+                    Framework.key.in_(payload.framework_keys),
+                    Framework.organization_id.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    found = {f.key for f in frameworks}
+    missing = sorted(set(payload.framework_keys) - found)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown framework: " + ", ".join(missing),
+        )
+
+    activations: list[FrameworkActivation] = []
+    for framework in frameworks:
+        activations.append(
+            await set_framework_activation(
+                db,
+                organization_id=context.organization_id,
+                framework=framework,
+                active=True,
+                actor_user_id=context.user.id,
+            )
+        )
+    await db.commit()
+    for activation in activations:
+        await db.refresh(activation)
+    return activations
+
+@router.get("/connectors", response_model=ConnectorCatalogOut)
+async def list_connectors(
+    context: OrgContext = Depends(get_org_context),
+) -> ConnectorCatalogOut:
+    """The monitoring sources, each reporting its real state.
+
+    Everything reads `coming_soon` today. The OAuth plumbing for
+    several of these exists elsewhere in the codebase, but none of it
+    produces compliance evidence yet, and a catalog implying otherwise
+    would be the most damaging thing this module could ship.
+    """
+    connectors = [ConnectorOut.model_validate(connector) for connector in CONNECTORS]
+    return ConnectorCatalogOut(
+        connectors=connectors,
+        available_count=sum(1 for c in connectors if c.status == "available"),
+        coming_soon_count=sum(1 for c in connectors if c.status == "coming_soon"),
+    )
+
+
+@router.get("/evidence-events", response_model=list[EvidenceEventOut])
+async def get_evidence_events(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[EvidenceEvent]:
+    """Observations recorded against this organization.
+
+    Empty until a connector is live. Deliberately not seeded with
+    examples: simulated monitoring data presented as a customer's own
+    is the one thing that would make every real number here suspect.
+    """
+    return await list_evidence_events(db, organization_id=context.organization_id)
+
+@router.get("/dashboard", response_model=ComplianceDashboardOut)
+async def get_compliance_dashboard(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ComplianceDashboardOut:
+    """Everything the executive view needs, in one call.
+
+    Aggregated server-side rather than assembled from five requests in
+    the browser: the numbers have to agree with each other, and five
+    independent fetches resolving at different moments is how a
+    dashboard ends up contradicting itself on screen.
+    """
+    _, declared = await _company_facts(db, context.organization_id)
+    dashboard = await build_dashboard(
+        db, organization_id=context.organization_id, facts_declared=declared
+    )
+    return ComplianceDashboardOut.model_validate(dashboard)
+
+@router.get("/review-center", response_model=ReviewCenterOut)
+async def get_review_center(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ReviewCenterOut:
+    """Everything waiting on a human decision, in one queue.
+
+    The product argues that AI does the repetitive work and people
+    handle exceptions. That only holds if the exceptions are in one
+    place — spread across six screens it becomes "go and look
+    everywhere", which is the job the customer was trying to stop
+    doing.
+    """
+    facts, declared = await _company_facts(db, context.organization_id)
+    recommended = applicable_framework_keys(facts) if declared else []
+
+    review = await build_review_center(
+        db,
+        organization_id=context.organization_id,
+        recommended_framework_keys=recommended,
+    )
+
+    return ReviewCenterOut(
+        categories=[
+            ReviewCategoryOut(
+                key=category.key,
+                label=category.label,
+                description=category.description,
+                count=category.count,
+                items=[ReviewItemOut.model_validate(item) for item in category.items],
+            )
+            for category in review.categories
+        ],
+        total_needing_review=review.total_needing_review,
+        auto_accepted_recently=review.auto_accepted_recently,
+        proposals_recently=review.proposals_recently,
+    )
+
+@router.get("/overview", response_model=ComplianceOverviewOut)
+async def get_compliance_overview(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ComplianceOverviewOut:
+    """Where the organization stands, for the Compliance screen itself.
+
+    Evaluates the active frameworks and summarises them, so the last two
+    steps of the promise — "assessment runs" and "readiness and missing
+    items appear" — are visible where the customer uploaded the document,
+    rather than only on a framework detail page they have to go and find.
+    """
+    activations = list(
+        (
+            await db.execute(
+                select(Framework)
+                .join(FrameworkActivation, FrameworkActivation.framework_id == Framework.id)
+                .where(
+                    FrameworkActivation.organization_id == context.organization_id,
+                    FrameworkActivation.status == "active",
+                )
+                .order_by(Framework.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    open_gaps = list(
+        (
+            await db.execute(
+                select(ComplianceGap).where(
+                    ComplianceGap.organization_id == context.organization_id,
+                    ComplianceGap.status != "resolved",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    gaps_by_framework: dict[uuid.UUID, int] = {}
+    for gap in open_gaps:
+        gaps_by_framework[gap.framework_id] = gaps_by_framework.get(gap.framework_id, 0) + 1
+
+    rows: list[FrameworkReadinessOut] = []
+    for framework in activations:
+        evaluations = await evaluate_framework(
+            db, organization_id=context.organization_id, framework=framework
+        )
+        rows.append(
+            FrameworkReadinessOut(
+                framework_id=framework.id,
+                framework_key=framework.key,
+                framework_name=framework.name,
+                readiness=ReadinessBreakdownOut.model_validate(summarize_readiness(evaluations)),
+                open_gap_count=gaps_by_framework.get(framework.id, 0),
+            )
+        )
+
+    proposals = await db.scalar(
+        select(func.count(EvidenceSuggestion.id)).where(
+            EvidenceSuggestion.organization_id == context.organization_id,
+            EvidenceSuggestion.status == "proposed",
+        )
+    )
+    processing = await db.scalar(
+        select(func.count(File.id)).where(
+            File.organization_id == context.organization_id,
+            File.processing_status.in_(("uploaded", "parsing", "analyzing")),
+        )
+    )
+    stale = await db.scalar(
+        select(func.count(Control.id)).where(
+            Control.organization_id == context.organization_id,
+            Control.needs_reassessment.is_(True),
+        )
+    )
+
+    return ComplianceOverviewOut(
+        frameworks=rows,
+        total_open_gaps=len(open_gaps),
+        proposals_awaiting_review=int(proposals or 0),
+        documents_processing=int(processing or 0),
+        controls_needing_reassessment=int(stale or 0),
+    )
+
+@router.get("/documents", response_model=list[ComplianceDocumentOut])
+async def list_compliance_documents(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[ComplianceDocumentOut]:
+    """The document library with live processing state.
+
+    The per-document suggestion counts are aggregated in one grouped
+    query rather than per row — this list is polled while documents are
+    processing, so an N+1 here would be a self-inflicted load spike.
+    """
+    files = list(
+        (
+            await db.execute(
+                select(File)
+                .where(File.organization_id == context.organization_id)
+                .order_by(File.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    counts = (
+        await db.execute(
+            select(
+                EvidenceSuggestion.file_id,
+                EvidenceSuggestion.status,
+                func.count(EvidenceSuggestion.id),
+            )
+            .where(EvidenceSuggestion.organization_id == context.organization_id)
+            .group_by(EvidenceSuggestion.file_id, EvidenceSuggestion.status)
+        )
+    ).all()
+    by_file: dict[uuid.UUID, dict[str, int]] = {}
+    for file_id, suggestion_status, count in counts:
+        by_file.setdefault(file_id, {})[suggestion_status] = count
+
+    documents: list[ComplianceDocumentOut] = []
+    for file_record in files:
+        tally = by_file.get(file_record.id, {})
+        out = ComplianceDocumentOut.model_validate(file_record)
+        out.proposed_count = tally.get("proposed", 0)
+        # Auto-approved mappings are approved evidence — counted with the
+        # ones a person approved, because that is what they are. Keeping
+        # them out would show "0 proposals" over a document that produced
+        # four pieces of evidence.
+        out.approved_count = tally.get("approved", 0) + tally.get("auto_approved", 0)
+        out.unverifiable_count = tally.get("unverifiable", 0)
+        documents.append(out)
+    return documents
+
+
+@router.post(
+    "/documents/process",
+    response_model=ComplianceDocumentOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def process_compliance_document(
+    payload: ProcessDocumentRequest,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.evidence.manage")),
+) -> ComplianceDocumentOut:
+    """Start the read → classify → propose pipeline for a just-uploaded file.
+
+    Returns 202 immediately and works in the background. Reading a policy
+    end to end is a slow model call, and holding the request open for it
+    would make the browser look hung during the exact step the product is
+    selling — the client polls `GET /documents` for the lifecycle instead.
+    """
+    file_record = await db.get(File, payload.file_id)
+    if file_record is None or file_record.organization_id != context.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
+    if file_record.processing_status in ("parsing", "analyzing"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This document is already being processed.",
+        )
+
+    file_record.processing_status = "uploaded"
+    file_record.processing_error = None
+    await db.commit()
+
+    background.add_task(
+        process_document,
+        file_record.id,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+    )
+    return ComplianceDocumentOut.model_validate(file_record)
+
+
 @router.post("/evidence/analyze", response_model=AnalyzeDocumentResult)
 async def analyze_document_for_evidence(
     payload: AnalyzeDocumentRequest,
@@ -887,6 +1390,7 @@ async def _get_org_suggestion(
 async def approve_evidence_suggestion(
     suggestion_id: uuid.UUID,
     payload: ApproveSuggestionRequest,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("compliance.evidence.manage")),
 ) -> Evidence:
@@ -912,6 +1416,19 @@ async def approve_evidence_suggestion(
         ) from exc
     await db.commit()
     await db.refresh(evidence)
+
+    # Close the loop the customer was promised: approving evidence
+    # re-runs the assessment for the frameworks this control serves, so
+    # readiness and the gap list reflect the decision without the user
+    # having to find the framework screen and press a button. Runs in the
+    # background because assessing a whole framework is slower than the
+    # click that triggered it, and the approval itself is already durable.
+    background.add_task(
+        reassess_frameworks_for_control,
+        suggestion.control_id,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+    )
     return evidence
 
 
@@ -1226,6 +1743,83 @@ async def _get_org_ai_system(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found")
     return system
 
+
+@router.get("/ai-systems/governance", response_model=AIGovernanceOverviewOut)
+async def get_ai_governance_overview(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> AIGovernanceOverviewOut:
+    """Every AI system with what is documented, missing and outstanding.
+
+    Computed deterministically from declared facts and what is linked
+    to each system — see app.compliance.ai_system_governance. The
+    output is a checklist the customer will be held to, so it has to
+    be the same checklist every time they look.
+    """
+    systems = list(
+        (
+            await db.execute(
+                select(AISystem)
+                .where(AISystem.organization_id == context.organization_id)
+                .order_by(AISystem.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    rows = [await assess_ai_system(db, system=system) for system in systems]
+
+    return AIGovernanceOverviewOut(
+        systems=[AISystemGovernanceOut.model_validate(row) for row in rows],
+        total_systems=len(rows),
+        high_risk_systems=sum(
+            1 for row in rows if row.risk_classification in ("high", "unacceptable")
+        ),
+        systems_without_screening=sum(1 for row in rows if not row.has_current_screening),
+        total_open_actions=sum(len(row.required_actions) for row in rows),
+    )
+
+
+@router.patch("/ai-systems/{ai_system_id}/governance", response_model=AISystemOut)
+async def update_ai_system_governance(
+    ai_system_id: uuid.UUID,
+    payload: AISystemGovernanceUpdate,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.ai_systems.manage")),
+) -> AISystem:
+    """Record the governance facts for one system.
+
+    Partial by design: an inventory entry is filled in over time by
+    different people, and requiring the whole record on every edit
+    would mean whoever knows the model name has to guess at oversight.
+    """
+    system = await db.get(AISystem, ai_system_id)
+    if system is None or system.organization_id != context.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="AI system not found"
+        )
+
+    before = {
+        field_name: getattr(system, field_name)
+        for field_name in payload.model_dump(exclude_unset=True)
+    }
+    for field_name, value in payload.model_dump(exclude_unset=True).items():
+        setattr(system, field_name, value)
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.ai_system.governance_updated",
+        object_type="ai_system",
+        object_id=str(system.id),
+        before_state=before,
+        after_state=payload.model_dump(exclude_unset=True),
+    )
+    await db.commit()
+    await db.refresh(system)
+    return system
 
 @router.get("/ai-systems/indicator-catalog")
 async def get_indicator_catalog(

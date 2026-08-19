@@ -25,10 +25,12 @@ it. Concluding a legal violation is a lawyer's call, not a query's.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
@@ -42,6 +44,7 @@ from app.compliance.models import (
     FrameworkActivation,
     Requirement,
 )
+from app.compliance.control_library import templates_for_framework
 from app.core.models import Task
 
 # Per-requirement conclusions, ordered worst to best. These are states of
@@ -236,6 +239,98 @@ async def evaluate_requirement(
     )
 
 
+@dataclass
+class ReadinessBreakdown:
+    """A readiness percentage together with the arithmetic behind it.
+
+    A bare "68%" is not usable by the person accountable for it — their
+    next question is always "which ones, and what do I do". Every count
+    here is a number the user can click through to a list, and
+    `explanation` is assembled from those same counts so the sentence can
+    never drift from the figure it explains.
+    """
+
+    percent: float
+    satisfied: int
+    partial: int
+    needs_review: int
+    evidence_missing: int
+    not_assessed: int
+    total: int
+    explanation: str
+
+
+# Weights for partial credit. A requirement with evidence that has not
+# passed assessment is genuinely further along than one with no evidence
+# at all, and scoring both zero tells the user their work achieved
+# nothing. Deliberately conservative: only a `satisfied` requirement
+# earns full credit, so the number can never overstate the position.
+READINESS_WEIGHTS = {
+    "satisfied": 1.0,
+    "partial": 0.5,
+    "needs_review": 0.25,
+    "evidence_missing": 0.0,
+    "not_assessed": 0.0,
+}
+
+
+def summarize_readiness(evaluations: list[RequirementEvaluation]) -> ReadinessBreakdown:
+    """Turn per-requirement conclusions into an explainable score."""
+    counts = {status: 0 for status in REQUIREMENT_STATUSES}
+    for evaluation in evaluations:
+        counts[evaluation.status] = counts.get(evaluation.status, 0) + 1
+
+    total = len(evaluations)
+    if total == 0:
+        return ReadinessBreakdown(
+            percent=0.0,
+            satisfied=0,
+            partial=0,
+            needs_review=0,
+            evidence_missing=0,
+            not_assessed=0,
+            total=0,
+            explanation="This framework has no requirements loaded, so there is nothing to score.",
+        )
+
+    earned = sum(READINESS_WEIGHTS.get(e.status, 0.0) for e in evaluations)
+    percent = round(100 * earned / total, 1)
+
+    # Built from the counts rather than written prose, so the sentence and
+    # the number are always the same calculation.
+    parts: list[str] = []
+    for status, label in (
+        ("satisfied", "satisfied"),
+        ("partial", "partially evidenced"),
+        ("needs_review", "awaiting human review"),
+        ("evidence_missing", "missing evidence"),
+        ("not_assessed", "not yet assessed"),
+    ):
+        count = counts.get(status, 0)
+        if count:
+            parts.append(f"{count} {label}")
+
+    detail = ", ".join(parts[:-1]) + f" and {parts[-1]}" if len(parts) > 1 else parts[0]
+    explanation = (
+        f"{percent}% ready because, of {total} requirement"
+        f"{'' if total == 1 else 's'}, {detail}. "
+        "Partially evidenced requirements count for half and those awaiting review for a "
+        "quarter; only fully satisfied requirements count in full. This measures the "
+        "evidence held in Veyntra, not a legal conclusion about compliance."
+    )
+
+    return ReadinessBreakdown(
+        percent=percent,
+        satisfied=counts.get("satisfied", 0),
+        partial=counts.get("partial", 0),
+        needs_review=counts.get("needs_review", 0),
+        evidence_missing=counts.get("evidence_missing", 0),
+        not_assessed=counts.get("not_assessed", 0),
+        total=total,
+        explanation=explanation,
+    )
+
+
 def _gap_kind_for(evaluation: RequirementEvaluation) -> str | None:
     return {
         "not_assessed": "no_control",
@@ -245,6 +340,38 @@ def _gap_kind_for(evaluation: RequirementEvaluation) -> str | None:
         "satisfied": None,
     }[evaluation.status]
 
+
+async def evaluate_framework(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    framework: Framework,
+) -> list[RequirementEvaluation]:
+    """Evaluate a framework's requirements without touching anything.
+
+    The read-only half of `run_framework_assessment`, which also reconciles
+    gaps. Split out because the overview endpoint is a GET read on every
+    page load: reconciling gaps there would mean the act of looking at the
+    dashboard silently opened and closed findings, and the audit trail
+    would fill with events nobody performed.
+    """
+    requirements = list(
+        (
+            await db.execute(
+                select(Requirement)
+                .where(Requirement.framework_id == framework.id)
+                .order_by(Requirement.reference_code)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        await evaluate_requirement(
+            db, organization_id=organization_id, requirement=requirement
+        )
+        for requirement in requirements
+    ]
 
 async def run_framework_assessment(
     db: AsyncSession,
@@ -499,6 +626,15 @@ async def set_framework_activation(
             activation.activated_at = datetime.now(UTC)
             activation.activated_by = actor_user_id
 
+    scaffolded = 0
+    if active:
+        scaffolded = await scaffold_controls_for_framework(
+            db,
+            organization_id=organization_id,
+            framework=framework,
+            actor_user_id=actor_user_id,
+        )
+
     await record_event(
         db,
         organization_id=organization_id,
@@ -506,10 +642,183 @@ async def set_framework_activation(
         action="compliance.framework.activated" if active else "compliance.framework.deactivated",
         object_type="framework",
         object_id=str(framework.id),
-        after_state={"status": activation.status},
+        after_state={"status": activation.status, "controls_scaffolded": scaffolded},
     )
     return activation
 
+
+async def reassess_frameworks_for_control(
+    control_id: uuid.UUID,
+    *,
+    organization_id: uuid.UUID,
+    actor_user_id: uuid.UUID | None,
+    session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]] | None = None,
+) -> list[uuid.UUID]:
+    """Re-run the assessment for every active framework this control serves.
+
+    Called after a person approves evidence, so the readiness figure and
+    the gap list reflect the decision they just made without them having
+    to find the framework screen and press a button. Opens its own session
+    because it runs as a background task after the response is sent.
+
+    This does not weaken the rule that a human decides what counts as
+    evidence — approval is still the gate, and it still happens by hand.
+    What is automated is the arithmetic that follows it, which is
+    deterministic: the same approved evidence always yields the same
+    conclusion, whether a person triggers the recomputation or an approval
+    does. Only active frameworks are touched, so approving evidence never
+    revives a framework the organization stood down."""
+    from app.db.session import AsyncSessionLocal
+
+    factory = session_factory or AsyncSessionLocal
+    assessed: list[uuid.UUID] = []
+
+    async with factory() as db:
+        frameworks = list(
+            (
+                await db.execute(
+                    select(Framework)
+                    .join(Requirement, Requirement.framework_id == Framework.id)
+                    .join(ControlMapping, ControlMapping.requirement_id == Requirement.id)
+                    .join(FrameworkActivation, FrameworkActivation.framework_id == Framework.id)
+                    .where(
+                        ControlMapping.control_id == control_id,
+                        FrameworkActivation.organization_id == organization_id,
+                        FrameworkActivation.status == "active",
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for framework in frameworks:
+            evaluations = await run_framework_assessment(
+                db,
+                organization_id=organization_id,
+                framework=framework,
+                actor_user_id=actor_user_id,
+            )
+            control_ids = {cid for e in evaluations for cid in e.control_ids}
+            if control_ids:
+                await db.execute(
+                    update(Control)
+                    .where(
+                        Control.id.in_(control_ids),
+                        Control.organization_id == organization_id,
+                    )
+                    .values(needs_reassessment=False)
+                )
+            assessed.append(framework.id)
+
+        await db.commit()
+
+    return assessed
+
+async def scaffold_controls_for_framework(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    framework: Framework,
+    actor_user_id: uuid.UUID | None,
+) -> int:
+    """Give a newly adopted framework a control set, reusing what exists.
+
+    Without this, adopting GDPR produces requirements with nothing
+    attached and the document intelligence has no target to propose
+    against — a privacy notice cannot be mapped to Article 13 if no
+    control for it exists.
+
+    Controls come from app.compliance.control_library, where one measure
+    lists every requirement it supports across frameworks. That matters
+    on the second adoption: an organization that already holds "Restrict
+    access to personal data" for GDPR gets that same control mapped to
+    the ISO 42001 clause too, rather than a duplicate with a different
+    name and its own empty evidence list. Their existing evidence starts
+    counting immediately, which is the whole argument for adopting a
+    second framework here rather than starting again elsewhere.
+
+    Scaffolded controls are created `not_started` with no evidence.
+    Adopting a framework must never move the compliance position: this
+    builds the shelf, not the contents.
+
+    Returns the number of controls created. Idempotent — re-activating a
+    framework adds only missing mappings, and never edits a control the
+    organization wrote themselves.
+    """
+    requirements = list(
+        (
+            await db.execute(
+                select(Requirement).where(Requirement.framework_id == framework.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not requirements:
+        return 0
+
+    by_code = {requirement.reference_code: requirement for requirement in requirements}
+
+    # Controls this organization already has from the library, so a
+    # second framework extends them instead of duplicating.
+    existing = {
+        control.template_key: control
+        for control in (
+            await db.execute(
+                select(Control).where(
+                    Control.organization_id == organization_id,
+                    Control.template_key.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+        if control.template_key
+    }
+
+    created = 0
+    for template in templates_for_framework(framework.key):
+        codes = [code for fk, code in template.satisfies if fk == framework.key]
+        targets = [by_code[code] for code in codes if code in by_code]
+        if not targets:
+            # The template names a requirement this framework revision
+            # does not carry. Skipped rather than invented.
+            continue
+
+        control = existing.get(template.key)
+        if control is None:
+            control = Control(
+                organization_id=organization_id,
+                title=template.title,
+                description=template.description,
+                status="not_started",
+                category=template.category,
+                priority=template.priority,
+                template_key=template.key,
+            )
+            db.add(control)
+            await db.flush()
+            existing[template.key] = control
+            created += 1
+
+        for requirement in targets:
+            already = (
+                await db.execute(
+                    select(ControlMapping).where(
+                        ControlMapping.control_id == control.id,
+                        ControlMapping.requirement_id == requirement.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if already is None:
+                db.add(
+                    ControlMapping(control_id=control.id, requirement_id=requirement.id)
+                )
+
+    await db.flush()
+    return created
 
 async def active_framework_ids(
     db: AsyncSession, *, organization_id: uuid.UUID

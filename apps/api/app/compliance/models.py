@@ -116,6 +116,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -161,6 +162,15 @@ class Requirement(UUIDPrimaryKeyMixin, Base):
     reference_code: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # standard | high
+    #
+    # "high" marks requirements where a wrongly-accepted evidence mapping
+    # is expensive to discover later: breach notification, DPIA,
+    # prohibited AI practices, human oversight. Evidence proposed against
+    # these always goes to a human, whatever the model's confidence.
+    # Sensitivity is a property of the requirement, not of the document,
+    # so it lives in the catalog rather than being inferred per upload.
+    sensitivity: Mapped[str] = mapped_column(String(20), nullable=False, default="standard")
 
 
 class Control(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -187,6 +197,19 @@ class Control(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # low | medium | high
     priority: Mapped[str] = mapped_column(String(10), default="medium")
+    # Raised when evidence is attached or approved against this control,
+    # cleared when the framework is next assessed. The point is that new
+    # evidence must not silently change a stated position: the previous
+    # assessment stays on the record, visibly stale, until someone runs
+    # the assessment again. It is a prompt to re-run, never an automatic
+    # re-grading.
+    needs_reassessment: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Set when this control came from app.compliance.control_library.
+    # Lets adopting a second framework extend an existing control with
+    # new requirement mappings instead of creating a near-identical one
+    # in a different vocabulary. Null for controls the organization
+    # wrote themselves, which are never touched by scaffolding.
+    template_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -350,6 +373,40 @@ class AISystem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     affected_users: Mapped[list[str]] = mapped_column(JSON, default=list)
     # [{"name": "Customer email", "classification": "confidential"}, ...]
     processed_data: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    # --- Governance facts -------------------------------------------
+    #
+    # Each of these answers a question the EU AI Act or GDPR asks
+    # directly, and each is a fact the organization declares rather than
+    # something inferred from the model's behaviour. Nullable because an
+    # inventory entry starts incomplete, and how incomplete is itself
+    # the thing `documentation_completeness` reports.
+
+    # Whether the system faces outside the organization. A tool only
+    # staff touch carries different obligations from one customers meet.
+    is_external: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    personal_data_processed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    sensitive_data_processed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    # Where the system operates or its output lands. Drives whether the
+    # EU AI Act reaches it at all.
+    geography: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # How a person can interpret, intervene in, or interrupt the system
+    # (Article 14). Free text: what counts as effective oversight differs
+    # per system, and a checkbox here would let an empty gesture pass.
+    human_oversight: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Whether the system makes decisions with legal or similarly
+    # significant effects on people (GDPR Article 22).
+    automated_decision_making: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    # development | pilot | production | retired
+    deployment_status: Mapped[str] = mapped_column(String(20), default="development")
+    # Third parties in this system's supply chain, by name.
+    third_party_vendors: Mapped[list[str]] = mapped_column(JSON, default=list)
+
     # minimal | limited | high | unacceptable (EU AI Act risk tiers)
     risk_classification: Mapped[str] = mapped_column(String(20), default="minimal")
     last_reviewed_at: Mapped[datetime | None] = mapped_column(
@@ -951,6 +1008,46 @@ class ComplianceGap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class EvidenceEvent(UUIDPrimaryKeyMixin, Base):
+    """An observation from a connector that may bear on a control.
+
+    The receiving end of continuous monitoring. An event is evidence that
+    the compliance position may have moved — never a new position: it
+    flags the control for reassessment and lets the deterministic
+    assessment decide, so one rule stays in one place rather than letting
+    connectors grade controls by a second standard.
+
+    Append-only by design. A connector reporting that something changed
+    must never be able to destroy the record of what was true before.
+    """
+
+    __tablename__ = "evidence_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    # Which connector observed it — a key from
+    # app.compliance.connectors.CONNECTORS.
+    source: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    control_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
+    )
+    # The identifier this observation has in the source system, so a
+    # repeated observation can be recognised rather than duplicated.
+    external_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Whether this event actually called an assessment into question.
+    # Recorded rather than derived, so the trail shows what the event did
+    # at the time even if the rules later change.
+    triggered_reassessment: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A proposed link between an uploaded document and a control.
 
@@ -991,6 +1088,27 @@ class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     rationale: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     quoted_passage: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # Where in the document the passage came from, as the document
+    # labels it ("Section 4", "Clause 7.2"). Traceability is the
+    # difference between evidence an auditor can follow and a claim
+    # they have to take on trust — without it, verifying a mapping
+    # means re-reading the whole document.
+    source_location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # policy_statement | procedure | record | attestation | other.
+    # A policy saying what the organization will do is weaker evidence
+    # than a record showing it happened, and the assessment should be
+    # able to tell them apart.
+    evidence_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # The specific requirement this passage supports. Nullable because
+    # a proposal may map to a control without the model resolving which
+    # of that control's requirements it speaks to.
+    requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("requirements.id"), nullable=True, index=True
+    )
+    # Why this suggestion did or did not reach a human. Recorded rather
+    # than recomputed, so an auto-approval can always be explained after
+    # the fact even if the rules later change.
+    routing_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
     quote_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Set when approved — the Evidence row this became.
     evidence_id: Mapped[uuid.UUID | None] = mapped_column(

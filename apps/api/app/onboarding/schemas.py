@@ -8,9 +8,9 @@ GOAL_KEYS = frozenset(
     {
         "improve_compliance",
         "improve_security",
-        "find_more_customers",
-        "automate_customer_support",
-        "automate_business_operations",
+        "prepare_for_audit",
+        "govern_ai_systems",
+        "handle_privacy_requests",
     }
 )
 
@@ -75,9 +75,16 @@ class ReadinessOpportunityOut(BaseModel):
 
 
 class ReadinessOut(BaseModel):
+    """Where an organization stands on the work Veyntra actually does.
+
+    The sales, support and process-automation dimensions were removed when
+    Veyntra narrowed to compliance: they were computed from modules that
+    are no longer part of the product, so every one of them would have
+    reported 0% on a healthy account and read as a failing score rather
+    than an absent feature."""
+
     compliance: ReadinessDimensionOut
+    evidence_coverage: ReadinessDimensionOut
+    framework_adoption: ReadinessDimensionOut
     security: ReadinessDimensionOut
-    sales_automation: ReadinessDimensionOut
-    support_automation: ReadinessDimensionOut
-    process_automation: ReadinessDimensionOut
     opportunities: list[ReadinessOpportunityOut]

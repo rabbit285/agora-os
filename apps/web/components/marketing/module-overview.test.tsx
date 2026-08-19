@@ -9,9 +9,9 @@ describe("ModuleOverview", () => {
     const expected: Record<string, string> = {
       Compliance: "/features#compliance",
       Security: "/features#security",
-      Sales: "/features#sales",
-      "Customer Support": "/features#support",
-      Automation: "/features#automation",
+      "Document Intelligence": "/features#document-intelligence",
+      "Privacy & Data Requests": "/features#privacy",
+      "Vendor Assurance": "/features#vendors",
       "AI Governance": "/features#ai-governance",
     };
     for (const [name, href] of Object.entries(expected)) {

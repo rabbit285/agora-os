@@ -138,6 +138,7 @@ export default function FrameworkDashboardPage({
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-center gap-6">
+              <Stat label="Readiness" value={`${result.readiness.percent}%`} />
               <Stat label="Satisfied" value={`${result.satisfied_count}/${result.requirements.length}`} />
               <Stat label="Evidence coverage" value={`${result.evidence_coverage_percent}%`} />
               <Stat label="Open gaps" value={String(result.gap_count)} />
@@ -145,7 +146,15 @@ export default function FrameworkDashboardPage({
                 Assessed {new Date(result.assessed_at).toLocaleString()}
               </p>
             </div>
-            <p className="mt-4 text-xs leading-relaxed text-[var(--fg-subtle)]">
+
+            {/* The score never appears without its arithmetic. A bare
+                percentage is not something the person accountable for it
+                can act on — their next question is always "which ones". */}
+            <p className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-app)] p-3 text-sm leading-relaxed text-[var(--fg-default)]">
+              {result.readiness.explanation}
+            </p>
+
+            <p className="mt-3 text-xs leading-relaxed text-[var(--fg-subtle)]">
               Statuses are computed from mapped controls, attached evidence, and recorded
               assessments — not inferred. A requirement with no evidence means nothing
               demonstrating it has been found in Veyntra, which is not a finding that the

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+import { apiFetch } from "@/lib/api";
 import { useCurrentUser } from "@/lib/session";
 
 /**
@@ -16,9 +17,26 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data: user, isLoading, isError } = useCurrentUser();
 
   useEffect(() => {
-    if (!isLoading && (isError || !user)) {
-      router.replace("/login");
-    }
+    if (isLoading || (!isError && user)) return;
+    // Clear the cookie *before* redirecting. `middleware.ts` decides
+    // "logged in" on cookie presence alone (a deliberate trade to keep a
+    // database round-trip off every request), so redirecting to /login
+    // while a dead cookie is still set gets bounced straight back here —
+    // and this component renders null, leaving a blank page with no way
+    // out. Logging out first is what makes the redirect land.
+    let cancelled = false;
+    void (async () => {
+      try {
+        await apiFetch("/api/v1/auth/logout", { method: "POST" });
+      } catch {
+        // Best effort: a failed logout must not strand the user on a
+        // blank screen. Redirect regardless.
+      }
+      if (!cancelled) router.replace("/login");
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [isLoading, isError, user, router]);
 
   if (isLoading) {

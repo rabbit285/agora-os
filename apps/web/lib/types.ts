@@ -151,9 +151,9 @@ export type OnboardingProfile = {
 export const ONBOARDING_GOALS: { key: string; label: string }[] = [
   { key: "improve_compliance", label: "Improve compliance" },
   { key: "improve_security", label: "Improve security" },
-  { key: "find_more_customers", label: "Find more customers" },
-  { key: "automate_customer_support", label: "Automate customer support" },
-  { key: "automate_business_operations", label: "Automate business operations" },
+  { key: "prepare_for_audit", label: "Prepare for an audit" },
+  { key: "govern_ai_systems", label: "Govern our AI systems" },
+  { key: "handle_privacy_requests", label: "Handle privacy requests" },
 ];
 
 export type ReadinessDimension = {
@@ -167,11 +167,14 @@ export type ReadinessOpportunity = {
 };
 
 export type Readiness = {
+  /** Controls marked implemented. */
   compliance: ReadinessDimension;
+  /** Controls with at least one piece of evidence attached — reported
+   * separately from `compliance` because a control ticked as implemented
+   * but never evidenced is the first thing an auditor finds. */
+  evidence_coverage: ReadinessDimension;
+  framework_adoption: ReadinessDimension;
   security: ReadinessDimension;
-  sales_automation: ReadinessDimension;
-  support_automation: ReadinessDimension;
-  process_automation: ReadinessDimension;
   opportunities: ReadinessOpportunity[];
 };
 
@@ -1860,6 +1863,7 @@ export type FrameworkAssessmentResult = {
   /** Requirements actually backed by evidence — the number that must not
    * move when an unrelated document is uploaded. */
   evidence_coverage_percent: number;
+  readiness: ReadinessBreakdown;
 };
 
 export type AuditEvent = {
@@ -1909,11 +1913,236 @@ export type AIAssessmentDetail = {
 /** An AI proposal that a document evidences a control. Deliberately not
  * Evidence: the assessment ignores these entirely, and approving one is
  * what creates the real evidence row. */
+/** A document in the compliance library, with where it is in the
+ * processing pipeline. `extracted_characters` travels with the status so
+ * the UI can show that `ready` meant text was genuinely read, rather
+ * than asking the user to trust a green badge over an empty result. */
+export type ComplianceDocument = {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  classification: string;
+  processing_status:
+    // Resting state: uploaded elsewhere in Veyntra and never submitted
+    // for compliance analysis. Not a pipeline stage.
+    | "not_analyzed"
+    | "uploaded"
+    | "parsing"
+    | "analyzing"
+    | "ready"
+    | "failed"
+    | "unsupported";
+  processing_error: string | null;
+  processed_at: string | null;
+  extracted_characters: number | null;
+  document_type: string | null;
+  document_domain: string | null;
+  created_at: string;
+  proposed_count: number;
+  approved_count: number;
+  unverifiable_count: number;
+};
+
+/** A readiness percentage with the arithmetic behind it. The explanation
+ * is built from the same counts as the number, so the sentence can never
+ * drift from the figure it explains. */
+export type ReadinessBreakdown = {
+  percent: number;
+  satisfied: number;
+  partial: number;
+  needs_review: number;
+  evidence_missing: number;
+  not_assessed: number;
+  total: number;
+  explanation: string;
+};
+
+/** A framework we do or do not think applies, and why.
+ *
+ * `reasons` restates facts the organization declared, so the customer
+ * can disagree with a recommendation by changing a fact rather than
+ * arguing with a model. */
+export type Connector = {
+  key: string;
+  name: string;
+  category: string;
+  /** Never optimistic. A customer who believes a source is watching
+   * their systems, and is wrong, is worse off than one who knows. */
+  status: "available" | "coming_soon";
+  observes: string;
+};
+
+export type ConnectorCatalog = {
+  connectors: Connector[];
+  available_count: number;
+  coming_soon_count: number;
+};
+
+export type EvidenceEvent = {
+  id: string;
+  source: string;
+  event_type: string;
+  summary: string;
+  control_id: string | null;
+  observed_at: string;
+  triggered_reassessment: boolean;
+};
+
+export type ActivityLine = { count: number; label: string };
+
+export type NextAction = {
+  title: string;
+  detail: string;
+  href: string;
+  priority: "high" | "medium" | "low";
+};
+
+export type FrameworkStatus = {
+  framework_id: string;
+  key: string;
+  name: string;
+  readiness_percent: number;
+  /** The arithmetic behind the figure. Never shown without it. */
+  explanation: string;
+  open_gap_count: number;
+};
+
+export type SystemAtRisk = {
+  ai_system_id: string;
+  name: string;
+  risk_classification: string;
+  readiness_percent: number;
+  open_action_count: number;
+};
+
+export type ComplianceDashboard = {
+  readiness_percent: number;
+  readiness_explanation: string;
+  critical_gap_count: number;
+  open_risk_count: number;
+  ai_system_count: number;
+  high_risk_ai_system_count: number;
+  overdue_action_count: number;
+  frameworks: FrameworkStatus[];
+  critical_issues: NextAction[];
+  systems_at_risk: SystemAtRisk[];
+  /** Counted from the audit trail, never narrated. */
+  recent_activity: ActivityLine[];
+  recommended_next_actions: NextAction[];
+};
+
+export type ReviewItem = {
+  id: string;
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+  /** Where the decision is actually made. */
+  href: string;
+};
+
+export type ReviewCategory = {
+  key: string;
+  label: string;
+  description: string;
+  count: number;
+  items: ReviewItem[];
+};
+
+export type ReviewCenter = {
+  categories: ReviewCategory[];
+  total_needing_review: number;
+  /** Accepted without asking, over the same window. */
+  auto_accepted_recently: number;
+  proposals_recently: number;
+};
+
+export type RequiredAction = {
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+  /** The obligation behind this action. */
+  basis: string;
+};
+
+/** One AI system as the governance screen needs it — computed
+ * deterministically, never a model opinion. */
+export type AISystemGovernance = {
+  ai_system_id: string;
+  name: string;
+  risk_classification: string;
+  deployment_status: string;
+  vendor: string | null;
+  model_name: string | null;
+  documentation_completeness: number;
+  missing_documentation: string[];
+  applicable_regulations: string[];
+  open_risk_count: number;
+  open_incident_count: number;
+  has_current_screening: boolean;
+  required_actions: RequiredAction[];
+  readiness_percent: number;
+  explanation: string;
+};
+
+export type AIGovernanceOverview = {
+  systems: AISystemGovernance[];
+  total_systems: number;
+  high_risk_systems: number;
+  systems_without_screening: number;
+  total_open_actions: number;
+};
+
+export type FrameworkRecommendation = {
+  framework_key: string;
+  framework_id: string | null;
+  framework_name: string | null;
+  applicability: "required" | "likely" | "recommended" | "not_indicated";
+  reasons: string[];
+  uncertainties: string[];
+  requires_legal_review: boolean;
+  already_active: boolean;
+};
+
+export type FrameworkRecommendations = {
+  recommendations: FrameworkRecommendation[];
+  /** False until anything has been declared. An empty result must
+   * read as "we have not asked yet", never "nothing applies to you". */
+  facts_declared: boolean;
+};
+
+export type FrameworkReadiness = {
+  framework_id: string;
+  framework_key: string;
+  framework_name: string;
+  readiness: ReadinessBreakdown;
+  open_gap_count: number;
+};
+
+/** Where the organization stands, for the Compliance screen itself — so
+ * "assessment runs" and "readiness appears" are visible where the
+ * document was uploaded, not only on a framework detail page. */
+export type ComplianceOverview = {
+  frameworks: FrameworkReadiness[];
+  total_open_gaps: number;
+  proposals_awaiting_review: number;
+  documents_processing: number;
+  controls_needing_reassessment: number;
+};
+
 export type EvidenceSuggestion = {
   id: string;
   file_id: string;
   control_id: string;
-  status: "proposed" | "approved" | "rejected" | "unverifiable";
+  status: "proposed" | "auto_approved" | "approved" | "rejected" | "unverifiable";
+  /** Where in the document the passage came from, as the document
+   * labels it. The difference between a citation a reviewer can
+   * follow and one they must take on trust. */
+  source_location: string | null;
+  evidence_type: string | null;
+  requirement_id: string | null;
+  /** Why this did or did not reach a human. */
+  routing_reason: string | null;
   /** The model's own confidence. Displayed, never used to decide
    * anything — a number a model assigns to its own output is not a
    * measurement. */

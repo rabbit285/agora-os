@@ -79,6 +79,10 @@ class ControlOut(BaseModel):
     status: str
     owner_id: uuid.UUID | None
     created_at: datetime
+    # True when evidence changed after the last assessment — the UI uses
+    # this to prompt a re-run rather than presenting a stale conclusion
+    # as current.
+    needs_reassessment: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -687,6 +691,22 @@ class RequirementEvaluationOut(BaseModel):
     gap_id: uuid.UUID | None = None
 
 
+class ReadinessBreakdownOut(BaseModel):
+    """The readiness score with its arithmetic attached, so the number is
+    never presented without the reason for it."""
+
+    percent: float
+    satisfied: int
+    partial: int
+    needs_review: int
+    evidence_missing: int
+    not_assessed: int
+    total: int
+    explanation: str
+
+    model_config = {"from_attributes": True}
+
+
 class FrameworkAssessmentResultOut(BaseModel):
     framework_id: uuid.UUID
     assessed_at: datetime
@@ -694,6 +714,7 @@ class FrameworkAssessmentResultOut(BaseModel):
     satisfied_count: int
     gap_count: int
     evidence_coverage_percent: float
+    readiness: ReadinessBreakdownOut
 
 
 class CreateGapTaskRequest(BaseModel):
@@ -848,6 +869,10 @@ class EvidenceSuggestionOut(BaseModel):
     rationale: str | None
     quoted_passage: str | None
     quote_verified: bool
+    source_location: str | None = None
+    evidence_type: str | None = None
+    requirement_id: uuid.UUID | None = None
+    routing_reason: str | None = None
     evidence_id: uuid.UUID | None
     created_at: datetime
 
@@ -865,6 +890,289 @@ class AnalyzeDocumentResult(BaseModel):
     # found in the document. Surfaced rather than hidden — it is the
     # honest measure of how much the model made up on this run.
     unverifiable_count: int
+
+
+class ComplianceDocumentOut(BaseModel):
+    """A document in the compliance library, with where it is in the
+    processing pipeline.
+
+    `extracted_characters` travels with the status so the UI can prove
+    `ready` meant something was actually read, rather than asking the
+    user to trust a green badge over an empty result.
+    """
+
+    id: uuid.UUID
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    classification: str
+    processing_status: str
+    processing_error: str | None
+    processed_at: datetime | None
+    extracted_characters: int | None
+    document_type: str | None
+    document_domain: str | None
+    created_at: datetime
+
+    proposed_count: int = 0
+    approved_count: int = 0
+    unverifiable_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class CompanyFactsUpdate(BaseModel):
+    """The declarations that decide which frameworks are in scope."""
+
+    operates_in_eu: bool = False
+    sells_to_eu_customers: bool = False
+    processes_personal_data: bool = False
+    processes_special_category_data: bool = False
+    uses_third_party_ai: bool = False
+    builds_ai_features: bool = False
+    is_data_processor: bool = False
+    sells_to_enterprise: bool = False
+    sector: str | None = Field(default=None, max_length=60)
+
+
+class FrameworkRecommendationOut(BaseModel):
+    """A framework we do or do not think applies, and why.
+
+    `reasons` restates the facts the organization declared, so a
+    recommendation can be argued with: disagree with the reason, change
+    the fact, get a different answer."""
+
+    framework_key: str
+    framework_id: uuid.UUID | None = None
+    framework_name: str | None = None
+    applicability: str
+    reasons: list[str]
+    uncertainties: list[str]
+    requires_legal_review: bool
+    already_active: bool = False
+
+
+class FrameworkRecommendationsOut(BaseModel):
+    recommendations: list[FrameworkRecommendationOut]
+    # False until the organization has declared anything. The UI must ask
+    # the questions rather than present an empty result as "nothing
+    # applies to you", which is the one wrong answer here.
+    facts_declared: bool
+
+
+class AdoptRecommendedRequest(BaseModel):
+    """Which recommendations to act on. Explicit rather than "adopt
+    everything", so adopting a framework stays a decision the customer
+    made."""
+
+    framework_keys: list[str] = Field(min_length=1)
+
+class FrameworkReadinessOut(BaseModel):
+    """One active framework's current standing."""
+
+    framework_id: uuid.UUID
+    framework_key: str
+    framework_name: str
+    readiness: ReadinessBreakdownOut
+    open_gap_count: int
+
+
+class ComplianceOverviewOut(BaseModel):
+    """Everything needed to answer "where do we stand" without leaving the
+    Compliance screen.
+
+    Computed from the assessments already on record rather than by
+    re-running them: this is read on every page load, and an endpoint that
+    silently reassessed on read would make the number depend on who looked
+    at it last."""
+
+    frameworks: list[FrameworkReadinessOut]
+    total_open_gaps: int
+    proposals_awaiting_review: int
+    documents_processing: int
+    controls_needing_reassessment: int
+
+class ConnectorOut(BaseModel):
+    """A monitoring source and its real state.
+
+    `status` is never optimistic. A customer who believes their GitHub
+    settings are being watched, and is wrong, is worse off than one who
+    knows they are not.
+    """
+
+    key: str
+    name: str
+    category: str
+    status: str
+    observes: str
+
+    model_config = {"from_attributes": True}
+
+
+class ConnectorCatalogOut(BaseModel):
+    connectors: list[ConnectorOut]
+    available_count: int
+    coming_soon_count: int
+
+
+class EvidenceEventOut(BaseModel):
+    id: uuid.UUID
+    source: str
+    event_type: str
+    summary: str
+    control_id: uuid.UUID | None
+    observed_at: datetime
+    # Whether this observation actually called an assessment into
+    # question, as judged at the time it arrived.
+    triggered_reassessment: bool
+
+    model_config = {"from_attributes": True}
+
+class ActivityLineOut(BaseModel):
+    count: int
+    label: str
+
+    model_config = {"from_attributes": True}
+
+
+class NextActionOut(BaseModel):
+    title: str
+    detail: str
+    href: str
+    priority: str
+
+    model_config = {"from_attributes": True}
+
+
+class FrameworkStatusOut(BaseModel):
+    framework_id: uuid.UUID
+    key: str
+    name: str
+    readiness_percent: float
+    # The arithmetic behind the figure. Never shown without it.
+    explanation: str
+    open_gap_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class SystemAtRiskOut(BaseModel):
+    ai_system_id: uuid.UUID
+    name: str
+    risk_classification: str
+    readiness_percent: float
+    open_action_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class ComplianceDashboardOut(BaseModel):
+    """The executive view. Every figure is either clickable through to
+    the thing it counts, or carries the arithmetic that produced it.
+    """
+
+    readiness_percent: float
+    readiness_explanation: str
+    critical_gap_count: int
+    open_risk_count: int
+    ai_system_count: int
+    high_risk_ai_system_count: int
+    overdue_action_count: int
+    frameworks: list[FrameworkStatusOut]
+    critical_issues: list[NextActionOut]
+    systems_at_risk: list[SystemAtRiskOut]
+    recent_activity: list[ActivityLineOut]
+    recommended_next_actions: list[NextActionOut]
+
+    model_config = {"from_attributes": True}
+
+class ReviewItemOut(BaseModel):
+    id: str
+    title: str
+    detail: str
+    priority: str
+    # Where the decision is actually made. A queue that lists work
+    # without taking you to it just relocates the searching.
+    href: str
+
+    model_config = {"from_attributes": True}
+
+
+class ReviewCategoryOut(BaseModel):
+    key: str
+    label: str
+    description: str
+    count: int
+    items: list[ReviewItemOut]
+
+
+class ReviewCenterOut(BaseModel):
+    categories: list[ReviewCategoryOut]
+    total_needing_review: int
+    # What the AI accepted without asking, over the same window, so the
+    # customer can see the ratio they are actually buying.
+    auto_accepted_recently: int
+    proposals_recently: int
+
+class RequiredActionOut(BaseModel):
+    title: str
+    detail: str
+    priority: str
+    # Which obligation drives this. An action nobody can trace back to
+    # a requirement is busywork.
+    basis: str
+
+    # Needed on the nested model too: without it Pydantic will not read
+    # the RequiredAction dataclass the governance engine returns.
+    model_config = {"from_attributes": True}
+
+
+class AISystemGovernanceOut(BaseModel):
+    """One AI system, as the governance screen needs it."""
+
+    ai_system_id: uuid.UUID
+    name: str
+    risk_classification: str
+    deployment_status: str
+    vendor: str | None
+    model_name: str | None
+    documentation_completeness: int
+    missing_documentation: list[str]
+    applicable_regulations: list[str]
+    open_risk_count: int
+    open_incident_count: int
+    has_current_screening: bool
+    required_actions: list[RequiredActionOut]
+    readiness_percent: float
+    explanation: str
+
+    model_config = {"from_attributes": True}
+
+
+class AIGovernanceOverviewOut(BaseModel):
+    systems: list[AISystemGovernanceOut]
+    total_systems: int
+    high_risk_systems: int
+    systems_without_screening: int
+    total_open_actions: int
+
+
+class AISystemGovernanceUpdate(BaseModel):
+    """The governance facts, editable without restating the whole record."""
+
+    is_external: bool | None = None
+    personal_data_processed: bool | None = None
+    sensitive_data_processed: bool | None = None
+    automated_decision_making: bool | None = None
+    geography: str | None = Field(default=None, max_length=200)
+    human_oversight: str | None = Field(default=None, max_length=2000)
+    deployment_status: str | None = Field(
+        default=None, pattern="^(development|pilot|production|retired)$"
+    )
+    third_party_vendors: list[str] | None = None
+
+class ProcessDocumentRequest(BaseModel):
+    file_id: uuid.UUID
 
 
 class ApproveSuggestionRequest(BaseModel):

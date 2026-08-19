@@ -128,7 +128,7 @@ async def test_accepting_invitation_creates_new_user_and_membership(
     with caplog.at_level("INFO", logger="agora.invitations"):
         created = await client.post(
             "/api/v1/organizations/current/invitations",
-            json={"email": "invitee1@example.com", "role_key": "sales_representative"},
+            json={"email": "invitee1@example.com", "role_key": "compliance_manager"},
         )
     assert created.status_code == 201
     token = _extract_token_from_log(caplog, "/invite/")
@@ -159,10 +159,14 @@ async def test_accepting_invitation_creates_new_user_and_membership(
     assert membership.organization_id == org_id
     assert membership.invited_by is not None
 
-    # A sales_representative should be able to create a lead but not
-    # decide an approval (RBAC actually wired to the new membership's role).
-    lead = await client.post("/api/v1/sales/leads", json={"source": "inbound"})
-    assert lead.status_code == 201
+    # RBAC is actually wired to the new membership's role: a compliance
+    # manager can create a control. Previously asserted with a sales
+    # representative creating a lead — that module was withdrawn, and a
+    # 404 would not have proven the role was granted anything.
+    control = await client.post(
+        "/api/v1/compliance/controls", json={"title": "Invited manager can do this"}
+    )
+    assert control.status_code == 201, control.text
 
 
 async def test_accept_invitation_with_invalid_token_rejected(client: AsyncClient) -> None:

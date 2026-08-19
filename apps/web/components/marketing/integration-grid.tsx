@@ -13,16 +13,15 @@ type Integration = { name: string; category: string; status: IntegrationStatus }
  * OAuth connector here, which is normal integration UX, not a deficiency
  * — shown as a status label rather than omitted so it isn't misread as
  * "already connected"). */
+// CRM, helpdesk and sales-data connectors are deliberately absent: they
+// fed the sales and support modules, which are no longer part of the
+// product. Listing a connector for a module a customer cannot reach
+// would be advertising a capability that does not exist.
 const INTEGRATIONS: Integration[] = [
-  { name: "HubSpot", category: "CRM", status: "requires-configuration" },
-  { name: "Salesforce", category: "CRM", status: "requires-configuration" },
-  { name: "Pipedrive", category: "CRM", status: "requires-configuration" },
-  { name: "Google", category: "Calendar, mail, drive", status: "requires-configuration" },
-  { name: "Microsoft", category: "Calendar, mail", status: "requires-configuration" },
-  { name: "GitHub", category: "Engineering", status: "requires-configuration" },
-  { name: "Slack", category: "Communication", status: "requires-configuration" },
-  { name: "Intercom", category: "Customer support", status: "requires-configuration" },
-  { name: "Apollo", category: "Sales data", status: "requires-configuration" },
+  { name: "Google", category: "Drive, mail, calendar", status: "requires-configuration" },
+  { name: "Microsoft", category: "SharePoint, mail, calendar", status: "requires-configuration" },
+  { name: "GitHub", category: "Engineering evidence", status: "requires-configuration" },
+  { name: "Slack", category: "Notifications", status: "requires-configuration" },
 ];
 
 const STATUS_LABEL: Record<IntegrationStatus, string> = {

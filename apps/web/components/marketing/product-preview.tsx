@@ -31,9 +31,9 @@ export function ProductPreview() {
             without either. */}
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
           <MetricCard label="Compliance readiness" value="86%" status="success" icon={ShieldCheck} />
-          <MetricCard label="Security posture" value="12 open" status="warning" />
-          <MetricCard label="Sales pipeline" value="€184k" status="success" icon={TrendingUp} />
-          <MetricCard label="Automation runs" value="342" status="neutral" icon={Workflow} />
+          <MetricCard label="Open gaps" value="12 open" status="warning" />
+          <MetricCard label="Awaiting review" value="7 proposals" status="warning" icon={TrendingUp} />
+          <MetricCard label="Documents read" value="342" status="neutral" icon={Workflow} />
         </CardContent>
         <div className="border-t border-[var(--border-default)] bg-[var(--bg-sunken)] p-4">
           <div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3">

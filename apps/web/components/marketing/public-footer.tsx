@@ -41,8 +41,8 @@ export function PublicFooter() {
           <div className="col-span-2 sm:col-span-1">
             <Logo size="sm" />
             <p className="mt-3 max-w-xs text-xs leading-relaxed text-[var(--fg-muted)]">
-              The secure AI operating system for SMEs — compliance, security, sales,
-              support, and automation in one governed workspace.
+              The compliance platform that reads your documents. Evidence, gaps and
+              readiness for GDPR, the EU AI Act, ISO 27001 and more.
             </p>
           </div>
           {FOOTER_COLUMNS.map((column) => (

@@ -122,6 +122,36 @@ async def test_logout_revokes_session(client: AsyncClient) -> None:
     assert me.status_code == 401
 
 
+async def test_logout_clears_a_cookie_whose_session_is_already_gone(client: AsyncClient) -> None:
+    """A dead cookie must still be removable.
+
+    Without this, the only endpoint that clears the cookie is the one that
+    401s on a dead session, so the browser keeps presenting it forever —
+    and the web middleware, which reads cookie presence as "logged in",
+    bounces the user off /login while AuthGuard bounces them back. That
+    deadlock renders a blank page with no way out (see the docstring on
+    `logout_endpoint`).
+    """
+    client.cookies.set("agora_session", "a-token-whose-session-no-longer-exists")
+
+    logout = await client.post("/api/v1/auth/logout")
+
+    assert logout.status_code == 200
+    assert logout.json() == {"ok": True}
+    # Assert the expiry directive rather than the client's cookie jar: the
+    # jar only evicts on a domain match, and the test client sets this
+    # cookie without one, so checking it would test httpx, not the API.
+    set_cookie = logout.headers.get("set-cookie", "")
+    assert "agora_session" in set_cookie
+    assert "Max-Age=0" in set_cookie
+
+
+async def test_logout_succeeds_with_no_cookie_at_all(client: AsyncClient) -> None:
+    """Logging out when already logged out is not an error."""
+    response = await client.post("/api/v1/auth/logout")
+    assert response.status_code == 200
+
+
 async def test_forgot_password_is_silent_about_unknown_email(client: AsyncClient) -> None:
     response = await client.post(
         "/api/v1/auth/forgot-password", json={"email": "nobody@example.com"}

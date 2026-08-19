@@ -15,15 +15,11 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.compliance.models import Control
+from app.compliance.models import Control, Evidence, Framework, FrameworkActivation
 from app.identity.models import User
 from app.onboarding.models import OnboardingProfile
 from app.onboarding.schemas import ReadinessDimensionOut, ReadinessOpportunityOut, ReadinessOut
-from app.sales.icp import get_icp_profile
-from app.sales.lead_finder import MIN_ICP_SCORE_FOR_MATCH, OPEN_LEAD_STATUSES
-from app.sales.models import Account, Lead
 from app.secops.service import compute_security_score
-from app.support.models import TicketMessage
 
 
 async def get_or_create_profile(
@@ -60,79 +56,47 @@ async def _compliance_percent(db: AsyncSession, organization_id: uuid.UUID) -> t
     return round(100 * implemented / total, 1), gaps
 
 
-async def _support_automation_percent(db: AsyncSession, organization_id: uuid.UUID) -> float:
-    """% of agent-facing reply volume (agent + ai sender types) that was
-    an AI-authored, auto-sent message — a real, honest proxy for "how much
-    of support is automated" (spec §68's "37% of support questions could
-    be automated" example, computed rather than invented)."""
-    total_replies = await _count(
-        db,
-        select(TicketMessage.id).where(
-            TicketMessage.organization_id == organization_id,
-            TicketMessage.sender_type.in_(["agent", "ai"]),
-        ),
-    )
-    if total_replies == 0:
+async def _evidence_coverage_percent(db: AsyncSession, organization_id: uuid.UUID) -> float:
+    """Share of this organization's controls with at least one piece of
+    evidence attached.
+
+    Distinct from the compliance percentage above, which counts controls
+    marked implemented. A control someone ticked as implemented but never
+    evidenced is exactly the gap an auditor finds first, so the two are
+    reported separately rather than averaged into one reassuring number.
+    """
+    total = await _count(db, select(Control.id).where(Control.organization_id == organization_id))
+    if total == 0:
         return 0.0
-    ai_sent = await _count(
+    with_evidence = await _count(
         db,
-        select(TicketMessage.id).where(
-            TicketMessage.organization_id == organization_id,
-            TicketMessage.sender_type == "ai",
-            TicketMessage.status == "sent",
+        select(Control.id)
+        .join(Evidence, Evidence.control_id == Control.id)
+        .where(Control.organization_id == organization_id)
+        .distinct(),
+    )
+    return round(100 * with_evidence / total, 1)
+
+
+async def _framework_adoption_percent(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> tuple[float, int]:
+    """How much of the framework catalog this organization has adopted.
+
+    Returns the percentage and the number still inactive, so the caller can
+    turn "none adopted" into an actionable next step rather than a bare
+    zero."""
+    total = await _count(db, select(Framework.id).where(Framework.organization_id.is_(None)))
+    if total == 0:
+        return 0.0, 0
+    active = await _count(
+        db,
+        select(FrameworkActivation.id).where(
+            FrameworkActivation.organization_id == organization_id,
+            FrameworkActivation.status == "active",
         ),
     )
-    return round(100 * ai_sent / total_replies, 1)
-
-
-async def _process_automation_percent(db: AsyncSession, organization_id: uuid.UUID) -> float:
-    """Reuses Automation Analytics' own success-rate formula rather than
-    a separately-computed number — see app.automation.analytics."""
-    from app.automation.analytics import compute_workflow_analytics
-
-    analytics = await compute_workflow_analytics(db, organization_id=organization_id)
-    return float(analytics["success_rate_percent"])
-
-
-async def _sales_automation_percent(db: AsyncSession, organization_id: uuid.UUID) -> float:
-    from app.sales.intelligence import compute_sales_intelligence
-
-    intelligence = await compute_sales_intelligence(db, organization_id=organization_id)
-    return float(intelligence["sequence_completion_rate_percent"])
-
-
-async def _icp_fit_accounts_without_a_lead(db: AsyncSession, organization_id: uuid.UUID) -> int:
-    profile = await get_icp_profile(db, organization_id=organization_id)
-    if profile is None:
-        return 0
-    accounts = list(
-        (
-            await db.execute(
-                select(Account.id).where(
-                    Account.organization_id == organization_id,
-                    Account.icp_score >= MIN_ICP_SCORE_FOR_MATCH,
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not accounts:
-        return 0
-    accounts_with_open_leads = {
-        row[0]
-        for row in (
-            await db.execute(
-                select(Lead.account_id).where(
-                    Lead.organization_id == organization_id,
-                    Lead.status.in_(OPEN_LEAD_STATUSES),
-                    Lead.account_id.isnot(None),
-                )
-            )
-        ).all()
-    }
-    return len([a for a in accounts if a not in accounts_with_open_leads])
-
+    return round(100 * active / total, 1), total - active
 
 async def _admins_without_mfa(db: AsyncSession, organization_id: uuid.UUID) -> int:
     from app.core.models import Membership, MembershipRole, Role
@@ -151,12 +115,44 @@ async def _admins_without_mfa(db: AsyncSession, organization_id: uuid.UUID) -> i
 
 async def compute_readiness(db: AsyncSession, *, organization_id: uuid.UUID) -> ReadinessOut:
     compliance_percent, compliance_gaps = await _compliance_percent(db, organization_id)
+    evidence_percent = await _evidence_coverage_percent(db, organization_id)
+    framework_percent, inactive_frameworks = await _framework_adoption_percent(
+        db, organization_id
+    )
     security_percent = float(await compute_security_score(db, organization_id=organization_id))
-    sales_percent = await _sales_automation_percent(db, organization_id)
-    support_percent = await _support_automation_percent(db, organization_id)
-    process_percent = await _process_automation_percent(db, organization_id)
 
     opportunities: list[ReadinessOpportunityOut] = []
+    if framework_percent == 0.0:
+        # Listed first when it applies: with no framework adopted there are
+        # no controls, so every other number below is zero for the same
+        # single reason and fixing this is what unblocks them.
+        opportunities.append(
+            ReadinessOpportunityOut(
+                title="Adopt your first framework",
+                detail=(
+                    "Activating GDPR, the EU AI Act or ISO 27001 builds the control set "
+                    "your evidence attaches to."
+                ),
+            )
+        )
+    elif inactive_frameworks > 0:
+        opportunities.append(
+            ReadinessOpportunityOut(
+                title=f"{inactive_frameworks} framework"
+                f"{'s are' if inactive_frameworks != 1 else ' is'} still inactive",
+                detail="Adopt the ones you are held to so their requirements are assessed.",
+            )
+        )
+    if evidence_percent < 100:
+        opportunities.append(
+            ReadinessOpportunityOut(
+                title="Upload a policy and let Veyntra map it",
+                detail=(
+                    f"{round(100 - evidence_percent)}% of your controls have no evidence "
+                    "attached. Document intelligence proposes the mappings for you."
+                ),
+            )
+        )
     if compliance_gaps > 0:
         opportunities.append(
             ReadinessOpportunityOut(
@@ -174,39 +170,15 @@ async def compute_readiness(db: AsyncSession, *, organization_id: uuid.UUID) -> 
                 detail="Organization Admins without TOTP MFA enrolled.",
             )
         )
-    icp_fit_count = await _icp_fit_accounts_without_a_lead(db, organization_id)
-    if icp_fit_count > 0:
-        opportunities.append(
-            ReadinessOpportunityOut(
-                title=f"{icp_fit_count} potential high-fit sales account"
-                f"{'s' if icp_fit_count != 1 else ''} identified",
-                detail="Accounts matching your ICP with no open Lead tracking them.",
-            )
-        )
-    if support_percent < 50:
-        opportunities.append(
-            ReadinessOpportunityOut(
-                title=f"{round(100 - support_percent)}% of support replies are still manual",
-                detail="Configure the Support AI Agent to auto-send grounded replies.",
-            )
-        )
-    if process_percent < 80:
-        opportunities.append(
-            ReadinessOpportunityOut(
-                title="Review failing or stalled automation workflow runs",
-                detail=f"Current workflow run success rate is {process_percent}%.",
-            )
-        )
 
     return ReadinessOut(
-        compliance=ReadinessDimensionOut(label="Compliance", percent=compliance_percent),
+        compliance=ReadinessDimensionOut(label="Controls implemented", percent=compliance_percent),
+        evidence_coverage=ReadinessDimensionOut(
+            label="Evidence coverage", percent=evidence_percent
+        ),
+        framework_adoption=ReadinessDimensionOut(
+            label="Frameworks adopted", percent=framework_percent
+        ),
         security=ReadinessDimensionOut(label="Security", percent=security_percent),
-        sales_automation=ReadinessDimensionOut(label="Sales Automation", percent=sales_percent),
-        support_automation=ReadinessDimensionOut(
-            label="Support Automation", percent=support_percent
-        ),
-        process_automation=ReadinessDimensionOut(
-            label="Process Automation", percent=process_percent
-        ),
         opportunities=opportunities,
     )

@@ -27,7 +27,7 @@ const SLIDES: Slide[] = [
     label: "Compliance",
     headline: "Turn compliance work into clear, auditable action.",
     description:
-      "Manage controls, evidence, policies, privacy workflows, risks, vendors, and audits from one governed workspace.",
+      "Adopt GDPR, the EU AI Act, ISO 27001, NIS2, DORA or SOC 2 and get a control set, an evidence trail, and a readiness score that explains exactly how it was calculated.",
     cta: "Explore Compliance",
     href: "/features#compliance",
     image: "/images/modules/module-compliance.jpg",
@@ -45,37 +45,37 @@ const SLIDES: Slide[] = [
     alt: "Security team monitoring global threat data across a wall of screens in a security operations center.",
   },
   {
-    id: "sales",
-    label: "Sales",
-    headline: "Find the right companies and buyers faster.",
+    id: "document-intelligence",
+    label: "Document Intelligence",
+    headline: "Upload a policy. Get proposed control mappings back.",
     description:
-      "Search companies and decision-makers, evaluate ICP fit, research prospects, and move approved opportunities into outreach.",
-    cta: "Explore Sales",
-    href: "/features#sales",
-    image: "/images/modules/module-sales.jpg",
-    alt: "Sales team reviewing pipeline and performance charts on a conference room screen.",
-  },
-  {
-    id: "support",
-    label: "Customer Support",
-    headline: "Deliver support that stays fast, personal, and smart.",
-    description:
-      "Give agents customer context, AI-assisted summaries, suggested responses, SLA visibility, and governed escalation tools.",
-    cta: "Explore Support",
-    href: "/features#support",
-    image: "/images/modules/module-support.jpg",
-    alt: "Customer support agents wearing headsets and assisting customers from their laptops.",
-  },
-  {
-    id: "automation",
-    label: "Automation",
-    headline: "Automate critical work without losing control.",
-    description:
-      "Build workflows with triggers, decisions, approvals, AI actions, integrations, retries, and complete execution history.",
-    cta: "Explore Automation",
-    href: "/features#automation",
+      "Veyntra reads each document, works out what it is, and proposes which controls it evidences — quoting the passage it relied on, and verifying that quote against your source.",
+    cta: "Explore Document Intelligence",
+    href: "/features#document-intelligence",
     image: "/images/modules/module-automation.jpg",
-    alt: "Team reviewing a connected automated-workflow diagram on a large screen.",
+    alt: "Team reviewing a connected process diagram on a large screen.",
+  },
+  {
+    id: "privacy",
+    label: "Privacy & Data Requests",
+    headline: "Handle DPIAs and subject requests without losing the thread.",
+    description:
+      "Screen processing activities for DPIA triggers, run assessments through to residual risk and DPO sign-off, and answer access requests with verified identity and a real discovery trail.",
+    cta: "Explore Privacy",
+    href: "/features#privacy",
+    image: "/images/modules/module-support.jpg",
+    alt: "Colleagues working through case records together at their laptops.",
+  },
+  {
+    id: "vendors",
+    label: "Vendor Assurance",
+    headline: "Review vendors on evidence, not on assurances.",
+    description:
+      "Collect questionnaires and documents, run privacy and security reviews, and record approvals — with conditional approval when evidence is still outstanding.",
+    cta: "Explore Vendor Assurance",
+    href: "/features#vendors",
+    image: "/images/modules/module-sales.jpg",
+    alt: "Team reviewing supplier assessment charts on a conference room screen.",
   },
   {
     id: "ai-governance",
@@ -174,7 +174,7 @@ export function ModuleCarousel() {
         <SectionHeader
           eyebrow="Platform"
           title="One platform for the work that keeps your business moving."
-          description="Bring compliance, security, sales, customer support, automation, and AI governance into one connected workspace."
+          description="Document intelligence, control mapping, privacy workflows, vendor assurance and AI governance — sharing one organization, one permission model, one audit trail."
         />
       </div>
 

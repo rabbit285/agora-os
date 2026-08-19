@@ -76,18 +76,17 @@ async def _build_executive_business_ai(
 ) -> ReportContent:
     readiness = await compute_readiness(db, organization_id=organization_id)
     dimensions = [
+        readiness.framework_adoption,
         readiness.compliance,
+        readiness.evidence_coverage,
         readiness.security,
-        readiness.sales_automation,
-        readiness.support_automation,
-        readiness.process_automation,
     ]
     return ReportContent(
-        title="Executive Business AI Report",
+        title="Executive Compliance Report",
         generated_at=datetime.now(UTC),
         sections=[
             ReportSection(
-                "Business AI Readiness by Dimension",
+                "Compliance Readiness by Dimension",
                 [{"Dimension": d.label, "Readiness %": d.percent} for d in dimensions],
             ),
             ReportSection(

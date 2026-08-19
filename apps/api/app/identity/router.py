@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.invitations import accept_invitation, decline_invitation, get_invitation_preview
 from app.db.session import get_db
-from app.dependencies import get_current_user
+from app.dependencies import _load_session, get_current_user
 from app.identity import service, sso
 from app.identity.models import Session as SessionModel
 from app.identity.models import User
@@ -144,12 +144,30 @@ async def sso_callback_endpoint(
 
 @router.post("/logout")
 async def logout_endpoint(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user_session: tuple[User, SessionModel] = Depends(get_current_user),
 ) -> dict[str, bool]:
-    _, session = user_session
-    await service.logout(db, session)
+    """Always clears the cookie, even when the session behind it is already
+    gone.
+
+    Deliberately does *not* depend on `get_current_user`. A cookie whose
+    session has expired, been revoked, or vanished with its database row
+    would make that dependency raise 401 — and the endpoint that 401s is
+    the only one that deletes the cookie, so the browser keeps sending a
+    dead cookie forever. `middleware.ts` treats cookie *presence* as
+    "logged in" and bounces those requests off /login, while `AuthGuard`
+    sends them back for a real session, and the user is locked out of
+    both sides with no way to clear the thing causing it.
+
+    "Log me out" should therefore never fail: revoke the session when we
+    can find one, and drop the cookie unconditionally either way.
+    """
+    token = request.cookies.get(settings.session_cookie_name)
+    if token:
+        session = await _load_session(db, token)
+        if session is not None:
+            await service.logout(db, session)
     response.delete_cookie(settings.session_cookie_name, path="/")
     return {"ok": True}
 

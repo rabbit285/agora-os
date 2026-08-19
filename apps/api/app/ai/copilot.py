@@ -21,7 +21,7 @@ from app.knowledge.retrieval import DEFAULT_TOP_K, RetrievedChunk, search_chunks
 
 NO_EVIDENCE_MESSAGE = (
     "I don't have any indexed documents to answer this from yet. "
-    "Upload documents in the Knowledge module first."
+    "Upload a policy or procedure under Compliance → Documents first."
 )
 
 PROMPT_TEMPLATE = "copilot.grounded_answer"

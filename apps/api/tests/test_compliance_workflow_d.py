@@ -17,9 +17,12 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.models import Membership
 from app.seed import _ensure_compliance_catalog
+from app.support.models import Customer
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +54,30 @@ async def _dsar(client: AsyncClient, email: str = "emma.muller@example-test.com"
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
+
+
+async def _support_customer(
+    db: AsyncSession, client: AsyncClient, *, name: str, email: str
+) -> None:
+    """Create a support customer directly in the database.
+
+    Seeded here rather than through POST /api/v1/support/customers because
+    the support module was withdrawn from the product when Veyntra narrowed
+    to compliance, so that route no longer exists. The *table* very much
+    does, and it is exactly what DSAR discovery has to search: personal
+    data does not stop existing because a module stopped being sold.
+    Seeding at this level keeps the coverage that matters — discovery
+    really does reach support records — without depending on a retired
+    HTTP surface.
+    """
+    me = (await client.get("/api/v1/auth/me")).json()
+    organization_id = (
+        await db.execute(
+            select(Membership.organization_id).where(Membership.user_id == uuid.UUID(me["id"]))
+        )
+    ).scalar_one()
+    db.add(Customer(organization_id=organization_id, name=name, email=email))
+    await db.flush()
 
 
 async def test_new_request_starts_unverified(client: AsyncClient) -> None:
@@ -111,7 +138,7 @@ async def test_failed_verification_still_blocks_export(client: AsyncClient) -> N
 
 
 async def test_discovery_finds_the_person_where_they_actually_appear(
-    client: AsyncClient,
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """D5. A discovery that reports nothing regardless of the data is
     worse than none — it manufactures confidence that there is nothing to
@@ -119,11 +146,7 @@ async def test_discovery_finds_the_person_where_they_actually_appear(
     await _signup(client, "dsar-discover@example.com")
 
     subject_email = "found.person@example-test.com"
-    created = await client.post(
-        "/api/v1/support/customers",
-        json={"name": "Found Person", "email": subject_email},
-    )
-    assert created.status_code in (200, 201), created.text
+    await _support_customer(db_session, client, name="Found Person", email=subject_email)
 
     dsar_id = await _dsar(client, email=subject_email)
     response = await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")
@@ -139,16 +162,14 @@ async def test_discovery_finds_the_person_where_they_actually_appear(
 
 
 async def test_discovery_is_scoped_to_the_calling_organization(
-    client: AsyncClient,
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """The one thing worse than failing to find a person's data is
     returning somebody else's."""
     subject_email = "shared.address@example-test.com"
 
     await _signup(client, "dsar-tenant-a@example.com")
-    await client.post(
-        "/api/v1/support/customers", json={"name": "Tenant A Customer", "email": subject_email}
-    )
+    await _support_customer(db_session, client, name="Tenant A Customer", email=subject_email)
     await client.post("/api/v1/auth/logout")
 
     await _signup(client, "dsar-tenant-b@example.com")
@@ -162,15 +183,13 @@ async def test_discovery_is_scoped_to_the_calling_organization(
 
 
 async def test_discovery_returns_references_not_a_second_copy_of_the_data(
-    client: AsyncClient,
+    client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """Counts and ids, not records: the discovery result must not become
     an uncontrolled duplicate of the personal data it located."""
     await _signup(client, "dsar-refs@example.com")
     subject_email = "refs.person@example-test.com"
-    await client.post(
-        "/api/v1/support/customers", json={"name": "Refs Person", "email": subject_email}
-    )
+    await _support_customer(db_session, client, name="Refs Person", email=subject_email)
     dsar_id = await _dsar(client, email=subject_email)
     findings = (await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")).json()
 

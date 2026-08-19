@@ -24,12 +24,8 @@ from typing import Any
 from sqlalchemy import String, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.automation.models import Workflow
 from app.compliance.models import DPIA, AIIncident, AISystem, Audit, Control, Questionnaire, Vendor
-from app.knowledge.models import Document
-from app.sales.models import Account, Contact, Lead, Opportunity
 from app.secops.models import SecurityIncident
-from app.support.models import Customer, Ticket
 
 DEFAULT_LIMIT_PER_TYPE = 5
 
@@ -43,13 +39,14 @@ class SearchResult:
 
 
 # (entity_type, model, [text columns to match], label column, module label)
+#
+# Sales, support, automation and knowledge records are deliberately not
+# searchable. Their tables still hold data — DSAR discovery reads them on
+# purpose — but those modules were withdrawn from the product, so every
+# result would link to a screen that no longer exists. A search result the
+# user cannot open is worse than no result: it advertises a module they
+# were told they do not have.
 _SEARCH_TARGETS: list[tuple[str, type[Any], list[str], str, str]] = [
-    ("sales_account", Account, ["name", "industry"], "name", "Sales"),
-    ("sales_contact", Contact, ["full_name", "email"], "full_name", "Sales"),
-    ("sales_lead", Lead, ["source"], "source", "Sales"),
-    ("sales_opportunity", Opportunity, ["title"], "title", "Sales"),
-    ("support_customer", Customer, ["name", "email"], "name", "Support"),
-    ("support_ticket", Ticket, ["subject", "description"], "subject", "Support"),
     ("vendor", Vendor, ["name", "description"], "name", "Compliance"),
     ("control", Control, ["title", "description"], "title", "Compliance"),
     ("audit", Audit, ["title"], "title", "Compliance"),
@@ -58,8 +55,6 @@ _SEARCH_TARGETS: list[tuple[str, type[Any], list[str], str, str]] = [
     ("ai_incident", AIIncident, ["title", "description"], "title", "Compliance"),
     ("questionnaire", Questionnaire, ["title"], "title", "Compliance"),
     ("security_incident", SecurityIncident, ["title", "description"], "title", "Security"),
-    ("automation_workflow", Workflow, ["name", "description"], "name", "Automation"),
-    ("knowledge_document", Document, ["title"], "title", "Knowledge"),
 ]
 
 
