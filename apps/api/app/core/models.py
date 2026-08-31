@@ -10,7 +10,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -272,12 +281,72 @@ class Approval(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class File(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "files"
+    __table_args__ = (
+        # A version chain is a line, not a tree. Without these, two
+        # people accepting two different uploads against the same
+        # previous version both succeed — the endpoint's "has this
+        # already been superseded?" check is a read before a write, and
+        # loses the race it exists to prevent. The result is two files
+        # claiming to supersede one version and no way to say which is
+        # current.
+        #
+        # Partial, because NULL is the normal state: almost every file
+        # supersedes nothing and is superseded by nothing.
+        #
+        # `sqlite_where` as well as `postgresql_where` — SQLite ignores
+        # the postgres-only clause and would build a plain unique index
+        # instead, making the tests enforce something stricter than
+        # production and pass for the wrong reason.
+        Index(
+            "uq_file_supersedes",
+            "supersedes_id",
+            unique=True,
+            postgresql_where=text("supersedes_id IS NOT NULL"),
+            sqlite_where=text("supersedes_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_file_superseded_by",
+            "superseded_by_id",
+            unique=True,
+            postgresql_where=text("superseded_by_id IS NOT NULL"),
+            sqlite_where=text("superseded_by_id IS NOT NULL"),
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
+    # --- who may see this outside the organization --------------------
+    #
+    # internal (default) | customer_shareable | restricted
+    #
+    # Default `internal` on purpose, and the whole point of the field. A
+    # document nobody has classified is one nobody has decided to share,
+    # and the export path treats "not decided" and "not shareable" the
+    # same way. The alternative — defaulting to shareable and relying on
+    # somebody to mark the sensitive ones — fails silently and outward,
+    # which is the one direction a compliance product must not fail in.
+    #
+    # `restricted` is stronger than internal: a vulnerability report or a
+    # penetration test is not merely un-shared, it is one somebody has
+    # said must not leave. Export refuses those outright rather than
+    # offering an override.
+    disclosure: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="internal", server_default="internal"
+    )
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     original_filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    # What this document *is*, as opposed to what it was called: SHA-256
+    # of the bytes. Two uploads of the same file under different names
+    # are one document, and a rename does not create a new one.
+    #
+    # Nullable, and deliberately so. Uploads are presigned — the client
+    # PUTs straight to object storage and the API never sees the bytes at
+    # creation time — so the hash is claimed by the client for an early
+    # duplicate check and then *verified* against the real content the
+    # first time the pipeline reads it. Rows written before this existed
+    # have NULL, which the partial unique index tolerates.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     content_type: Mapped[str] = mapped_column(String(150), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     classification: Mapped[str] = mapped_column(String(20), default="internal")
@@ -300,12 +369,81 @@ class File(UUIDPrimaryKeyMixin, Base):
     # `unsupported` (we can never read this content type) — kept distinct
     # because the first is worth retrying and the second never is.
     processing_status: Mapped[str] = mapped_column(String(20), default="not_analyzed", index=True)
+    # Set when this upload turned out to be bytes the organization
+    # already has as a fully analysed document. The row is kept — someone
+    # did upload a file and deleting it silently would be a lie about
+    # what happened — but it points at the original rather than growing a
+    # second set of evidence, gaps and tasks for one real-world policy.
+    duplicate_of_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # --- version lineage ------------------------------------------------
+    #
+    # One logical document, many uploads. `supersedes_id` points at the
+    # version this one replaces; `superseded_by_id` at the one that
+    # replaced it. The head of a chain — the row with no
+    # `superseded_by_id` — is the current version, which is the one the
+    # library lists, the Copilot answers from, and compliance counts.
+    #
+    # Two columns rather than one so both directions are a single index
+    # lookup: "what is current" is asked on every page, and walking a
+    # chain backwards to find the head would make the common question the
+    # expensive one.
+    #
+    # Superseded versions are never deleted. "What did your retention
+    # policy say in March" is a question an auditor asks, and a product
+    # that overwrote the file cannot answer it.
+    supersedes_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # What this version calls itself, where the document says so, or an
+    # internal sequence where it does not. Never invented from the
+    # filename — see app.compliance.document_versioning.detect_version_label.
+    version_label: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # A *proposal*, not a link. The document this upload looks like a
+    # newer version of, and how sure Veyntra is. Acting on it is a
+    # person's decision — `accept_new_version` is what makes it real.
+    version_candidate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # high | medium | low
+    version_confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Why Veyntra thinks so, in the reader's words. Persisted rather than
+    # recomputed: the banner asking somebody to confirm a version link is
+    # asking them to agree with an argument, and an argument they cannot
+    # read is one they cannot disagree with. Recomputing it per page load
+    # would mean re-downloading and re-parsing both documents.
+    version_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # The date the document says it takes effect, exactly as written in
+    # it. Text, not a date: "August 2026" is what the policy says, and
+    # parsing it into 2026-08-01 would be inventing a day nobody wrote.
+    # Absent where the document does not state one.
+    version_effective_date: Mapped[str | None] = mapped_column(
+        String(60), nullable=True
+    )
     processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Recorded so "ready" can never be claimed over an empty extraction —
     # a document that parsed to nothing is a failure that would otherwise
     # look like success with no matching controls.
     extracted_characters: Mapped[int | None] = mapped_column(nullable=True)
+    # Whether this document has been chunked and embedded so the Copilot
+    # can retrieve from it. Tracked separately from `processing_status`
+    # because they are different pipelines with different failure modes:
+    # a document can be read and mapped to controls perfectly while its
+    # embedding call fails, and reporting that as "Analyzed" left the
+    # customer asking the Copilot about a document it could not see.
+    # pending | indexed | failed | unsupported
+    index_status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True
+    )
+    index_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    indexed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # What the model thinks this document *is*, kept separate from
     # `classification` above (which is the security label: internal,
     # confidential…). Nullable because classification is a proposal, and
@@ -334,6 +472,12 @@ class Notification(UUIDPrimaryKeyMixin, Base):
     # "in_app" — see channels_requested/channels_delivered for the real
     # multi-channel picture.
     channel: Mapped[str] = mapped_column(String(20), default="in_app")
+    # What happened, not how many times we tried to tell someone about
+    # it. A retry of the delivery job carries the same key and writes
+    # nothing; a genuinely new state transition carries a new one.
+    # Nullable for notifications raised before this existed, and for the
+    # ad-hoc ones that have no natural key.
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     channels_requested: Mapped[list[str]] = mapped_column(JSON, default=list)
     channels_delivered: Mapped[list[str]] = mapped_column(JSON, default=list)
     title: Mapped[str] = mapped_column(String(200), nullable=False)

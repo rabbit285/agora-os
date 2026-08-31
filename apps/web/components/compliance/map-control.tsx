@@ -26,14 +26,27 @@ export function MapControl({
   requirementCode,
   frameworkId,
   mappedControlIds,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   requirementId: string;
   requirementCode: string;
   frameworkId: string;
   mappedControlIds: string[];
+  /** Controlled mode. When supplied, the caller owns the open state and
+   * this component renders nothing while closed — the caller's own
+   * trigger (a More menu item, say) stands in for the button below. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [mode, setMode] = useState<"existing" | "new">("existing");
 
   const [search, setSearch] = useState("");
@@ -113,6 +126,7 @@ export function MapControl({
   const error = mapExisting.error ?? createNew.error;
 
   if (!open) {
+    if (isControlled) return null;
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Link2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />

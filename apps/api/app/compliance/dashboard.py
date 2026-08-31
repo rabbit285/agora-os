@@ -51,7 +51,8 @@ ACTIVITY_LABELS: dict[str, str] = {
     "compliance.evidence.suggestion_rejected": "evidence mapping{s} you rejected",
     "compliance.framework.assessed": "framework assessment{s} run",
     "compliance.gap.resolved": "gap{s} resolved",
-    "compliance.gap.opened": "new gap{s} identified",
+    "compliance.gap.created": "new gap{s} identified",
+    "compliance.gap.remediation_generated": "remediation{s} proposed",
     "compliance.framework.activated": "framework{s} adopted",
 }
 

@@ -29,6 +29,7 @@ export default function CopilotPage() {
           role: "assistant",
           text: answer.text,
           citations: answer.citations,
+          facts: answer.facts,
           grounded: answer.grounded,
           provider: answer.provider,
         },
@@ -57,7 +58,7 @@ export default function CopilotPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="AI Copilot"
-        description="Answers are grounded in your uploaded documents — citations show exactly which chunks were used."
+        description="Answers come from your compliance records and your uploaded documents. Every answer shows which."
       />
       <CopilotPanel
         messages={messages}

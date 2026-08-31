@@ -16,7 +16,6 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.assessment import (
@@ -67,18 +66,28 @@ def test_explanation_states_the_counts_behind_the_number() -> None:
     breakdown = summarize_readiness(
         [
             _evaluation("satisfied"),
-            _evaluation("partial"),
-            _evaluation("evidence_missing"),
+            _evaluation("needs_review"),
+            _evaluation("deficient"),
             _evaluation("evidence_missing"),
         ]
     )
 
-    # 1.0 + 0.5 + 0 + 0 = 1.5 of 4.
-    assert breakdown.percent == 37.5
+    # 1.0 + 0.5 + 0.25 + 0 = 1.75 of 4.
+    assert breakdown.percent == 43.8
     assert "1 satisfied" in breakdown.explanation
-    assert "1 partially evidenced" in breakdown.explanation
-    assert "2 missing evidence" in breakdown.explanation
-    assert "37.5%" in breakdown.explanation
+    assert "1 awaiting review" in breakdown.explanation
+    assert "1 with an identified deficiency" in breakdown.explanation
+    assert "1 missing evidence" in breakdown.explanation
+    assert "43.8%" in breakdown.explanation
+
+
+def test_an_open_question_scores_above_a_named_deficiency() -> None:
+    """Evidence on file with nothing shown to be wrong is a better
+    position than evidence with a condition known to be unmet. Scoring
+    them the same was part of why "needs review" and "gap" looked
+    interchangeable on the framework screen."""
+    assert READINESS_WEIGHTS["needs_review"] > READINESS_WEIGHTS["deficient"]
+    assert READINESS_WEIGHTS["deficient"] > READINESS_WEIGHTS["evidence_missing"]
 
 
 def test_nothing_to_assess_scores_zero_rather_than_dividing_by_zero() -> None:

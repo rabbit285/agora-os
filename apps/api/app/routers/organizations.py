@@ -21,6 +21,7 @@ from app.core.models import (
     RolePermission,
     Team,
 )
+from app.identity.models import User
 from app.core.organization_deletion import (
     cancel_organization_deletion,
     execute_organization_deletion,
@@ -32,6 +33,7 @@ from app.core.schemas import (
     LegalEntityOut,
     LegalEntityUpdate,
     MembershipOut,
+    OrganizationPersonOut,
     OrganizationDeletionConfirm,
     OrganizationSettingsOut,
     OrganizationSettingsUpdate,
@@ -257,13 +259,16 @@ async def list_members(
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("org.users.manage")),
 ) -> list[MembershipOut]:
-    result = await db.execute(
-        select(Membership).where(Membership.organization_id == context.organization_id)
-    )
-    memberships = result.scalars().all()
+    rows = (
+        await db.execute(
+            select(Membership, User)
+            .join(User, User.id == Membership.user_id)
+            .where(Membership.organization_id == context.organization_id)
+        )
+    ).all()
 
     out: list[MembershipOut] = []
-    for membership in memberships:
+    for membership, user in rows:
         role_result = await db.execute(
             select(Role.key)
             .join(MembershipRole, MembershipRole.role_id == Role.id)
@@ -272,10 +277,51 @@ async def list_members(
         roles = [row[0] for row in role_result.all()]
         out.append(
             MembershipOut(
-                id=membership.id, user_id=membership.user_id, status=membership.status, roles=roles
+                id=membership.id,
+                user_id=membership.user_id,
+                status=membership.status,
+                roles=roles,
+                full_name=user.full_name,
+                email=user.email,
             )
         )
     return out
+
+
+@router.get("/current/people", response_model=list[OrganizationPersonOut])
+async def list_people(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[OrganizationPersonOut]:
+    """The colleagues a form can offer, and nothing else about them.
+
+    Separate from `/members`, which needs `org.users.manage` because it
+    exposes roles and membership state. Choosing who ran an audit — or
+    who owns a task — is not user administration, and a compliance
+    manager should not need the power to change people's roles in order
+    to name one of them in a form.
+
+    Name and email only, and only active members: enough to pick a person
+    and no more.
+    """
+    rows = (
+        await db.execute(
+            select(User)
+            .join(Membership, Membership.user_id == User.id)
+            .where(
+                Membership.organization_id == context.organization_id,
+                Membership.status == "active",
+                User.is_active.is_(True),
+            )
+            .order_by(User.full_name.asc(), User.email.asc())
+        )
+    ).scalars().all()
+    return [
+        OrganizationPersonOut(
+            id=user.id, full_name=user.full_name, email=user.email
+        )
+        for user in rows
+    ]
 
 
 @router.get("/current/invitations", response_model=list[InvitationOut])

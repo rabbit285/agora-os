@@ -30,15 +30,28 @@ export function AttachEvidence({
   onAttached,
   compact = false,
   label = "Attach evidence",
+  open: controlledOpen,
+  onOpenChange,
 }: {
   controlId: string;
   onAttached?: () => void;
   compact?: boolean;
   label?: string;
+  /** Controlled mode. When supplied, the caller owns the open state and
+   * this component renders nothing while closed — the caller's own
+   * trigger (a More menu item, say) stands in for the button below. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
 
@@ -67,6 +80,7 @@ export function AttachEvidence({
   });
 
   if (!open) {
+    if (isControlled) return null;
     return (
       <Button
         size="sm"

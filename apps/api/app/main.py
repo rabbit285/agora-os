@@ -129,7 +129,25 @@ def _error_envelope(
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return _error_envelope(request, exc.status_code, str(exc.detail))
+    """Carry a structured refusal through, rather than stringifying it.
+
+    A handler that raises `HTTPException(detail="...")` gets the sentence
+    it wrote. One that raises `detail={"code": ..., "message": ...}` is
+    saying something the screen can act on — offer an applicability link,
+    a framework picker — and `str()` on that dict produced a Python repr
+    in the customer's error banner. The message still lands where every
+    existing caller reads it; the code travels beside it.
+    """
+    detail = exc.detail
+    if isinstance(detail, dict) and "message" in detail:
+        code = detail.get("code")
+        return _error_envelope(
+            request,
+            exc.status_code,
+            str(detail["message"]),
+            {"code": code} if code else None,
+        )
+    return _error_envelope(request, exc.status_code, str(detail))
 
 
 @app.exception_handler(RequestValidationError)

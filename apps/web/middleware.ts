@@ -26,7 +26,14 @@ const AUTH_ONLY_PATHS = new Set(["/login", "/signup"]);
 
 // Modules removed from the product. Prefix-matched, so every child route
 // goes with the parent.
-const RETIRED_MODULE_PREFIXES = [
+//
+// Exported so tests can assert against the real list rather than a copy
+// that drifts: a Copilot citation pointing at any of these renders as a
+// working link and lands on a 404, which is precisely how citations went
+// on opening `/knowledge/<id>` after that module was withdrawn. Mirrored
+// server-side by RETIRED_ROUTE_PREFIXES in app/ai/citations.py, which
+// composes the hrefs.
+export const RETIRED_MODULE_PREFIXES = [
   "/sales",
   "/support",
   "/automation",

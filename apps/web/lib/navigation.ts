@@ -8,10 +8,14 @@
 // product a customer sees. `middleware.ts` rejects their routes so a
 // stale bookmark cannot reach a screen the product no longer has.
 //
-// Every entry below resolves to a real page. Where a section of the
-// stacked /compliance screen is the right destination, the link is an
-// anchor into it rather than an invented route — only `[id]` detail
-// routes exist beneath /compliance, so /compliance/frameworks would 404.
+// Every entry below resolves to a real page — a route, never an anchor.
+// The compliance entries used to point at `#frameworks`, `#controls`,
+// `#privacy` and so on, all of which were sections of one 1,500-line
+// screen. A sidebar whose items all lead to the same page is not
+// navigation, and the customer could not tell which of the fifteen
+// stacked workflows the product had actually taken them to. Each is now
+// a page that answers one question; /compliance itself redirects the old
+// anchors so existing bookmarks still land in the right place.
 //
 // `implemented: false` items render but link to /coming-soon rather than
 // a dead link (spec section 82, No Fake Features). `permission` is an
@@ -34,7 +38,6 @@ import {
   KeyRound,
   Plug,
   ScrollText,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Users,
@@ -69,29 +72,37 @@ export const NAVIGATION: NavGroup[] = [
     label: "Compliance",
     items: [
       { label: "Documents", href: "/documents", implemented: true, icon: BookOpen },
+      // Directly after Documents: a policy record is created from a
+      // document, so this is where the reader looks next.
+      {
+        label: "Policies",
+        href: "/compliance/policies",
+        implemented: true,
+        icon: ScrollText,
+      },
       { label: "AI Systems", href: "/ai-systems", implemented: true, icon: Cpu },
       {
         label: "Frameworks",
-        href: "/compliance#frameworks",
+        href: "/compliance/frameworks",
         implemented: true,
         icon: ScrollText,
       },
       {
         label: "Controls & Risk",
-        href: "/compliance#controls",
+        href: "/compliance/controls",
         implemented: true,
         icon: ClipboardCheck,
       },
       {
         label: "Assessments",
-        href: "/compliance#assessments",
+        href: "/compliance/assessments",
         implemented: true,
         icon: FileClock,
       },
-      { label: "Privacy", href: "/compliance#privacy", implemented: true, icon: Users },
+      { label: "Privacy", href: "/compliance/privacy", implemented: true, icon: Users },
       {
         label: "Vendors & Trust",
-        href: "/compliance#vendors",
+        href: "/compliance/vendors",
         implemented: true,
         icon: Building2,
       },
@@ -111,7 +122,6 @@ export const NAVIGATION: NavGroup[] = [
   {
     label: "Assurance",
     items: [
-      { label: "Security", href: "/security", implemented: true, icon: ShieldAlert },
       { label: "Integrations", href: "/integrations", implemented: true, icon: Plug },
       { label: "Audit Log", href: "/settings/audit-logs", implemented: true, icon: FileClock },
     ],
@@ -163,8 +173,18 @@ export const NAVIGATION: NavGroup[] = [
   },
 ];
 
+// The top-bar switcher. Security is deliberately absent: it was a
+// separate product module, and security-relevant controls now live
+// inside compliance. Two navigations describing different old products
+// is how a customer ends up unsure which one they are actually in.
 export const MODULES = [
   { key: "overview", label: "Overview", href: "/dashboard", implemented: true },
-  { key: "compliance", label: "Compliance", href: "/compliance", implemented: true },
-  { key: "security", label: "Security", href: "/security", implemented: true },
+  {
+    key: "compliance",
+    label: "Compliance",
+    // The frameworks screen, not the old stacked page: "how ready are
+    // we" is the question someone switching into Compliance is asking.
+    href: "/compliance/frameworks",
+    implemented: true,
+  },
 ];

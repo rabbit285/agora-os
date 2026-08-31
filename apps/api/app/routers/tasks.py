@@ -3,12 +3,13 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit.labels import describe
 from app.audit.models import AuditEvent
 from app.audit.service import record_event
-from app.core.models import File, Task, TaskComment, TaskEvidence
+from app.core.models import File, Membership, Task, TaskComment, TaskEvidence
 from app.core.schemas import (
     TaskActivityOut,
     TaskCommentCreate,
@@ -21,6 +22,7 @@ from app.core.schemas import (
 )
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
+from app.identity.models import User
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -102,6 +104,41 @@ async def update_task(
             object_id=str(task.id),
             before_state={"status": before_status},
             after_state={"status": task.status},
+        )
+
+    if payload.assignee_id is not None and payload.assignee_id != task.assignee_id:
+        # Membership, not User.organization_id — a user belongs to an
+        # organization through a membership row, and checking anything
+        # else would let a task be assigned across tenants.
+        assignee = (
+            await db.execute(
+                select(User)
+                .join(Membership, Membership.user_id == User.id)
+                .where(
+                    User.id == payload.assignee_id,
+                    Membership.organization_id == context.organization_id,
+                    Membership.status == "active",
+                )
+            )
+        ).scalar_one_or_none()
+        if assignee is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
+        before_assignee = task.assignee_id
+        task.assignee_id = payload.assignee_id
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="core.task.assigned",
+            object_type="task",
+            object_id=str(task.id),
+            before_state={"assignee_id": str(before_assignee) if before_assignee else None},
+            after_state={
+                "assignee_id": str(assignee.id),
+                "assignee_name": assignee.full_name or assignee.email,
+            },
         )
 
     if payload.checklist is not None:
@@ -214,18 +251,51 @@ async def list_task_activity(
     task_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(get_org_context),
-) -> list[AuditEvent]:
+) -> list[TaskActivityOut]:
     """spec §44's "Activity" field — reuses the real audit trail every task
     mutation already writes to (`record_event`, `object_type="task"`)
-    rather than a second, parallel activity log."""
-    await _get_org_task(db, task_id, context.organization_id)
+    rather than a second, parallel activity log.
+
+    A remediation task's history is not only its own. The interesting
+    events — the plan being generated, a document arriving that might
+    close it, the control being reassessed, the gap closing — are
+    recorded against the compliance gap, because that is the object
+    they happened to. Reading only `object_type="task"` is why these
+    tasks showed an empty activity list while the work was in fact
+    being logged the whole time.
+
+    Events with no reader-facing phrasing are dropped rather than shown
+    raw: this feed is read by someone who does not work in compliance
+    daily, and an internal action name is not a sentence.
+    """
+    task = await _get_org_task(db, task_id, context.organization_id)
+
+    subjects = [("task", str(task_id))]
+    if task.entity_type and task.entity_id:
+        subjects.append((task.entity_type, task.entity_id))
+
     result = await db.execute(
         select(AuditEvent)
         .where(
-            AuditEvent.object_type == "task",
-            AuditEvent.object_id == str(task_id),
             AuditEvent.organization_id == context.organization_id,
+            tuple_(AuditEvent.object_type, AuditEvent.object_id).in_(subjects),
         )
         .order_by(AuditEvent.created_at)
     )
-    return list(result.scalars().all())
+
+    activity: list[TaskActivityOut] = []
+    for event in result.scalars().all():
+        label = describe(event.action, event.after_state)
+        if label is None:
+            continue
+        activity.append(
+            TaskActivityOut(
+                action=event.action,
+                label=label,
+                actor_user_id=event.actor_user_id,
+                before_state=event.before_state,
+                after_state=event.after_state,
+                created_at=event.created_at,
+            )
+        )
+    return activity

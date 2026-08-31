@@ -40,7 +40,6 @@ const STATUS_VARIANTS: Record<
   eradication: "warning",
   recovery: "secondary",
   postmortem: "secondary",
-  closed: "success",
   prospect: "secondary",
   customer: "success",
   churned: "outline",
@@ -80,6 +79,11 @@ const STATUS_VARIANTS: Record<
   error: "destructive",
   ok: "success",
   in_review: "warning",
+  // Not a failure and not progress: something has to be filled in before
+  // the work can count for anything. Warning rather than destructive,
+  // because nothing is broken — a step was skipped.
+  needs_setup: "warning",
+  ready_to_share: "success",
   retired: "outline",
   minimal: "outline",
   limited: "secondary",
@@ -107,9 +111,34 @@ const STATUS_VARIANTS: Record<
   provider_supplied: "success",
   requires_review: "warning",
   unknown: "outline",
+  // Requirement states, from app.compliance.assessment. The audit
+  // workspace shows these against every scoped requirement.
+  evidence_missing: "destructive",
+  assessment_failed: "destructive",
+  deficient: "warning",
+  satisfied: "success",
+  // Audit finding lifecycle. "Ready for verification" is warning rather
+  // than success on purpose: the work is done and nobody has checked it,
+  // which is a state that still wants somebody's attention.
+  remediation_in_progress: "warning",
+  ready_for_verification: "warning",
+  closed: "success",
+  accepted_risk: "outline",
 };
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({
+  status,
+  label,
+}: {
+  status: string;
+  /** The server's wording for this state, where it has one.
+   *
+   * Several vocabularies here read badly when de-underscored:
+   * "not assessed" is not what `not_assessed` means to an auditor — the
+   * requirement has no control mapped to it. Where the API sends words
+   * chosen for the reader, they win over the ones derived from the key. */
+  label?: string | null;
+}) {
   const variant = STATUS_VARIANTS[status] ?? "secondary";
-  return <Badge variant={variant}>{status.replace(/_/g, " ")}</Badge>;
+  return <Badge variant={variant}>{label || status.replace(/_/g, " ")}</Badge>;
 }

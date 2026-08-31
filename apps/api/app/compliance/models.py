@@ -118,7 +118,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, DateTime, Uuid
 
@@ -252,9 +261,29 @@ class Evidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A stored artifact (reuses the Phase 1 File primitive — spec section
     80: shared platform primitives, not a duplicate storage path) that
     supports a Control or a Vendor, or stands alone in the evidence
-    library."""
+    library.
+
+    One document supporting one control is one piece of evidence. Both
+    creation paths — a person approving a suggestion, and an
+    auto-approval during analysis — used to insert blindly, so
+    reprocessing a policy five times left five identical rows and the
+    control's evidence count counted our retries. The unique index below
+    makes that unrepresentable; `app.core.idempotency.get_or_create` is
+    how callers reach it without racing.
+    """
 
     __tablename__ = "evidence"
+    __table_args__ = (
+        Index(
+            "uq_evidence_org_file_control",
+            "organization_id",
+            "file_id",
+            "control_id",
+            unique=True,
+            postgresql_where=text("control_id IS NOT NULL"),
+            sqlite_where=text("control_id IS NOT NULL"),
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
@@ -320,23 +349,112 @@ class Risk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class Policy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The governance wrapper around a policy document.
+
+    A `File` is the document somebody uploaded. `Evidence` is what the
+    document proves. A Policy is the third thing: who owns it, which
+    version is current, whether anybody approved it, and when it is next
+    due for review. None of that lives in the document, which is why it
+    needs a record of its own — and why that record references the
+    document rather than copying it.
+
+    Created automatically when Document Intelligence classifies an upload
+    as a policy (see app.compliance.policy_governance). Detection is not
+    approval: a detected policy starts at `needs_review` with its
+    governance fields empty, because the product cannot know who owns a
+    document or whether the organization has signed it off, and inventing
+    either would be a fabricated compliance record.
+    """
+
     __tablename__ = "policies"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # The document this policy currently is. Superseded versions keep
+    # their own rows in `policy_versions` so an auditor can still read
+    # what was in force at a past date.
     file_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | published
+    # needs_review | draft | approved | review_due | superseded | retired
+    #
+    # `published` from the original two-state field maps onto `approved`.
+    status: Mapped[str] = mapped_column(String(30), default="needs_review")
+    # What kind of policy this is, in the document's own words — taken
+    # from the classifier rather than a fixed enum of ours, which would
+    # fit nobody.
+    category: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # --- Governance ---------------------------------------------------
+    #
+    # All nullable, all left empty by automatic detection. A missing
+    # value means "nobody has told us", which the UI asks about; a
+    # guessed value would be a compliance record nobody wrote.
+    version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    effective_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_review_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Months between reviews. Drives `next_review_at` when a review is
+    # completed, so the schedule survives without being retyped.
+    review_frequency_months: Mapped[int | None] = mapped_column(nullable=True)
+    # True when this record was created by classification rather than by
+    # a person. Kept so the UI can say where it came from, and so a
+    # backfill can tell its own rows from hand-made ones.
+    detected_automatically: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
     )
     # spec §69 "New AI Tool Adoption" chain's final step, "Add approved-use
     # policy" — set when `decide_ai_system_status` approves an AISystem.
     ai_system_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=True
+    )
+
+
+class PolicyVersion(UUIDPrimaryKeyMixin, Base):
+    """A document that was, at some point, this policy.
+
+    Append-only. A superseded version is never deleted: "what did your
+    retention policy say in March" is a question an auditor asks, and a
+    product that overwrote the file cannot answer it.
+    """
+
+    __tablename__ = "policy_versions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    policy_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("policies.id"), nullable=False, index=True
+    )
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=False
+    )
+    # As recorded when this version was current. Free text: a customer's
+    # versioning scheme is theirs.
+    version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # current | superseded
+    status: Mapped[str] = mapped_column(String(20), default="current")
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
     )
 
 
@@ -486,10 +604,42 @@ class ProcessingActivity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     data_categories: Mapped[list[str]] = mapped_column(JSON, default=list)
     data_subjects: Mapped[str] = mapped_column(String(300), nullable=False)
     retention_period: Mapped[str] = mapped_column(String(300), nullable=False)
-    # active | archived
+    # draft | active | needs_review | retired | archived
+    #
+    # A RoPA entry is a claim the organization keeps making about itself,
+    # so it has a lifecycle rather than just existing. `needs_review`
+    # is the state a record enters when something it depends on moved or its
+    # review date passed — it is still the record of what is processed,
+    # and it is no longer one anybody has confirmed lately.
     status: Mapped[str] = mapped_column(String(20), default="active")
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # --- governance ----------------------------------------------------
+    #
+    # When a person last confirmed this record still describes reality,
+    # and when they said they would look again. Null review dates mean
+    # nobody has set a cadence, which the overview reports as such rather
+    # than inventing one.
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    next_review_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Whether this activity processes Article 9 data, and on what
+    # condition. Held apart from `data_categories` because the legal
+    # question is different: special-category processing needs its own
+    # condition on top of a lawful basis, and a record that mixes them
+    # cannot show whether the second one was ever answered.
+    special_category: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    special_category_condition: Mapped[str | None] = mapped_column(
+        String(60), nullable=True
     )
 
 
@@ -584,7 +734,25 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     export_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the request actually arrived. Distinct from `created_at`,
+    # which is when somebody got around to logging it — the deadline runs
+    # from receipt, and a request logged three days late does not get
+    # three extra days.
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    # One month from receipt, recomputed when receipt or the extension
+    # changes. Stored so a list can sort and filter on it without
+    # deriving it per row.
     due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # A recorded decision to take longer, not a longer default. Zero
+    # means no extension; the maximum the product records is two further
+    # months.
+    extension_months: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    extension_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    extension_granted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
@@ -725,6 +893,10 @@ class Questionnaire(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Who is asking, and by when. A questionnaire without them is a form;
+    # with them it is a piece of work somebody owns.
+    customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # customer_provided | internal_template
     source: Mapped[str] = mapped_column(String(30), default="internal_template")
     # draft | in_progress | completed
@@ -741,6 +913,44 @@ class Questionnaire(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # --- archived, not deleted ----------------------------------------
+    #
+    # A timestamp rather than a status value, deliberately. Archiving is
+    # orthogonal to where the work got to: a completed questionnaire that
+    # is archived is still completed, and restoring it has to put it back
+    # exactly as it was. Folding "archived" into `status` would overwrite
+    # the answer to "how far did this get" with the answer to "is it on
+    # the active list", and the first one is not recoverable afterwards.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    archived_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # The customer engagement this belongs to, for a questionnaire a
+    # customer sent. Null for internal assessments, which are nobody's
+    # engagement but our own — that distinction is the whole reason this
+    # is nullable rather than required.
+    security_review_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_reviews.id"), nullable=True, index=True
+    )
+    # --- where the questions came from --------------------------------
+    #
+    # The customer's own spreadsheet, when they sent one. Kept so the
+    # completed questionnaire can go back in the shape it arrived in
+    # rather than in ours: a security team that sent a 42-row XLSX with
+    # their own columns wants those 42 rows back, not a different
+    # document that happens to contain the same answers.
+    source_file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # What the importer made of that file's columns:
+    # {"question": "Customer Question", "category": "Requirement",
+    #  "answer": "Response", "sheet": "Sheet1", "header_row": 1}
+    # Shown back for confirmation before anything is written — a mapping
+    # nobody checked is a mapping that silently puts answers in the wrong
+    # column.
+    source_columns: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class QuestionnaireQuestion(UUIDPrimaryKeyMixin, Base):
@@ -778,8 +988,44 @@ class QuestionnaireAnswer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     answer_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
-    # draft | approved | missing
-    status: Mapped[str] = mapped_column(String(20), default="missing")
+    # unanswered | draft | needs_review | approved | rejected
+    #
+    # `missing` is gone. It described the row being empty rather than
+    # what the reader has to do about it, and the screen printed it
+    # verbatim — "missing" tells a compliance manager nothing about
+    # whether Veyntra failed, or nobody has looked yet, or an answer
+    # exists and needs a decision.
+    status: Mapped[str] = mapped_column(String(20), default="unanswered")
+    # What the model said about its own output. Displayed, never used on
+    # its own to decide whether a person must look — see
+    # app.compliance.questionnaire_ai.route_answer, where the checks that
+    # matter (is anything actually backing this) come first.
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Why this needs a human, in words the reviewer can act on. Null when
+    # nothing is outstanding.
+    review_reason: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    # Who approved it and when — the record that makes an approved answer
+    # something the organization stands behind rather than something a
+    # model wrote.
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The words somebody actually approved.
+    #
+    # "Has this changed since it was approved" cannot be answered from
+    # timestamps: `updated_at` moves on the same flush that records the
+    # approval, and on every later touch for any reason. Comparing the
+    # text against what was signed off is the only way to answer it
+    # truthfully — and it is the question a customer-facing export has to
+    # ask before quoting an answer as approved.
+    #
+    # Null on rows approved before this existed. Null means "we cannot
+    # tell", and the export treats that as unchanged rather than
+    # inventing a discrepancy nobody can act on.
+    approved_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
     # ai_suggested | manual | reused_from_library
     source_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     citations: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
@@ -808,12 +1054,81 @@ class Audit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("frameworks.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Who performed the audit. Two fields because there are two cases and
+    # collapsing them loses the one that matters: a colleague running an
+    # internal audit is a real account with a real identity in the trail,
+    # and an external firm is a name we were given. Storing the firm in a
+    # user column would assert an account that does not exist; storing
+    # the colleague only as text throws away the actor.
+    auditor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
     auditor_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # internal | external | null
+    #
+    # Recorded, never inferred. "No user id, therefore external" is the
+    # rule this column replaces, and it was wrong in the ordinary case: a
+    # colleague whose name was typed as text before there was a picker is
+    # an internal auditor whose account simply was not linked. Calling
+    # them external in a formal report misstates who conducted the audit.
+    #
+    # Null means nobody has established which this is — a legacy row
+    # whose name matched no member, or matched more than one. Unresolved
+    # is reported as unresolved; it is not quietly resolved either way.
+    auditor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The firm an external auditor belongs to. Only ever set alongside
+    # `auditor_type == "external"`; an internal auditor's organization is
+    # the one running the audit.
+    auditor_organization: Mapped[str | None] = mapped_column(
+        String(300), nullable=True
+    )
+    # What this audit covers, in the auditor's words. Not derivable from
+    # the framework: two ISO 42001 audits can scope different systems,
+    # and "which of our things did you look at" is the first question
+    # anybody reading the report later will ask.
+    scope: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # planned | in_progress | completed
+    #
+    # The timestamps below are the state, not decoration beside it. A
+    # `planned` audit carrying a `completed_at` is what this product was
+    # doing: the completion stamp was set on the way to completed and
+    # never cleared on the way back, so the screen showed "Planned" over
+    # "Completed 8/26/2026". They move together now — see
+    # `app.compliance.audit_state`.
     status: Mapped[str] = mapped_column(String(20), default="planned")
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When Veyntra built the workspace, and what it found. The counts are
+    # a snapshot: the point of an audit is what was true when the auditor
+    # looked, and compliance state moves underneath it constantly.
+    prepared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # {"applicable": int, "satisfied": int, "needs_review": int,
+    #  "gaps": int, "evidence": int, "open_remediation": int}
+    prepared_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The framework as it was named when the audit ran. Frameworks are
+    # catalog rows that get renamed and re-versioned; a completed audit
+    # should still say what it audited against.
+    framework_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # --- archived, not deleted ----------------------------------------
+    #
+    # A timestamp rather than a status value, deliberately. Archiving is
+    # orthogonal to where the work got to: a completed questionnaire that
+    # is archived is still completed, and restoring it has to put it back
+    # exactly as it was. Folding "archived" into `status` would overwrite
+    # the answer to "how far did this get" with the answer to "is it on
+    # the active list", and the first one is not recoverable afterwards.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    archived_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
 
@@ -835,35 +1150,349 @@ class AuditFinding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     control_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
     )
+    # The row in the audit workspace this came from. Null for a finding
+    # raised by hand — the fallback for something that maps to no
+    # requirement — which is why this is nullable rather than the audit
+    # being the only link.
+    audit_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audit_items.id"), nullable=True, index=True
+    )
+    requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("requirements.id"), nullable=True, index=True
+    )
+    # Copied, not joined. A finding has to keep reading correctly after
+    # the catalog is renamed or the control is retired.
+    requirement_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    control_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # low | medium | high | critical
     severity: Mapped[str] = mapped_column(String(10), nullable=False)
-    # open | remediated
-    status: Mapped[str] = mapped_column(String(20), default="open")
-    # Cross-module hook: set when severity is high/critical.
+    # open | remediation_in_progress | ready_for_verification | closed
+    # | accepted_risk
+    #
+    # Remediation finishing is not the finding closing. The team can do
+    # the work and attach the evidence; whether that answers the finding
+    # is the auditor's call, and collapsing the two would let a task
+    # board close an audit finding.
+    status: Mapped[str] = mapped_column(String(30), default="open")
+    # What the auditor was looking at when they raised it. A list of
+    # {evidence_id, title, document_href, evidence_type} — frozen,
+    # because "the evidence I reviewed" is a claim about a moment.
+    evidence_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # --- verification, which is a human act ---------------------------
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verification_note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Cross-module hook: the remediation task doing the work. Reused from
+    # an existing task where the same gap already has one, rather than
+    # opening a second for the same underlying problem.
     related_task_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
     )
+    # --- superseded, not deleted --------------------------------------
+    #
+    # An auditor who verified and closed an observation, and then changed
+    # their conclusion on that same requirement to a Minor finding, ends
+    # up with two findings for one row. That is correct: reopening a
+    # closed verification somebody signed would rewrite a signature. But
+    # leaving the first one in the list unlabelled is what made a
+    # completed audit report "18 conclusions, 19 findings" with nothing
+    # on screen explaining the extra one.
+    #
+    # So the earlier finding is marked as replaced, keeping its severity,
+    # its status and its verification intact. It stays in the record and
+    # out of the counts.
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audit_findings.id"), nullable=True
+    )
+    superseded_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class AuditReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One generated audit report, and exactly what it said.
+
+    Written once, never edited. An audit report is a statement about what
+    an auditor concluded on a given day; if remediation moves afterwards,
+    the report does not get quietly better. Version 1 keeps saying what
+    it said, the screen notes that the audit has changed since, and
+    somebody generates version 2 if they want the current picture.
+
+    `contents` is the snapshot — the conclusions as decided, the finding
+    states and remediation states at generation, the evidence and
+    document versions cited. Stored rather than re-derived, because
+    re-deriving it next month answers a different question than "what did
+    this report say".
+
+    A preview writes none of this. The two-step exists so somebody reads
+    the report before it exists as a file, and a preview that left a
+    record behind would make the history a list of things considered
+    rather than things issued.
+    """
+
+    __tablename__ = "audit_reports"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audits.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Increments per audit, so "version 2 of the report" is a thing
+    # somebody can ask for and point at.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    file_format: Mapped[str] = mapped_column(String(10), nullable=False, default="pdf")
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    contents: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # A fingerprint of the audit state this was generated from. Compared
+    # against the audit now, to say "changed since generated" without
+    # diffing two snapshots on every page load.
+    source_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generated_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("audit_id", "version", name="uq_audit_report_version"),
+    )
+
+
+class ReviewExport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One customer-facing package, and exactly what went into it.
+
+    A generated deliverable is a claim made to somebody outside the
+    organization, so this is written once and never edited. When the
+    review moves on afterwards — an answer is reopened, a policy gets a
+    new version — the export stays as it was and the screen says the
+    review has changed since. Rewriting it would mean the customer's copy
+    and our record of what we sent them no longer match, which is the one
+    thing an assurance record must never do.
+
+    `contents` is the snapshot: the answers as approved at that moment,
+    the document versions included, the sections chosen, the disclosures
+    kept. It is stored rather than re-derived because re-deriving it
+    tomorrow answers a different question than "what did we send".
+
+    A preview writes none of these. The two-step exists so somebody sees
+    the contents before they exist as a file, and a preview that left a
+    record behind would make the history a log of things considered
+    rather than things sent.
+    """
+
+    __tablename__ = "review_exports"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    security_review_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("security_reviews.id"), nullable=False, index=True
+    )
+    # summary | questionnaire | evidence_pack
+    output_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    # pdf | xlsx | zip
+    file_format: Mapped[str] = mapped_column(String(10), nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Increments per (review, output_type), so "version 2 of the summary"
+    # is a thing somebody can ask for and point at.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # The generated file. Delivered through the same signed, time-limited
+    # download the rest of the product uses; never inlined.
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
+    )
+    # The frozen contents. See the class docstring — this is the record
+    # of what was sent, not a cache of what is currently true.
+    contents: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # A fingerprint of the review state this was generated from. Compared
+    # against the review now, to say "changed since generated" without
+    # having to diff two snapshots on every page load.
+    source_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generated_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    # Set only when somebody records that it actually went to the
+    # customer. Generating a PDF is not sending it, and a product that
+    # conflates the two tells its user a package was delivered because a
+    # file exists.
+    shared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    shared_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class AuditItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One scoped requirement in an audit, and what the auditor did with it.
+
+    This is the thing that turns an audit from a blank finding form into
+    a prepared workspace. When an audit is prepared, Veyntra writes one
+    of these per applicable requirement, carrying what it found at that
+    moment: the control serving the requirement, the evidence on file,
+    the assessment state, and the sentences explaining both.
+
+    Everything prefixed `prepared_` is a **snapshot**, deliberately
+    denormalised. Compliance state moves constantly — documents get new
+    versions, controls get reassessed, evidence gets attached — and an
+    audit is a record of what was true when somebody looked. Joining
+    live to controls and evidence would mean a completed audit silently
+    rewriting its own conclusions every time the underlying data moved,
+    which is the opposite of what an audit is for.
+
+    The auditor's decision lives beside the snapshot rather than
+    replacing it, so the record shows both what Veyntra found and what a
+    person concluded about it.
+    """
+
+    __tablename__ = "audit_items"
+    __table_args__ = (
+        # One row per requirement per audit. Preparing twice reconciles
+        # rather than duplicating, and this is what makes that safe under
+        # a retry rather than merely likely.
+        UniqueConstraint("audit_id", "requirement_id", name="uq_audit_item_requirement"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    audit_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audits.id"), nullable=False, index=True
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("requirements.id"), nullable=False, index=True
+    )
+    # --- snapshot: the requirement, as it read at preparation ---------
+    reference_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    requirement_title: Mapped[str] = mapped_column(String(300), nullable=False)
+    framework_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # --- snapshot: the organization's answer to it --------------------
+    control_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("controls.id"), nullable=True, index=True
+    )
+    control_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # evidenced | partially_evidenced | needs_review | evidence_insufficient
+    # | no_evidence | not_applicable — the vocabulary of
+    # app.compliance.control_assessment, not a second scale.
+    prepared_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="no_evidence"
+    )
+    prepared_confidence: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    prepared_why: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    prepared_missing: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # [{evidence_id, title, document_href, source_location, evidence_type,
+    #   model_confidence}] — enough for the auditor to read the evidence
+    # without leaving the audit, and to open the document when they want.
+    evidence_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    applicability: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    applicability_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # --- the auditor's decision ---------------------------------------
+    #
+    # null while unreviewed. no_finding | observation | minor | major
+    # | critical | needs_evidence. Kept apart from `prepared_status`
+    # because "what the evidence shows" and "what the auditor concluded"
+    # are different claims by different parties.
+    decision: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    decision_note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finding_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("audit_findings.id"), nullable=True
+    )
+    # --- excluded from this audit, by a person --------------------------
+    #
+    # Scope is the auditor's to set. A requirement that binds the
+    # organization can still be outside the scope of one engagement — a
+    # limited internal audit is a legitimate thing to run — and saying so
+    # here changes this audit only. The organization's framework
+    # applicability is a different question with a different answer, and
+    # editing it to shape an audit's scope would quietly rewrite what the
+    # company is held to.
+    #
+    # A reason is required by the service that sets these. "Excluded"
+    # with no explanation is the one thing a reader of the report cannot
+    # do anything with.
+    excluded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    excluded_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    exclusion_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class SecurityReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """Spec §69's "Enterprise Sales Security Review" — one per Sales
-    Opportunity (a second review would be a new row after the first is
-    superseded, not modeled here; see docs/KNOWN_LIMITATIONS.md). See
-    app.compliance.service.start_security_review / sync_security_review /
-    clear_security_review and docs/DECISIONS.md ADR-0035."""
+    """One customer's security review: the engagement a questionnaire
+    belongs to.
+
+    Originally "Enterprise Sales Security Review", one per Sales
+    Opportunity. That module was withdrawn, and because
+    `opportunity_id` was a non-null foreign key into it, this table
+    became impossible to write to — which is why the Assessments page
+    could show a finished customer questionnaire beside "No customer
+    security reviews". There was no way to create one.
+
+    So it is compliance-native now. The customer is `customer_name`,
+    which is a name rather than a foreign key into a CRM this product
+    does not have. `opportunity_id` stays nullable for the rows that
+    predate the change; nothing new sets it.
+
+    One review holds many questionnaires — a customer sends a security
+    questionnaire, then a privacy one, then an AI governance one, and
+    they are one engagement. The link lives on
+    `Questionnaire.security_review_id`; `questionnaire_id` below is the
+    old single link, kept so existing reviews still resolve.
+    """
 
     __tablename__ = "security_reviews"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
     )
-    opportunity_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("sales_opportunities.id"), nullable=False, unique=True
+    # What to call the engagement, and who it is with. The customer is a
+    # name because this product has no account model and is not getting
+    # one back — see the module docstring.
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    # Legacy. Rows created before the Sales module was withdrawn point at
+    # an opportunity; nothing creates one now.
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("sales_opportunities.id"), nullable=True, unique=True
     )
-    questionnaire_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("questionnaires.id"), nullable=False
+    # Legacy single link. New reviews hold their questionnaires through
+    # `Questionnaire.security_review_id` instead.
+    questionnaire_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("questionnaires.id"), nullable=True
+    )
+    # --- archived, not deleted -----------------------------------------
+    #
+    # The same separation as everywhere else: where the record lives is
+    # not how far its work got. Archiving a review never touches the
+    # questionnaires hanging off it.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    archived_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     # Cross-module hook: set when Opportunity.value is at/above the
     # materiality threshold — clearing then requires this Approval granted.
@@ -901,8 +1530,23 @@ class DataTransfer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # adequacy_decision | sccs | bcrs | derogation (GDPR Articles 45-49)
     transfer_mechanism: Mapped[str] = mapped_column(String(30), nullable=False)
     safeguards_description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # The vendor this transfer goes to, where one is on file. Linked
+    # rather than retyped: the destination country and the DPA already
+    # live on the vendor record, and two copies of one fact drift.
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("vendors.id"), nullable=True, index=True
+    )
     # active | under_review | terminated
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # When somebody last confirmed the mechanism still holds. Adequacy
+    # decisions get struck down and SCCs get superseded, so "we recorded
+    # SCCs once" is not the same claim as "this transfer is covered".
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_review_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Cross-module hook: set when transfer_mechanism is "derogation".
     related_risk_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
@@ -1001,6 +1645,16 @@ class ComplianceGap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Populated by generate_remediation — kept separate from `summary` so
     # the finding and the proposed fix stay distinguishable.
     recommendation: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # The structured plan behind that sentence: problem, why, owner,
+    # required evidence, checklist. Stored as a whole rather than as
+    # columns because it is written once and read once, and every reader
+    # wants all of it — see app.compliance.remediation.RemediationPlan.
+    remediation_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # The specific conditions the evidence on file does not meet, as the
+    # coverage analysis named them at the moment the gap was raised.
+    # Stored rather than re-derived so a finding cannot quietly change its
+    # own wording underneath somebody who is working on it.
+    missing_conditions: Mapped[list[str]] = mapped_column(JSON, default=list)
     # The remediation Task, once one has been raised from this gap.
     task_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
@@ -1069,6 +1723,49 @@ class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "evidence_suggestions"
+    __table_args__ = (
+        # One document proposed against one control *for one requirement*
+        # is one mapping, however many times the document is analysed.
+        #
+        # The requirement is part of the identity because it is part of
+        # the claim: a policy can evidence one control for Article 32 and
+        # for Article 33, and those are different obligations. Leaving it
+        # out collapsed them and halved the control's coverage.
+        #
+        # The passage the model quoted is deliberately *not* part of it —
+        # keying on the quote made the identity only as stable as the
+        # model, and a re-extraction that phrased the same citation
+        # differently read as a second proposal.
+        #
+        # Two indexes because a null requirement means something: the
+        # model named a control without resolving which requirement the
+        # passage speaks to, and that is one mapping per document and
+        # control.
+        Index(
+            "uq_suggestion_requirement",
+            "organization_id",
+            "file_id",
+            "control_id",
+            "requirement_id",
+            unique=True,
+            # Both dialects: the tests run on SQLite, which ignores a
+            # `postgresql_where` and would silently create a *plain*
+            # unique index — rejecting the second requirement for one
+            # control, which is exactly what this partial index exists
+            # to allow.
+            postgresql_where=text("requirement_id IS NOT NULL"),
+            sqlite_where=text("requirement_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_suggestion_control_only",
+            "organization_id",
+            "file_id",
+            "control_id",
+            unique=True,
+            postgresql_where=text("requirement_id IS NULL"),
+            sqlite_where=text("requirement_id IS NULL"),
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
@@ -1088,6 +1785,10 @@ class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     rationale: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     quoted_passage: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # The logical identity of this proposal: a fingerprint over the
+    # section it came from and the passage it quotes, normalized for
+    # whitespace and case. See app.core.idempotency.text_fingerprint.
+    passage_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Where in the document the passage came from, as the document
     # labels it ("Section 4", "Clause 7.2"). Traceability is the
     # difference between evidence an auditor can follow and a claim

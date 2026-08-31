@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowUpRight, FileText } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -10,7 +12,40 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { ChecklistItem, Task, TaskActivity, TaskComment, TaskEvidence } from "@/lib/types";
+import type {
+  ChecklistItem,
+  ComplianceGap,
+  FileRecord,
+  Task,
+  TaskActivity,
+  TaskComment,
+  TaskEvidence,
+} from "@/lib/types";
+
+const PRIORITY_LABEL: Record<string, string> = {
+  urgent: "Urgent",
+  high: "High priority",
+  normal: "Normal priority",
+  low: "Low priority",
+};
+
+/** A person reads "Related gap: AI literacy training evidence incomplete",
+ * not `linked to compliance_gap: 8f3a…`. Anything we cannot phrase is not
+ * shown at all rather than shown as its internal name. */
+const ENTITY_LABEL: Record<string, string> = {
+  compliance_gap: "Related gap",
+};
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-8">
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
 
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -26,6 +61,17 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
     queryKey: ["tasks", id],
     queryFn: () => apiFetch<Task>(`/api/v1/tasks/${id}`),
     retry: false,
+  });
+
+  const gapId = task?.entity_type === "compliance_gap" ? task.entity_id : null;
+
+  // The gap carries the remediation plan. Fetched rather than duplicated
+  // onto the task so the task can never show a plan the gap has since
+  // regenerated against newer evidence.
+  const { data: gap } = useQuery<ComplianceGap>({
+    queryKey: ["compliance", "gaps", gapId],
+    queryFn: () => apiFetch<ComplianceGap>(`/api/v1/compliance/gaps/${gapId}`),
+    enabled: !!gapId,
   });
 
   const { data: comments } = useQuery<TaskComment[]>({
@@ -49,7 +95,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const updateChecklist = useMutation({
     mutationFn: (checklist: ChecklistItem[]) =>
       apiFetch<Task>(`/api/v1/tasks/${id}`, { method: "PATCH", body: { checklist } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", id] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", id, "activity"] });
+    },
   });
 
   const addComment = useMutation({
@@ -80,32 +129,87 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   if (!task) return null;
 
   const checklist = task.checklist;
+  const plan = gap?.remediation_plan ?? null;
+  const entityLabel = task.entity_type ? ENTITY_LABEL[task.entity_type] : undefined;
 
   return (
     <div>
       <PageHeader
         title={task.title}
-        description={task.description ?? undefined}
+        // The plan is rendered below as sections. Repeating it here as one
+        // wall of text would be the same information twice, worse.
+        description={plan ? undefined : (task.description ?? undefined)}
         actions={<StatusBadge status={task.status} />}
       />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <Badge variant="outline">{task.module}</Badge>
-        <Badge variant="outline">priority: {task.priority}</Badge>
-        {task.entity_type && (
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <Badge variant="outline">{PRIORITY_LABEL[task.priority] ?? "Normal priority"}</Badge>
+        {task.due_at && (
           <Badge variant="outline">
-            linked to {task.entity_type}: {task.entity_id}
+            Due {new Date(task.due_at).toLocaleDateString()}
           </Badge>
         )}
-        {task.due_at && (
-          <Badge variant="outline">due {new Date(task.due_at).toLocaleDateString()}</Badge>
-        )}
+        {plan && <Badge variant="outline">Suggested owner: {plan.owner}</Badge>}
       </div>
 
-      <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-          Checklist
-        </h2>
+      {entityLabel && gap && (
+        <Link
+          href={`/compliance/frameworks/${gap.framework_id}`}
+          className="mb-6 flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--warning-500)]/35 bg-[var(--warning-50)] p-3 text-sm text-[var(--warning-700)] hover:border-[var(--warning-500)]/60"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            <span className="font-semibold">{entityLabel}:</span> {gap.summary}
+          </span>
+          <ArrowUpRight className="ml-auto mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        </Link>
+      )}
+
+      {plan && (
+        <>
+          <Section title="Problem">
+            <p className="text-sm text-[var(--fg-muted)]">{plan.problem}</p>
+          </Section>
+
+          <Section title="Why this is open">
+            <p className="text-sm text-[var(--fg-muted)]">{plan.why}</p>
+            {plan.evidence_reviewed.length > 0 && (
+              <p className="mt-2 text-sm text-[var(--fg-subtle)]">
+                Already reviewed: {plan.evidence_reviewed.join(", ")}
+              </p>
+            )}
+            {plan.affected_ai_systems.length > 0 && (
+              <p className="mt-1 text-sm text-[var(--fg-subtle)]">
+                Affected AI systems: {plan.affected_ai_systems.join(", ")}
+              </p>
+            )}
+          </Section>
+
+          <Section title="What to do">
+            <p className="text-sm text-[var(--fg-muted)]">{plan.action}</p>
+          </Section>
+
+          <Section title="Evidence that would close this">
+            <ul className="flex flex-col gap-1">
+              {plan.required_evidence.map((item) => (
+                <li
+                  key={item}
+                  className="flex items-start gap-2 text-sm text-[var(--fg-muted)]"
+                >
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-sm text-[var(--fg-subtle)]">
+              Upload these on the Documents page — Veyntra reads them, maps them to this
+              control and reassesses on its own. You do not need to attach them by hand.
+            </p>
+          </Section>
+        </>
+      )}
+
+      <Section title="Checklist">
         {checklist.length === 0 && (
           <p className="mb-2 text-sm text-[var(--fg-muted)]">No checklist items yet.</p>
         )}
@@ -148,30 +252,24 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             Add item
           </Button>
         </div>
-      </div>
+      </Section>
 
-      <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-          Evidence
-        </h2>
+      <Section title="Evidence">
         {evidence && evidence.length === 0 && (
-          <p className="text-sm text-[var(--fg-muted)]">No evidence attached.</p>
+          <p className="text-sm text-[var(--fg-muted)]">
+            {plan
+              ? "Nothing attached to this task yet. Evidence Veyntra maps to the control is counted whether or not it is attached here."
+              : "No evidence attached."}
+          </p>
         )}
         <div className="flex flex-col gap-2">
           {evidence?.map((item) => (
-            <Card key={item.id}>
-              <CardContent className="pt-6 text-sm text-[var(--fg-muted)]">
-                File {item.file_id}
-              </CardContent>
-            </Card>
+            <TaskEvidenceRow key={item.id} fileId={item.file_id} />
           ))}
         </div>
-      </div>
+      </Section>
 
-      <div className="mb-8">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-          Comments
-        </h2>
+      <Section title="Comments">
         {comments && comments.length === 0 && (
           <p className="mb-2 text-sm text-[var(--fg-muted)]">No comments yet.</p>
         )}
@@ -206,24 +304,41 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             Comment
           </Button>
         </div>
-      </div>
+      </Section>
 
-      <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-          Activity
-        </h2>
+      <Section title="Activity">
         {activity && activity.length === 0 && (
           <p className="text-sm text-[var(--fg-muted)]">No activity recorded yet.</p>
         )}
-        <div className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-2">
           {activity?.map((event, index) => (
-            <div key={index} className="text-xs text-[var(--fg-muted)]">
-              <span className="font-medium text-[var(--fg-muted)]">{event.action}</span>{" "}
-              {new Date(event.created_at).toLocaleString()}
-            </div>
+            <li key={index} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+              <span className="text-[var(--fg-default)]">{event.label}</span>
+              <span className="text-xs text-[var(--fg-subtle)]">
+                {new Date(event.created_at).toLocaleString()}
+              </span>
+            </li>
           ))}
-        </div>
-      </div>
+        </ol>
+      </Section>
     </div>
+  );
+}
+
+/** Attached evidence, by filename. The raw file id told the reader
+ * nothing and was the same class of leak as the entity id above it. */
+function TaskEvidenceRow({ fileId }: { fileId: string }) {
+  const { data: file } = useQuery<FileRecord>({
+    queryKey: ["files", fileId],
+    queryFn: () => apiFetch<FileRecord>(`/api/v1/files/${fileId}`),
+  });
+
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-2 pt-6 text-sm text-[var(--fg-muted)]">
+        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {file?.original_filename ?? "Attached document"}
+      </CardContent>
+    </Card>
   );
 }

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Bot, CheckCircle2, Sparkles } from "lucide-react";
 
 import { DashboardHero } from "@/components/dashboard-hero";
+import { PriorityBadge } from "@/components/priority-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
@@ -18,12 +19,6 @@ import type { ComplianceDashboard } from "@/lib/types";
  * percentage with nothing behind it, so every figure here either links
  * through to what it counts or carries its own arithmetic.
  */
-
-const PRIORITY_VARIANT: Record<string, "destructive" | "outline" | "secondary"> = {
-  high: "destructive",
-  medium: "outline",
-  low: "secondary",
-};
 
 function Metric({
   label,
@@ -129,9 +124,7 @@ export default function DashboardPage() {
                             <span className="font-medium text-[var(--fg-default)]">
                               {action.title}
                             </span>
-                            <Badge variant={PRIORITY_VARIANT[action.priority] ?? "secondary"}>
-                              {action.priority}
-                            </Badge>
+                            <PriorityBadge priority={action.priority} />
                           </div>
                           <p className="mt-1 text-sm leading-relaxed text-[var(--fg-muted)]">
                             {action.detail}

@@ -1217,12 +1217,17 @@ async def test_questionnaire_status_lifecycle(client: AsyncClient) -> None:
     await _signup(client, "quest3@example.com", "Questionnaire Org 3")
     questionnaire_id = await _create_questionnaire(client, "Status lifecycle test")
 
+    # Workflow status is derived from the answers now — see
+    # app.compliance.questionnaire_status. Sending anything but
+    # "completed" hands it back to that calculation rather than
+    # overriding it, so a questionnaire with no questions comes back as
+    # the draft it is.
     updated = await client.patch(
         f"/api/v1/compliance/questionnaires/{questionnaire_id}/status",
-        json={"status": "in_progress"},
+        json={"status": "in_review"},
     )
     assert updated.status_code == 200
-    assert updated.json()["status"] == "in_progress"
+    assert updated.json()["status"] == "draft"
 
     completed = await client.patch(
         f"/api/v1/compliance/questionnaires/{questionnaire_id}/status",

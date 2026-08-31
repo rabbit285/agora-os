@@ -12,27 +12,12 @@ import { Input } from "@/components/ui/input";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { SearchResponse, SearchResult } from "@/lib/types";
 
-// Entity types with a dedicated detail page; anything else falls back to
-// the Knowledge Graph explorer rather than a dead link (spec section 82).
-const DETAIL_ROUTES: Record<string, (id: string) => string> = {
-  sales_account: (id) => `/sales/accounts/${id}`,
-  support_ticket: (id) => `/support/tickets/${id}`,
-  security_incident: (id) => `/security/incidents/${id}`,
-  vendor: (id) => `/compliance/vendors/${id}`,
-  control: (id) => `/compliance/controls/${id}`,
-  audit: (id) => `/compliance/audits/${id}`,
-  ai_system: (id) => `/compliance/ai-systems/${id}`,
-  dpia: (id) => `/compliance/dpias/${id}`,
-  ai_incident: (id) => `/compliance/ai-incidents/${id}`,
-  questionnaire: (id) => `/compliance/questionnaires/${id}`,
-  automation_workflow: (id) => `/automation/workflows/${id}`,
-  knowledge_document: (id) => `/knowledge/${id}`,
-};
-
+// The route comes from the server. A lookup table here drifts the moment
+// a route changes, and the failure mode is a result that looks real and
+// lands on a 404 — which this table did for every sales, support,
+// automation and knowledge entry after those modules were withdrawn.
 function resultHref(result: SearchResult): string {
-  const route = DETAIL_ROUTES[result.entity_type];
-  if (route) return route(result.id);
-  return `/knowledge/graph?type=${result.entity_type}&id=${result.id}`;
+  return result.href;
 }
 
 export function SearchResults({ initialQuery }: { initialQuery: string }) {

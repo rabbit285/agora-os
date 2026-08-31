@@ -1,15 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  RefreshCw,
-  Upload,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, FileText, GitBranch, Loader2, RefreshCw, ShieldCheck, Sparkles, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +25,10 @@ const STAGES: { key: string; label: string }[] = [
   { key: "uploaded", label: "Uploaded" },
   { key: "parsing", label: "Reading" },
   { key: "analyzing", label: "Matching controls" },
-  { key: "ready", label: "Ready" },
+  // "Ready" only ever meant "processing finished", which a customer
+  // reasonably reads as "this document is fine". Veyntra read it; what
+  // it found is the next line down.
+  { key: "ready", label: "Analyzed" },
 ];
 
 // `not_analyzed` is deliberately absent: it is a resting state, not a
@@ -70,6 +67,31 @@ function ProcessingTrail({ status }: { status: string }) {
       })}
     </div>
   );
+}
+
+/** What to say about a document's control mappings.
+ *
+ * "No control matches proposed" is true of a brand-new organization and
+ * badly misleading: it reads as "we looked and your policy evidences
+ * nothing", when what happened is that there was nothing to look
+ * against. The first thing a customer does in the product should not
+ * report a negative finding about work they have not started.
+ *
+ * The server decides which of the three situations this is — see
+ * `_mapping_state` — because it is the only place that knows whether the
+ * organization has any controls at all.
+ */
+function mappingSummary(doc: ComplianceDocument): string {
+  if (doc.proposed_count > 0) {
+    return `${doc.proposed_count} proposal${doc.proposed_count === 1 ? "" : "s"} awaiting review`;
+  }
+  if (doc.approved_count > 0) {
+    return `${doc.approved_count} approved as evidence`;
+  }
+  if (doc.mapping_state === "no_controls") {
+    return "evidence mapping starts when you adopt a framework";
+  }
+  return "no control matches proposed";
 }
 
 export function DocumentLibrary() {
@@ -163,21 +185,112 @@ export function DocumentLibrary() {
 
       <div className="flex flex-col gap-2">
         {(documents ?? []).map((doc) => (
-          <Card key={doc.id}>
+          // The whole row opens the document — via one real link that
+          // stretches over the card, not a click handler on a div. The
+          // link keeps its keyboard semantics and its accessible name;
+          // everything interactive inside the row sits above it on
+          // `relative z-10` so a policy link or a retry button does its
+          // own job instead of navigating away.
+          <Card
+            key={doc.id}
+            className={
+              doc.href
+                ? "relative transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] focus-within:ring-2 focus-within:ring-[var(--border-focus)]"
+                : undefined
+            }
+          >
             <CardContent className="py-4">
               <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                <span className="flex items-center gap-2 font-medium text-[var(--fg-default)]">
-                  <FileText className="h-4 w-4 text-[var(--fg-subtle)]" aria-hidden="true" />
-                  {doc.original_filename}
+                <span className="flex min-w-0 items-center gap-2">
+                  <FileText
+                    className="h-4 w-4 shrink-0 text-[var(--fg-subtle)]"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0">
+                    {doc.href ? (
+                      <Link
+                        href={doc.href}
+                        className="font-medium text-[var(--fg-default)] after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+                      >
+                        {doc.title || doc.original_filename}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-[var(--fg-default)]">
+                        {doc.title || doc.original_filename}
+                      </span>
+                    )}
+                    {/* The filename, once, underneath the name. It is how
+                        the customer finds the file on their own disk. */}
+                    <span className="block truncate text-xs text-[var(--fg-subtle)]">
+                      {doc.original_filename}
+                    </span>
+                  </span>
                 </span>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="relative z-10 flex shrink-0 flex-wrap items-center gap-1.5">
+                  {/* A quiet chevron, so the row reads as openable
+                      without a View button on all twenty of them. */}
+                  {doc.href && (
+                    <ChevronRight
+                      className="order-last h-4 w-4 text-[var(--fg-subtle)]"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {/* One row is one logical document. When it has more
+                      than one version, the row says so and the count is
+                      the way into the history — the older versions are
+                      not listed here, because they are not other
+                      documents. */}
+                  {doc.version_count > 1 && (
+                    <Badge variant="outline" className="gap-1">
+                      <GitBranch className="h-3 w-3" aria-hidden="true" />
+                      {doc.version_label ? `${doc.version_label} · ` : ""}
+                      {doc.version_count} versions
+                    </Badge>
+                  )}
+                  {/* An undecided version question is why the library
+                      briefly holds two rows for one document. Saying so
+                      on both rows beats letting it look like the
+                      duplicate bug it is not. */}
+                  {doc.has_pending_version && (
+                    <Badge variant="secondary" className="gap-1">
+                      <GitBranch className="h-3 w-3" aria-hidden="true" />
+                      Version to confirm
+                    </Badge>
+                  )}
                   {doc.document_domain && <Badge variant="outline">{doc.document_domain}</Badge>}
                   {doc.processing_status === "ready" && (
                     <Badge variant="success" className="gap-1">
                       <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                      Ready
+                      Analyzed
                     </Badge>
                   )}
+                  {/* Whether the Copilot can actually retrieve from this
+                      document — a different pipeline from the analysis
+                      above, and one that can fail on its own. Showing
+                      only "Analyzed" is what let someone ask the Copilot
+                      about a document it had never been given. */}
+                  {doc.processing_status === "ready" &&
+                    doc.index_status === "indexed" && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Sparkles className="h-3 w-3" aria-hidden="true" />
+                        Indexed for Copilot
+                      </Badge>
+                    )}
+                  {doc.processing_status === "ready" &&
+                    doc.index_status === "pending" && (
+                      <Badge variant="outline" className="gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        Indexing for Copilot
+                      </Badge>
+                    )}
+                  {doc.processing_status === "ready" &&
+                    (doc.index_status === "failed" ||
+                      doc.index_status === "unsupported") && (
+                      <Badge variant="destructive" className="gap-1">
+                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                        Not available to Copilot
+                      </Badge>
+                    )}
                   {(doc.processing_status === "failed" ||
                     doc.processing_status === "unsupported") && (
                     <Badge variant="destructive" className="gap-1">
@@ -196,7 +309,7 @@ export function DocumentLibrary() {
                   submitted for compliance analysis. Offering the action
                   is honest; showing a stalled progress trail is not. */}
               {doc.processing_status === "not_analyzed" && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="relative z-10 flex flex-wrap items-center gap-2">
                   <span className="text-sm text-[var(--fg-muted)]">Not analyzed yet.</span>
                   <Button
                     size="sm"
@@ -210,24 +323,40 @@ export function DocumentLibrary() {
                 </div>
               )}
 
+              {/* A policy document says so, and links to the record
+                  Veyntra created for it. The customer never has to make
+                  this connection by hand. */}
+              {doc.policy_id && (
+                // Above the stretched row link, so this opens the policy
+                // record rather than the document behind it.
+                <Link
+                  href={`/compliance/policies/${doc.policy_id}`}
+                  className="relative z-10 mt-1 inline-flex flex-wrap items-center gap-1.5 self-start text-sm text-[var(--brand-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Policy detected · {doc.policy_title}
+                  {doc.policy_status !== "approved" && " — needs governance review"}
+                </Link>
+              )}
+
+              {doc.processing_status === "ready" && doc.index_error && (
+                <p className="text-sm text-[var(--warning-700)]">{doc.index_error}</p>
+              )}
+
               {doc.processing_status === "ready" && (
                 <div className="text-sm text-[var(--fg-muted)]">
                   {doc.document_type && (
                     <span className="text-[var(--fg-default)]">{doc.document_type}</span>
                   )}
-                  {/* Shown so "Ready" is backed by a number: a document
-                      that parsed to nothing can never look like one that
-                      simply matched no controls. */}
+                  {/* Shown so "Analyzed" is backed by a number: a
+                      document that parsed to nothing can never look like
+                      one that simply matched no controls. */}
                   {doc.extracted_characters !== null && (
                     <span> · {doc.extracted_characters.toLocaleString()} characters read</span>
                   )}
                   <span>
                     {" · "}
-                    {doc.proposed_count > 0
-                      ? `${doc.proposed_count} proposal${doc.proposed_count === 1 ? "" : "s"} awaiting review`
-                      : doc.approved_count > 0
-                        ? `${doc.approved_count} approved as evidence`
-                        : "no control matches proposed"}
+                    {mappingSummary(doc)}
                   </span>
                   {doc.unverifiable_count > 0 && (
                     <span className="text-[var(--warning-700)]">
@@ -249,7 +378,7 @@ export function DocumentLibrary() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="mt-2"
+                      className="relative z-10 mt-2"
                       disabled={reprocess.isPending}
                       onClick={() => reprocess.mutate(doc.id)}
                     >

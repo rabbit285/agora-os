@@ -44,6 +44,11 @@ class DocumentChunkOut(BaseModel):
     chunk_index: int
     content: str
     token_count: int
+    # What the document calls this place. Carried so the reader view can
+    # show a citation's passage under the heading it actually sits under,
+    # rather than under "chunk 5".
+    section_label: str | None = None
+    page_number: int | None = None
 
     model_config = {"from_attributes": True}
 

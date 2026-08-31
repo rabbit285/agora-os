@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 
+import {
+  FrameworkCard,
+  ReadinessDisclaimer,
+} from "@/components/compliance/framework-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +39,44 @@ export function ReadinessPanel() {
     },
   });
 
+  // Ordered by what needs a person: frameworks with open actions first,
+  // then ones with decisions waiting, then the settled ones. A page that
+  // opens on a framework nobody has started buries the one that is
+  // failing underneath it.
+  const sorted = useMemo(() => {
+    return [...(overview?.frameworks ?? [])].sort((a, b) => {
+      if (a.open_gap_count !== b.open_gap_count) {
+        return b.open_gap_count - a.open_gap_count;
+      }
+      if (a.readiness.needs_review !== b.readiness.needs_review) {
+        return b.readiness.needs_review - a.readiness.needs_review;
+      }
+      // Then the least ready, which is where the work is.
+      if (a.readiness.percent !== b.readiness.percent) {
+        return a.readiness.percent - b.readiness.percent;
+      }
+      return a.framework_name.localeCompare(b.framework_name);
+    });
+  }, [overview]);
+
+  const summary = useMemo(() => {
+    const frameworks = overview?.frameworks ?? [];
+    const scored = frameworks.filter((f) => f.readiness.total > 0);
+    const average = scored.length
+      ? Math.round(
+          scored.reduce((total, f) => total + f.readiness.percent, 0) / scored.length
+        )
+      : 0;
+    return [
+      { label: "Adopted", value: frameworks.length },
+      { label: "Average readiness", value: `${average}%` },
+      {
+        label: "Open actions",
+        value: frameworks.reduce((total, f) => total + f.open_gap_count, 0),
+      },
+    ];
+  }, [overview]);
+
   if (!overview) return null;
 
   // Nothing adopted means no controls exist, which means an uploaded
@@ -51,7 +94,7 @@ export function ReadinessPanel() {
             to. Until then Veyntra can read an upload, but has nothing to propose it against.
           </p>
           <Button asChild size="sm">
-            <Link href="#frameworks">Choose frameworks</Link>
+            <Link href="/compliance/frameworks">Choose frameworks</Link>
           </Button>
         </CardContent>
       </Card>
@@ -81,39 +124,32 @@ export function ReadinessPanel() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {overview.frameworks.map((framework) => (
-          <Card key={framework.framework_id}>
-            <CardContent className="pt-6">
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <Link
-                  href={`/compliance/frameworks/${framework.framework_id}`}
-                  className="font-medium text-[var(--fg-default)] hover:underline"
-                >
-                  {framework.framework_name}
-                </Link>
-                <span className="text-2xl font-semibold text-[var(--fg-default)]">
-                  {framework.readiness.percent}%
-                </span>
-              </div>
-
-              {/* The number never appears without the arithmetic behind
-                  it — the reader's next question is always "which ones". */}
-              <p className="text-sm leading-relaxed text-[var(--fg-muted)]">
-                {framework.readiness.explanation}
-              </p>
-
-              {framework.open_gap_count > 0 && (
-                <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--warning-700)]">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {framework.open_gap_count} open gap
-                  {framework.open_gap_count === 1 ? "" : "s"} — each names the evidence it needs.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+      {/* Three numbers about the whole position, before the per-
+          framework detail. A reader who only wants "are we alright"
+          stops here. */}
+      <dl className="mb-4 grid grid-cols-3 gap-3">
+        {summary.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3"
+          >
+            <dt className="text-xs uppercase tracking-wide text-[var(--fg-subtle)]">
+              {item.label}
+            </dt>
+            <dd className="mt-1 text-2xl font-semibold text-[var(--fg-default)]">
+              {item.value}
+            </dd>
+          </div>
         ))}
-      </div>
+      </dl>
+
+      {/* A list, semantically — it is one. */}
+      <ul className="flex flex-col gap-3">
+        {sorted.map((framework) => (
+          <FrameworkCard key={framework.framework_id} framework={framework} />
+        ))}
+      </ul>
+      <ReadinessDisclaimer />
     </div>
   );
 }

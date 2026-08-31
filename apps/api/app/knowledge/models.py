@@ -72,5 +72,19 @@ class DocumentChunk(UUIDPrimaryKeyMixin, Base):
     token_count: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    # citations (spec F4) reference chunk id + document id + this index;
-    # nothing else needs to be stored on the chunk for that.
+    # Where this chunk came from, in the document's own terms. Resolved at
+    # ingest (app.knowledge.headings) because it is a property of the
+    # source text, not of the answer, and re-deriving it per citation
+    # would mean re-parsing the file on every question.
+    #
+    # Both are nullable and mean it: a document with no headings has no
+    # section, and a .docx has no pages. A citation says what it knows and
+    # falls back to the document title rather than inventing a location.
+    section_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    page_number: Mapped[int | None] = mapped_column(nullable=True)
+
+    # citations (spec F4) reference chunk id + document id + this index.
+    # Those stay here, and stay in the AI request record, because an
+    # auditor asking "what exactly did the model see" needs the exact
+    # chunk — they are simply never shown to a customer, who gets the
+    # title/section/page above instead (app.ai.citations).

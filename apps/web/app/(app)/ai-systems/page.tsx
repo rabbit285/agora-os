@@ -7,6 +7,7 @@ import { AlertTriangle, Bot, CheckCircle2, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { AIIncidentsSection } from "@/components/compliance/sections/ai-incidents";
 import { EmptyState } from "@/components/empty-state";
 import { apiFetch } from "@/lib/api";
 import type { AIGovernanceOverview } from "@/lib/types";
@@ -90,9 +91,17 @@ export default function AISystemsPage() {
       )}
 
       {data?.total_systems === 0 && (
+        // Names the distinction rather than leaving it to be inferred.
+        // Declaring "we use third-party AI" during onboarding is an
+        // organization-level fact and is what puts the EU AI Act in
+        // scope; this page is the inventory of individual systems, and
+        // which obligations actually bind you depends on each one's role
+        // and risk class. Seeing "you use AI" on one screen and "none
+        // registered" on another reads as a bug unless the product says
+        // they are different questions.
         <EmptyState
-          title="No AI systems recorded yet"
-          description="Register the AI you use — a support agent, an internal copilot, a model in your own product — and Veyntra will tell you what governing it requires."
+          title="No individual AI systems registered yet"
+          description="If you told Veyntra during onboarding that you use or build AI, that put the EU AI Act in scope for your organization. Which obligations apply depends on each system's role and risk classification — register them here and Veyntra will work that out per system."
         />
       )}
 
@@ -191,6 +200,7 @@ export default function AISystemsPage() {
           </Card>
         ))}
       </div>
+      <AIIncidentsSection />
     </div>
   );
 }

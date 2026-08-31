@@ -14,8 +14,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.compliance.dashboard import ACTIVITY_LABELS, _next_actions
-from app.compliance.dashboard import FrameworkStatus
+from app.compliance.dashboard import ACTIVITY_LABELS, FrameworkStatus, _next_actions
 from app.seed import _ensure_compliance_catalog
 
 
@@ -163,8 +162,20 @@ async def test_readiness_is_weighted_by_requirement_count(client: AsyncClient) -
     body = (await client.get("/api/v1/compliance/dashboard")).json()
     assert len(body["frameworks"]) == 2
     assert "weighted by their" in body["readiness_explanation"]
-    # 25 GDPR requirements + 2 SOC 2 requirements.
-    assert "27 requirements" in body["readiness_explanation"]
+
+    # The denominator is the sum of each framework's *applicable*
+    # requirements, not a flat average across frameworks. Asserted as a
+    # property rather than a fixed number: requirement scoping
+    # legitimately changes the count per organization, and a hardcoded
+    # total would break every time a scoping rule was added.
+    detail = (
+        await client.get("/api/v1/compliance/overview")
+    ).json()
+    expected = sum(f["readiness"]["total"] for f in detail["frameworks"])
+    assert f"{expected} requirements" in body["readiness_explanation"]
+    # SOC 2 is shallow; GDPR is deep. A flat average would weight them
+    # equally, which is the thing this test exists to prevent.
+    assert expected > 2
 
 
 async def test_recent_activity_is_counted_not_narrated(client: AsyncClient) -> None:

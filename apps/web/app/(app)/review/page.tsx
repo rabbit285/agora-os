@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 
+import { EvidenceReview } from "@/components/compliance/evidence-review";
 import { PageHeader } from "@/components/page-header";
+import { PriorityBadge } from "@/components/priority-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { CARD_LINK_FOCUS } from "@/lib/focus";
 import { apiFetch } from "@/lib/api";
 import type { ReviewCenter } from "@/lib/types";
 
@@ -22,12 +25,6 @@ import type { ReviewCenter } from "@/lib/types";
  * padding itself with things that might matter later.
  */
 
-const PRIORITY_VARIANT: Record<string, "destructive" | "outline" | "secondary"> = {
-  high: "destructive",
-  medium: "outline",
-  low: "secondary",
-};
-
 export default function ReviewCenterPage() {
   const { data } = useQuery<ReviewCenter>({
     queryKey: ["compliance", "review-center"],
@@ -42,6 +39,34 @@ export default function ReviewCenterPage() {
         title="Review Center"
         description="Every decision waiting on you, in one place."
       />
+
+      {/* The number, then what it is made of. "5 decisions" on its own
+          is a badge; the breakdown is what lets someone decide whether
+          this is ten minutes or an afternoon before they start. */}
+      {data && data.total_needing_review > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-[var(--fg-default)]">
+            {data.total_needing_review} decision
+            {data.total_needing_review === 1 ? "" : "s"} need
+            {data.total_needing_review === 1 ? "s" : ""} your attention
+          </h2>
+          <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--fg-muted)]">
+            {active.map((category) => (
+              <li key={category.key}>
+                <a
+                  href={`#${category.key}`}
+                  className="hover:text-[var(--fg-default)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+                >
+                  <span className="font-medium text-[var(--fg-default)]">
+                    {category.count}
+                  </span>{" "}
+                  {category.label.toLowerCase()}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {data && (
         <Card className="mb-6">
@@ -89,7 +114,9 @@ export default function ReviewCenterPage() {
 
       <div className="flex flex-col gap-6">
         {active.map((category) => (
-          <section key={category.key}>
+          // `scroll-mt` keeps the heading clear of the sticky top bar
+          // when the summary above links down to it.
+          <section key={category.key} id={category.key} className="scroll-mt-24">
             <div className="mb-2 flex flex-wrap items-baseline gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
                 {category.label}
@@ -100,9 +127,18 @@ export default function ReviewCenterPage() {
               {category.description}
             </p>
 
+            {/* The one category where the decision can be made in place.
+                Evidence mappings are the bulk of this queue and each one
+                is a yes/no on a quoted passage — sending the reviewer to
+                another screen to answer it, and back here for the next,
+                is the queue failing at the one job it has. The component
+                is the same one Documents uses, citation and all. */}
+            {category.key === "evidence_mappings" ? (
+              <EvidenceReview />
+            ) : (
             <div className="flex flex-col gap-2">
               {category.items.map((item) => (
-                <Link key={item.id} href={item.href}>
+                <Link key={item.id} href={item.href} className={CARD_LINK_FOCUS}>
                   <Card className="transition-colors hover:border-[var(--border-strong)]">
                     <CardContent className="flex items-start justify-between gap-4 py-4">
                       <div className="min-w-0">
@@ -110,9 +146,7 @@ export default function ReviewCenterPage() {
                           <span className="font-medium text-[var(--fg-default)]">
                             {item.title}
                           </span>
-                          <Badge variant={PRIORITY_VARIANT[item.priority] ?? "secondary"}>
-                            {item.priority}
-                          </Badge>
+                          <PriorityBadge priority={item.priority} />
                         </div>
                         <p className="mt-1 text-sm leading-relaxed text-[var(--fg-muted)]">
                           {item.detail}
@@ -127,6 +161,7 @@ export default function ReviewCenterPage() {
                 </Link>
               ))}
             </div>
+            )}
           </section>
         ))}
       </div>

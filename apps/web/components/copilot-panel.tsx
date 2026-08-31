@@ -1,19 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { AlertCircle, Send, Sparkles, User as UserIcon } from "lucide-react";
 
+import { ComplianceFacts, CopilotSources } from "@/components/copilot-sources";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Citation } from "@/lib/types";
+import type { Citation, ComplianceFact } from "@/lib/types";
 
 export type CopilotMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
   citations?: Citation[];
+  facts?: ComplianceFact[];
   grounded?: boolean;
   provider?: string;
   isError?: boolean;
@@ -23,7 +24,11 @@ export type CopilotMessage = {
  * a page-specific chat widget. Grounding/citations are shown honestly:
  * only what the backend actually returns (no fabricated confidence score
  * or Facts/Analysis/Recommendations split, since /ai/copilot/ask returns
- * a single grounded answer, not structured sections). */
+ * a single grounded answer, not structured sections).
+ *
+ * An answer can rest on two different things, and they are shown apart:
+ * values read from Veyntra's compliance records, and passages from
+ * uploaded documents. See components/copilot-sources.tsx. */
 export function CopilotPanel({
   messages,
   onSend,
@@ -32,7 +37,6 @@ export function CopilotPanel({
   onInputChange,
   suggestedPrompts,
   placeholder = "Ask a question about your uploaded documents…",
-  citationHref,
 }: {
   messages: CopilotMessage[];
   onSend: (text: string) => void;
@@ -41,7 +45,6 @@ export function CopilotPanel({
   onInputChange: (value: string) => void;
   suggestedPrompts?: string[];
   placeholder?: string;
-  citationHref?: (citation: Citation) => string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +91,7 @@ export function CopilotPanel({
         ) : (
           <div className="flex flex-col gap-4">
             {messages.map((message) => (
-              <CopilotMessageBubble key={message.id} message={message} citationHref={citationHref} />
+              <CopilotMessageBubble key={message.id} message={message} />
             ))}
             {isLoading && (
               <div className="flex items-center gap-2 text-xs text-[var(--fg-subtle)]">
@@ -119,13 +122,7 @@ export function CopilotPanel({
   );
 }
 
-function CopilotMessageBubble({
-  message,
-  citationHref,
-}: {
-  message: CopilotMessage;
-  citationHref?: (citation: Citation) => string;
-}) {
+function CopilotMessageBubble({ message }: { message: CopilotMessage }) {
   if (message.role === "user") {
     return (
       <div className="flex items-start justify-end gap-2">
@@ -159,30 +156,32 @@ function CopilotMessageBubble({
           </div>
         )}
         <p className="whitespace-pre-wrap">{message.text}</p>
-        {!message.isError && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {message.provider === "demo" && <Badge variant="warning">Demo data</Badge>}
-            {message.grounded === false && <Badge variant="outline">No sources found</Badge>}
-            {message.grounded && message.citations && (
-              <Badge variant="ai">
-                {message.citations.length} source{message.citations.length === 1 ? "" : "s"}
-              </Badge>
-            )}
+        {!message.isError && message.provider === "demo" && (
+          <div className="mt-2">
+            <Badge variant="warning">Demo data</Badge>
           </div>
         )}
-        {message.citations && message.citations.length > 0 && (
-          <div className="mt-2 flex flex-col gap-1 border-t border-[var(--border-default)] pt-2">
-            {message.citations.map((citation) => (
-              <Link
-                key={citation.chunk_id}
-                href={citationHref ? citationHref(citation) : `/knowledge/${citation.document_id}`}
-                className="text-xs text-[var(--fg-muted)] hover:text-[var(--brand-primary)] hover:underline"
-              >
-                Document {citation.document_id.slice(0, 8)} · chunk {citation.chunk_index}
-              </Link>
-            ))}
-          </div>
+
+        {/* Veyntra's own records first: where the question was about
+            compliance state, they are the answer. */}
+        {message.facts && <ComplianceFacts facts={message.facts} />}
+
+        {message.citations && (
+          <CopilotSources citations={message.citations} answerLength={message.text.length} />
         )}
+
+        {/* Only worth saying when nothing at all backed the answer. An
+            answer read from the compliance records has sources — they are
+            simply not documents, and "No sources found" beside a block of
+            facts read straight from the database was a lie. */}
+        {!message.isError &&
+          message.grounded === false &&
+          !message.facts?.length &&
+          !message.citations?.length && (
+            <p className="mt-2 text-xs text-[var(--fg-subtle)]">
+              No documents or compliance records matched this question.
+            </p>
+          )}
       </div>
     </div>
   );

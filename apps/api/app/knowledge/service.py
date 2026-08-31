@@ -16,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.gateway import ModelGateway
 from app.core.models import File
-from app.knowledge.chunking import chunk_text, estimate_token_count
+from app.knowledge.chunking import chunk_document, estimate_token_count
 from app.knowledge.models import Document, DocumentChunk, KnowledgeBase
-from app.knowledge.parsing import UnsupportedFormatError, extract_text
+from app.knowledge.parsing import UnsupportedFormatError, extract_document
 
 DEFAULT_KNOWLEDGE_BASE_NAME = "General"
 
@@ -73,14 +73,16 @@ async def ingest_document(
     await db.flush()
 
     try:
-        text = extract_text(file_record.content_type, file_bytes)
+        extracted = extract_document(file_record.content_type, file_bytes)
     except UnsupportedFormatError as exc:
         document.status = "unsupported_format"
         document.error = str(exc)
         await db.commit()
         return document.status
 
-    chunks = chunk_text(text)
+    # Chunked with the page offsets from extraction, so each chunk knows
+    # the heading and page a citation will point the customer at.
+    chunks = chunk_document(extracted.text, page_starts=extracted.page_starts)
     if not chunks:
         document.status = "failed"
         document.error = "No extractable text content"
@@ -101,18 +103,20 @@ async def ingest_document(
         organization_id=document.organization_id,
         requested_by=document.created_by,
         task_type="knowledge.embed_document",
-        texts=chunks,
+        texts=[chunk.text for chunk in chunks],
     )
 
-    for index, (chunk_content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+    for index, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
         db.add(
             DocumentChunk(
                 organization_id=document.organization_id,
                 document_id=document.id,
                 chunk_index=index,
-                content=chunk_content,
+                content=chunk.text,
                 embedding=embedding,
-                token_count=estimate_token_count(chunk_content),
+                token_count=estimate_token_count(chunk.text),
+                section_label=chunk.section_label,
+                page_number=chunk.page_number,
             )
         )
 

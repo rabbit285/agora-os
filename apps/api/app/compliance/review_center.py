@@ -128,6 +128,75 @@ async def _evidence_mappings(
     return category
 
 
+async def _questionnaire_answers(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> ReviewCategory:
+    """Answers Veyntra drafted that it could not stand behind.
+
+    A questionnaire goes back to a customer over the organization's name,
+    so an answer the product is unsure of is exactly the kind of decision
+    the Review Center exists to surface. The reason travels with it —
+    "needs review" without saying what is missing just moves the guessing
+    somewhere else.
+    """
+    from app.compliance.models import Questionnaire, QuestionnaireAnswer, QuestionnaireQuestion
+
+    category = ReviewCategory(
+        key="questionnaire_answers",
+        label="Questionnaire answers",
+        description=(
+            "Veyntra drafted these answers but could not confirm them. They go to a "
+            "customer over your name, so a person decides."
+        ),
+    )
+    rows = list(
+        (
+            await db.execute(
+                select(QuestionnaireAnswer, QuestionnaireQuestion, Questionnaire)
+                .join(
+                    QuestionnaireQuestion,
+                    QuestionnaireQuestion.id == QuestionnaireAnswer.question_id,
+                )
+                .join(
+                    Questionnaire,
+                    Questionnaire.id == QuestionnaireQuestion.questionnaire_id,
+                )
+                .where(
+                    QuestionnaireAnswer.organization_id == organization_id,
+                    QuestionnaireAnswer.status == "needs_review",
+                    # Archived work is not outstanding work. Somebody who
+                    # put a questionnaire away is telling us they are not
+                    # working on it, and a review queue that keeps asking
+                    # about it is arguing with them. The answers are
+                    # untouched — restoring brings the item straight back.
+                    Questionnaire.archived_at.is_(None),
+                )
+                .order_by(QuestionnaireAnswer.updated_at.desc())
+            )
+        ).all()
+    )
+    for answer, question, questionnaire in rows:
+        confidence = (
+            f" Confidence {round(answer.confidence * 100)}%."
+            if answer.confidence is not None
+            else ""
+        )
+        category.items.append(
+            ReviewItem(
+                id=str(answer.id),
+                title=question.text[:200],
+                detail=(
+                    f"{questionnaire.title}. "
+                    f"{answer.review_reason or 'Waiting on your decision.'}"
+                    f"{confidence}"
+                ),
+                priority="high",
+                href=f"/compliance/questionnaires/{questionnaire.id}",
+            )
+        )
+    return category
+
+
 async def _framework_applicability(
     db: AsyncSession, organization_id: uuid.UUID, *, recommended_keys: list[str]
 ) -> ReviewCategory:
@@ -405,6 +474,7 @@ async def build_review_center(
         await _remediation_completion(db, organization_id),
         await _stale_assessments(db, organization_id),
         await _risk_acceptance(db, organization_id),
+        await _questionnaire_answers(db, organization_id),
         await _framework_applicability(
             db, organization_id, recommended_keys=recommended_framework_keys or []
         ),
