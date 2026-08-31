@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ClipboardCheck, LogOut, Menu, Search, Settings, User as UserIcon } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
-import { GlobalCreateButton } from "@/components/global-create-button";
 import { ModuleSwitcher } from "@/components/module-switcher";
 import { useSidebar } from "@/components/sidebar-context";
 import {
@@ -21,23 +20,29 @@ import {
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { useCurrentOrganization, useCurrentUser } from "@/lib/session";
-import type { Approval, Notification } from "@/lib/types";
+import type { Approval, Notification, ReviewCenter } from "@/lib/types";
 
 function NavIconLink({
   href,
   label,
   icon: Icon,
   count,
+  hint,
 }: {
   href: string;
   label: string;
   icon: typeof Bell;
   count?: number;
+  hint?: string;
 }) {
   return (
     <Link
       href={href}
       aria-label={count ? `${label} (${count} unread)` : label}
+      // A native title rather than a tooltip component: these are two
+      // icons in a header, and the accessible name is already carried by
+      // aria-label above. Screen readers get the label either way.
+      title={hint ?? label}
       className="btn-glow relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--nav-fg-muted)] transition-colors duration-[var(--transition-fast)] hover:bg-[var(--nav-hover)] hover:text-[var(--nav-fg)]"
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
@@ -70,7 +75,18 @@ export function TopNavigation() {
   });
 
   const unreadCount = notifications?.filter((n) => !n.read_at).length ?? 0;
-  const pendingApprovalsCount = approvals?.filter((a) => a.status === "pending").length ?? 0;
+  const { data: review } = useQuery<ReviewCenter>({
+    queryKey: ["compliance", "review-center"],
+    queryFn: () => apiFetch<ReviewCenter>("/api/v1/compliance/review-center"),
+  });
+
+  // Counts what the destination actually shows. Approvals are one of the
+  // Review Center categories, so badging this with approvals alone would
+  // under-report the work waiting behind the icon.
+  const reviewCount =
+    review?.total_needing_review ??
+    approvals?.filter((a) => a.status === "pending").length ??
+    0;
 
   async function handleLogout() {
     await apiFetch("/api/v1/auth/logout", { method: "POST" });
@@ -105,7 +121,6 @@ export function TopNavigation() {
         <ModuleSwitcher />
       </div>
       <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
-        <GlobalCreateButton />
         <div className="relative hidden w-56 lg:block">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--nav-fg-muted)]"
@@ -121,8 +136,20 @@ export function TopNavigation() {
             className="border-[var(--nav-border)] bg-[var(--nav-bg-elevated)] pl-8 text-[var(--nav-fg)] placeholder:text-[var(--nav-fg-muted)]"
           />
         </div>
-        <NavIconLink href="/approvals" label="Approvals" icon={ClipboardCheck} count={pendingApprovalsCount} />
-        <NavIconLink href="/notifications" label="Notifications" icon={Bell} count={unreadCount} />
+        <NavIconLink
+          href="/review"
+          label="Review Center"
+          hint="Review Center — decisions waiting on you"
+          icon={ClipboardCheck}
+          count={reviewCount}
+        />
+        <NavIconLink
+          href="/notifications"
+          label="Notifications"
+          hint="Notifications"
+          icon={Bell}
+          count={unreadCount}
+        />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

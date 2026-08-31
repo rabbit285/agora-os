@@ -14,9 +14,7 @@ from app.onboarding.schemas import (
     GoalsStepUpdate,
     OnboardingProfileOut,
     ReadinessOut,
-    SalesProfileStepUpdate,
     SecurityProfileStepUpdate,
-    SupportProfileStepUpdate,
 )
 from app.onboarding.service import compute_readiness, get_or_create_profile
 
@@ -93,33 +91,11 @@ async def update_security_profile_step(
     return profile
 
 
-@router.put("/sales-profile", response_model=OnboardingProfileOut)
-async def update_sales_profile_step(
-    payload: SalesProfileStepUpdate,
-    db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("org.settings.manage")),
-) -> OnboardingProfile:
-    profile = await get_or_create_profile(db, organization_id=context.organization_id)
-    profile.sales_focus = payload.sales_focus
-    await _advance(profile, 5)
-    await db.commit()
-    await db.refresh(profile)
-    return profile
-
-
-@router.put("/support-profile", response_model=OnboardingProfileOut)
-async def update_support_profile_step(
-    payload: SupportProfileStepUpdate,
-    db: AsyncSession = Depends(get_db),
-    context: OrgContext = Depends(require_permission("org.settings.manage")),
-) -> OnboardingProfile:
-    profile = await get_or_create_profile(db, organization_id=context.organization_id)
-    profile.support_channels = payload.support_channels
-    await _advance(profile, 6)
-    await db.commit()
-    await db.refresh(profile)
-    return profile
-
+# The sales-profile and support-profile steps were removed when Veyntra
+# narrowed to compliance. They collected a sales focus and a list of
+# support channels for modules that are no longer part of the product,
+# and their screens are gone — an endpoint whose only caller was a
+# deleted screen is dead weight, not an API.
 
 @router.post("/advance", response_model=OnboardingProfileOut)
 async def advance_step(

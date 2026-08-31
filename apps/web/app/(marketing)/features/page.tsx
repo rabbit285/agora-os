@@ -15,7 +15,7 @@ import { PageHero } from "@/components/marketing/page-hero";
 export const metadata: Metadata = {
   title: "Product — Veyntra",
   description:
-    "Compliance, security, sales, support, automation, AI governance, knowledge management, and an AI Copilot — one platform, permission-aware throughout.",
+    "Document intelligence, control mapping, deterministic assessments, DPIAs, subject access requests, vendor assurance and AI governance — permission-aware throughout.",
   alternates: { canonical: "/features" },
 };
 
@@ -44,34 +44,33 @@ const SECTIONS: { id: string; title: string; description: string; items: Feature
     ],
   },
   {
-    id: "sales",
-    title: "Sales",
-    description: "Company and people discovery through to pipeline and meetings.",
+    id: "document-intelligence",
+    title: "Document Intelligence",
+    description: "Upload a document once; Veyntra works out where it belongs.",
     items: [
-      { icon: TrendingUp, title: "Company & people discovery", description: "Search and research prospects with ICP scoring." },
-      { icon: TrendingUp, title: "Outreach & qualification", description: "Manage sequences with compliance-aware suppression built in." },
-      { icon: TrendingUp, title: "Pipeline & meetings", description: "Track opportunities and prep for meetings with AI-assisted notes." },
+      { icon: TrendingUp, title: "Automatic classification", description: "Each document is read and identified — a privacy notice, a RoPA, a security policy." },
+      { icon: TrendingUp, title: "Proposed control mappings", description: "The AI proposes which controls a document evidences, quoting the passage it relied on." },
+      { icon: TrendingUp, title: "Verified citations", description: "Every quote is checked against the source document. A quote that isn't there can never be approved." },
     ],
   },
   {
-    id: "support",
-    title: "Customer Support",
-    description: "Conversations, ticketing, and SLA tracking with AI assistance.",
+    id: "privacy",
+    title: "Privacy & Data Requests",
+    description: "DPIA screening through to subject access requests.",
     items: [
-      { icon: MessagesSquare, title: "Conversations & tickets", description: "One queue for customer conversations and tickets." },
-      { icon: MessagesSquare, title: "SLA tracking", description: "Know what's at risk before it breaches." },
-      { icon: MessagesSquare, title: "AI summaries & suggestions", description: "Faster responses, grounded in the actual conversation." },
-      { icon: MessagesSquare, title: "Escalation", description: "Route urgent issues to the right team automatically." },
+      { icon: MessagesSquare, title: "DPIA screening", description: "Processing activities screened against Art. 35(3) and the EDPB's nine criteria." },
+      { icon: MessagesSquare, title: "Risk & residual risk", description: "Inherent and residual risk on the same matrix, with unreassessed risks counted at inherent." },
+      { icon: MessagesSquare, title: "Subject access requests", description: "Identity verification, real data discovery, and an export that stays blocked until both are done." },
     ],
   },
   {
-    id: "automation",
-    title: "Automation",
-    description: "A workflow builder with triggers, approvals, and AI actions.",
+    id: "vendors",
+    title: "Vendor Assurance",
+    description: "Review vendors on the evidence they actually provided.",
     items: [
-      { icon: Workflow, title: "Workflow builder", description: "Build multi-step automations without writing code." },
-      { icon: Workflow, title: "Triggers & approvals", description: "Sensitive steps wait for a human review by default." },
-      { icon: Workflow, title: "Execution history", description: "Every run is logged and auditable." },
+      { icon: Workflow, title: "Questionnaires & documents", description: "Collect what a vendor claims and what they can show." },
+      { icon: Workflow, title: "Privacy & security reviews", description: "Separate reviews, each recorded against the evidence on file." },
+      { icon: Workflow, title: "Conditional approval", description: "Outstanding evidence produces a conditional approval with stated conditions, not a green tick." },
     ],
   },
   {
@@ -91,13 +90,13 @@ export default function FeaturesPage() {
     <div>
       <PageHero
         eyebrow="Product"
-        title="Everything your operations team needs,"
+        title="Everything a compliance team needs,"
         accent="in one place"
-        description="Compliance, security, sales, support, automation, and AI governance — sharing the same organization, permissions, and audit trail."
+        description="Document intelligence, control mapping, assessments, privacy workflows and vendor assurance — sharing the same organization, permissions, and audit trail."
       >
         <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-4 py-2 text-sm text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
           <Gauge className="h-4 w-4 text-[var(--brand-primary)]" aria-hidden="true" />
-          Plus an AI Copilot that works across every module below.
+          Assessments are deterministic — computed from your evidence, never a model&apos;s opinion.
         </p>
       </PageHero>
 

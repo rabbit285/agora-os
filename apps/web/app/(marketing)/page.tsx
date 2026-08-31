@@ -14,24 +14,24 @@ import { WorkflowExample } from "@/components/marketing/workflow-example";
 import { WorldMapBackdropLazy } from "@/components/marketing/world-map-backdrop-lazy";
 
 export const metadata: Metadata = {
-  title: "Veyntra — The secure AI operating system for SMEs",
+  title: "Veyntra — Upload once. AI does the compliance work.",
   description:
-    "Veyntra helps SMEs manage compliance, reduce security risk, find customers, support users, and automate daily operations from one intelligent workspace.",
+    "Veyntra reads your policies, proposes which controls they evidence, and shows you exactly where the gaps are — for GDPR, the EU AI Act, ISO 27001, NIS2, DORA and SOC 2.",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Veyntra — The secure AI operating system for SMEs",
+    title: "Veyntra — Upload once. AI does the compliance work.",
     description:
-      "Compliance, security, sales, support, and automation — from one governed workspace.",
+      "AI-proposed control mappings with verified citations. You approve every one.",
     url: "/",
     type: "website",
   },
 };
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect your business tools", description: "Bring in CRM, calendar, mail, and engineering data through read-only or configurable integrations." },
-  { step: "2", title: "Understand risks and opportunities", description: "Veyntra surfaces compliance gaps, security findings, and sales signals across your data." },
-  { step: "3", title: "Receive AI-assisted recommendations", description: "The AI Copilot proposes next actions, grounded in your organization's own records." },
-  { step: "4", title: "Review, approve, and automate", description: "Nothing sensitive runs without a human review — approved actions become repeatable automations." },
+  { step: "1", title: "Choose your frameworks", description: "Adopt GDPR, the EU AI Act, ISO 27001, NIS2, DORA or SOC 2. Veyntra builds the control set for you." },
+  { step: "2", title: "Upload your documents", description: "Policies, notices, procedures. Veyntra reads each one, works out what it is, and finds the controls it evidences." },
+  { step: "3", title: "Approve the mappings", description: "Every proposal quotes the passage it relied on, and the quote is checked against your document before you see it." },
+  { step: "4", title: "See what's actually missing", description: "A readiness score that shows its arithmetic, gaps that name the evidence they need, and tasks to close them." },
 ];
 
 export default function HomePage() {
@@ -62,8 +62,8 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-[var(--content-max-width)] px-4 py-28 sm:px-6 lg:px-8">
           <SectionHeader
             eyebrow="The problem"
-            title="Growing SMEs run on disconnected tools"
-            description="Compliance, security, sales, support, automation, and reporting usually live in five different systems that don't talk to each other."
+            title="Compliance evidence lives in a spreadsheet nobody trusts"
+            description="Policies sit in one drive, the control list in another, and the link between them exists only in somebody's memory — until an auditor asks."
           />
           <div className="mx-auto mt-12 grid max-w-3xl gap-6 sm:grid-cols-2">
             {[
@@ -141,16 +141,16 @@ export default function HomePage() {
             description="A critical security incident automatically creates a linked compliance risk for review."
           />
           <WorkflowExample
-            steps={[{ module: "Support", label: "Support" }, { module: "Security", label: "Security" }]}
-            description="A support escalation involving a security concern notifies the Security team directly."
+            steps={[{ module: "Compliance", label: "Documents" }, { module: "Compliance", label: "Evidence" }]}
+            description="An uploaded policy is read, classified, and proposed as evidence against the controls it actually supports."
           />
           <WorkflowExample
-            steps={[{ module: "Support", label: "Support" }, { module: "Sales", label: "Sales" }]}
-            description="An upsell signal detected in a support conversation can create a qualified Sales lead."
+            steps={[{ module: "Compliance", label: "Evidence" }, { module: "Compliance", label: "Assessment" }]}
+            description="Approving a mapping marks the control for reassessment — the previous conclusion is never silently rewritten."
           />
           <WorkflowExample
-            steps={[{ module: "Sales", label: "Sales" }, { module: "Compliance", label: "Compliance" }]}
-            description="A new enterprise opportunity can trigger a compliance security-review task automatically."
+            steps={[{ module: "Compliance", label: "Gap" }, { module: "Compliance", label: "Task" }]}
+            description="A gap becomes an owned, dated task linked back to the requirement and control that produced it."
           />
         </div>
       </section>

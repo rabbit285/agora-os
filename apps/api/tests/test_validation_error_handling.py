@@ -32,13 +32,18 @@ async def _signup(client: AsyncClient, email: str, org_name: str) -> uuid.UUID:
 
 
 async def test_custom_field_validator_error_returns_422_not_500(client: AsyncClient) -> None:
-    """app.automation.schemas.WorkflowCreate.trigger_type — a
-    pre-existing custom @field_validator that raises ValueError, never
-    previously exercised by an invalid value in any test."""
+    """app.memory.schemas.MemoryEntryCreate.entry_type — a custom
+    @field_validator that raises ValueError.
+
+    Originally asserted against automation's WorkflowCreate.trigger_type;
+    that module was withdrawn from the product, and a 404 from a missing
+    route would not exercise the validator at all. Memory is a live
+    module with the identical pattern, so the behaviour under test — a
+    raising validator surfacing as 422 rather than 500 — is unchanged."""
     await _signup(client, "validation1@example.com", "Validation Org 1")
     response = await client.post(
-        "/api/v1/automation/workflows",
-        json={"name": "Test Workflow", "trigger_type": "not_a_real_trigger"},
+        "/api/v1/memory",
+        json={"entry_type": "not_a_real_entry_type", "content": "x"},
     )
     assert response.status_code == 422, response.text
-    assert "Unsupported trigger_type" in response.text
+    assert "Unknown entry_type" in response.text

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import io
+from dataclasses import dataclass
 
 TEXT_CONTENT_TYPES = {"text/plain", "text/markdown", "text/csv"}
 PDF_CONTENT_TYPES = {"application/pdf"}
@@ -24,18 +25,38 @@ class UnsupportedFormatError(Exception):
         self.content_type = content_type
 
 
-def extract_text(content_type: str, data: bytes) -> str:
+@dataclass(frozen=True)
+class ExtractedDocument:
+    """Extracted text, plus where its pages begin.
+
+    `page_starts` holds the character offset at which each page starts, so
+    a citation can say "page 4" instead of a chunk number. It is empty for
+    formats that genuinely have no pages — a Markdown file or a .docx
+    paragraph stream does not, and a made-up page number sends the reader
+    somewhere that does not exist.
+    """
+
+    text: str
+    page_starts: tuple[int, ...] = ()
+
+
+def extract_document(content_type: str, data: bytes) -> ExtractedDocument:
     if content_type in TEXT_CONTENT_TYPES:
-        return _extract_text_plain(content_type, data)
+        return ExtractedDocument(_extract_text_plain(content_type, data))
     if content_type in PDF_CONTENT_TYPES:
         return _extract_pdf(data)
     if content_type in DOCX_CONTENT_TYPES:
-        return _extract_docx(data)
+        return ExtractedDocument(_extract_docx(data))
     if content_type in XLSX_CONTENT_TYPES:
-        return _extract_xlsx(data)
+        return ExtractedDocument(_extract_xlsx(data))
     if content_type in HTML_CONTENT_TYPES:
-        return _extract_html(data)
+        return ExtractedDocument(_extract_html(data))
     raise UnsupportedFormatError(content_type)
+
+
+def extract_text(content_type: str, data: bytes) -> str:
+    """Just the text, for the callers that only ever wanted that."""
+    return extract_document(content_type, data).text
 
 
 def _extract_text_plain(content_type: str, data: bytes) -> str:
@@ -48,11 +69,29 @@ def _extract_text_plain(content_type: str, data: bytes) -> str:
     return text
 
 
-def _extract_pdf(data: bytes) -> str:
+PAGE_SEPARATOR = "\n\n"
+
+
+def _extract_pdf(data: bytes) -> ExtractedDocument:
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
-    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+    pages = [page.extract_text() or "" for page in reader.pages]
+
+    # Assembled by hand rather than with join() because the offsets are
+    # the point: a citation resolves its page by asking which of these the
+    # passage starts after.
+    starts: list[int] = []
+    parts: list[str] = []
+    offset = 0
+    for index, page in enumerate(pages):
+        if index:
+            parts.append(PAGE_SEPARATOR)
+            offset += len(PAGE_SEPARATOR)
+        starts.append(offset)
+        parts.append(page)
+        offset += len(page)
+    return ExtractedDocument("".join(parts), tuple(starts))
 
 
 def _extract_docx(data: bytes) -> str:

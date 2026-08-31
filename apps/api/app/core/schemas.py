@@ -26,6 +26,10 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     status: str | None = Field(default=None, pattern="^(open|in_progress|done|cancelled)$")
     checklist: list[ChecklistItem] | None = None
+    # A remediation plan suggests a *team* — "HR / People" — because we
+    # do not know the customer's org chart. Naming the person is theirs
+    # to do, and the trail should say when they did it.
+    assignee_id: uuid.UUID | None = None
 
 
 class TaskCommentCreate(BaseModel):
@@ -56,6 +60,10 @@ class TaskEvidenceOut(BaseModel):
 
 class TaskActivityOut(BaseModel):
     action: str
+    # The same event as a sentence. Computed rather than stored so the
+    # wording can change without rewriting the audit trail, which must
+    # stay immutable.
+    label: str
     actor_user_id: uuid.UUID | None
     before_state: dict[str, Any] | None
     after_state: dict[str, Any] | None
@@ -176,11 +184,31 @@ class RoleOut(BaseModel):
     permissions: list[str]
 
 
+class OrganizationPersonOut(BaseModel):
+    """A colleague, as a form offers them.
+
+    Deliberately thin. This answers "who could I pick", not "who is in
+    this organization and what can they do" — that second question is
+    `MembershipOut`, and it needs a permission this one does not.
+    """
+
+    id: uuid.UUID
+    full_name: str | None = None
+    email: str
+
+    model_config = {"from_attributes": True}
+
+
 class MembershipOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     status: str
     roles: list[str]
+    # Who the member actually is. A picker that offers user ids is not a
+    # picker — anywhere the product asks "which person", it has to be
+    # able to show their name.
+    full_name: str | None = None
+    email: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -217,11 +245,26 @@ class FileUploadRequest(BaseModel):
     classification: str = Field(
         default="internal", pattern="^(public|internal|confidential|restricted)$"
     )
+    # SHA-256 of the file, computed by the client before uploading.
+    #
+    # Optional, and treated as a *hint*: uploads are presigned, so the API
+    # has no bytes to hash at this point and cannot verify the claim. It
+    # is used to answer "you already have this" before the customer waits
+    # through an upload and a full analysis, and the pipeline recomputes
+    # the hash from the real content the first time it reads the file —
+    # a wrong or absent claim costs an upload, never correctness.
+    content_hash: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
 
 
 class FileUploadResponse(BaseModel):
     file_id: uuid.UUID
-    upload_url: str
+    # Null when the file is already held: there is nothing to upload.
+    upload_url: str | None = None
+    # What the customer is told. `duplicate` means these exact bytes are
+    # already an analysed document; `processing` means an upload of them
+    # is in flight and a second pipeline must not be started.
+    status: str = "new"
+    message: str | None = None
 
 
 class FileOut(BaseModel):

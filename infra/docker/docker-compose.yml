@@ -52,6 +52,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      # Crash recovery after an unclean shutdown — Docker Desktop exiting
+      # takes the engine with it — fsyncs the whole data directory before
+      # accepting connections, which on this dataset takes about ninety
+      # seconds. Without a start period that is 5s x 10 retries = 50s of
+      # budget, so Postgres is marked unhealthy while it is still
+      # legitimately starting, and every service that `depends_on` it
+      # with `condition: service_healthy` aborts with "dependency failed
+      # to start". `restart: unless-stopped` does not save them: compose
+      # never started the containers, so there is nothing to restart.
+      #
+      # A start period is exactly this: time during which a failing check
+      # does not count against `retries`. Recovery is now waited out
+      # instead of being mistaken for a failure.
+      start_period: 180s
 
   redis:
     image: redis:7-alpine

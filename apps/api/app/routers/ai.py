@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.copilot import ask_copilot
-from app.ai.schemas import AIProviderStatusOut, CitationOut, CopilotAskRequest, CopilotAskResponse
+from app.ai.schemas import (
+    AIProviderStatusOut,
+    CitationOut,
+    ComplianceFactOut,
+    CopilotAskRequest,
+    CopilotAskResponse,
+)
 from app.config import settings
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -70,7 +76,17 @@ async def copilot_ask(
     """Retrieval-grounded Copilot (spec section 9): embeds the question,
     searches the organization's own document chunks, and answers using
     only what was retrieved — citations reflect what was actually fetched,
-    not anything the model asserts about itself (docs/AI_ARCHITECTURE.md)."""
+    not anything the model asserts about itself (docs/AI_ARCHITECTURE.md).
+
+    Two provenances leave here separately. `facts` are values read from
+    Veyntra's own compliance records; `citations` are places in uploaded
+    documents. They are never merged, because a control's status is not
+    something a document said.
+
+    Chunk ids stay behind: they are written to the AI request record for
+    traceability (app.ai.gateway) and resolved into a document title,
+    section and page for the customer (app.ai.citations).
+    """
     answer = await ask_copilot(
         db,
         organization_id=context.organization_id,
@@ -83,12 +99,20 @@ async def copilot_ask(
         provider=answer.provider,
         model=answer.model,
         grounded=answer.grounded,
+        facts=[
+            ComplianceFactOut(label=f.label, value=f.value, detail=f.detail)
+            for f in answer.facts
+        ],
         citations=[
             CitationOut(
+                reference=c.reference,
+                document_title=c.document_title,
+                section=c.section,
+                page=c.page,
+                passage=c.passage,
+                source_type=c.source_type,
                 document_id=c.document_id,
-                chunk_id=c.chunk_id,
-                chunk_index=c.chunk_index,
-                score=c.score,
+                href=c.href,
             )
             for c in answer.citations
         ],

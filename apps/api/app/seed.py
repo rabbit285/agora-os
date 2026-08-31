@@ -18,6 +18,7 @@ from app.ai.gateway import ModelGateway
 from app.automation.models import Workflow, WorkflowTemplate
 from app.automation.service import advance_run, start_run
 from app.billing.models import Subscription
+from app.compliance.catalog import CATALOG
 from app.compliance.models import (
     AIAssessment,
     AIIncident,
@@ -523,97 +524,59 @@ async def _seed_sample_document(
     return file_record.id
 
 
-CATALOG_FRAMEWORKS: dict[str, tuple[str, list[tuple[str, str]]]] = {
-    "gdpr": (
-        "GDPR",
-        [
-            ("Art. 5", "Principles relating to processing of personal data"),
-            ("Art. 30", "Records of processing activities"),
-            ("Art. 33", "Notification of a personal data breach"),
-            ("Art. 35", "Data protection impact assessment"),
-        ],
-    ),
-    "eu_ai_act": (
-        "EU AI Act",
-        [
-            ("Art. 9", "Risk management system"),
-            ("Art. 13", "Transparency and provision of information to users"),
-        ],
-    ),
-    "iso27001": (
-        "ISO 27001",
-        [
-            ("A.5.1", "Policies for information security"),
-            ("A.8.1", "Inventory of information and other associated assets"),
-        ],
-    ),
-    "iso42001": (
-        "ISO 42001",
-        [
-            ("6.1", "Actions to address risks and opportunities (AI management system)"),
-            ("8.4", "Third-party relationships in the AI system lifecycle"),
-        ],
-    ),
-    "soc2": (
-        "SOC 2",
-        [
-            ("CC6.1", "Logical and physical access controls"),
-            ("CC7.2", "System monitoring to detect security events"),
-        ],
-    ),
-    "nis2": (
-        "NIS2",
-        [
-            ("Art. 21", "Cybersecurity risk-management measures"),
-            ("Art. 23", "Reporting obligations for significant incidents"),
-        ],
-    ),
-    "dora": (
-        "DORA",
-        [
-            ("Art. 5", "ICT risk management framework"),
-            ("Art. 17", "ICT-related incident management process"),
-        ],
-    ),
-}
 
 
 async def _ensure_compliance_catalog(db: AsyncSession) -> dict[str, Requirement]:
-    """Idempotently seeds the global framework/requirement catalog (spec
-    section 12). Returns the GDPR requirements by reference code, which
-    the demo org's controls map to."""
+    """Idempotently seed the global framework/requirement catalog.
+
+    Reads app.compliance.catalog, which is the single definition of what
+    each framework requires. Existing requirements are updated in place
+    rather than skipped, so deepening the catalog reaches organizations
+    that were seeded against an earlier, shallower version — the whole
+    point of catalog depth is that it improves for everyone.
+
+    Returns the GDPR requirements by reference code for the demo data.
+    """
     gdpr_requirements: dict[str, Requirement] = {}
 
-    for key, (name, requirements) in CATALOG_FRAMEWORKS.items():
+    for catalog_framework in CATALOG:
         framework = (
-            await db.execute(select(Framework).where(Framework.key == key))
+            await db.execute(select(Framework).where(Framework.key == catalog_framework.key))
         ).scalar_one_or_none()
         if framework is None:
-            framework = Framework(key=key, name=name)
+            framework = Framework(key=catalog_framework.key, name=catalog_framework.name)
             db.add(framework)
             await db.flush()
 
-        for reference_code, title in requirements:
+        for entry in catalog_framework.requirements:
             requirement = (
                 await db.execute(
                     select(Requirement).where(
                         Requirement.framework_id == framework.id,
-                        Requirement.reference_code == reference_code,
+                        Requirement.reference_code == entry.code,
                     )
                 )
             ).scalar_one_or_none()
             if requirement is None:
                 requirement = Requirement(
-                    framework_id=framework.id, reference_code=reference_code, title=title
+                    framework_id=framework.id,
+                    reference_code=entry.code,
+                    title=entry.title,
+                    description=entry.description,
+                    sensitivity=entry.sensitivity,
                 )
                 db.add(requirement)
                 await db.flush()
-            if key == "gdpr":
-                gdpr_requirements[reference_code] = requirement
+            else:
+                requirement.title = entry.title
+                requirement.description = entry.description
+                requirement.sensitivity = entry.sensitivity
+
+            if catalog_framework.key == "gdpr":
+                gdpr_requirements[entry.code] = requirement
 
     await db.commit()
     return gdpr_requirements
-
 
 async def _seed_demo_compliance_data(
     db: AsyncSession,

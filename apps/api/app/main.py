@@ -38,27 +38,19 @@ from app.routers import (
     ai,
     approvals,
     audit,
-    automation,
     billing,
-    briefing,
     compliance,
     files,
     health,
-    integrations,
     knowledge,
     marketing,
     memory,
     notifications,
     onboarding,
     organizations,
-    recommendations,
-    reporting,
     rules_engine,
-    sales,
-    sales_lead_finder,
     search,
     security,
-    support,
     tasks,
     trust_center,
 )
@@ -137,7 +129,25 @@ def _error_envelope(
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return _error_envelope(request, exc.status_code, str(exc.detail))
+    """Carry a structured refusal through, rather than stringifying it.
+
+    A handler that raises `HTTPException(detail="...")` gets the sentence
+    it wrote. One that raises `detail={"code": ..., "message": ...}` is
+    saying something the screen can act on — offer an applicability link,
+    a framework picker — and `str()` on that dict produced a Python repr
+    in the customer's error banner. The message still lands where every
+    existing caller reads it; the code travels beside it.
+    """
+    detail = exc.detail
+    if isinstance(detail, dict) and "message" in detail:
+        code = detail.get("code")
+        return _error_envelope(
+            request,
+            exc.status_code,
+            str(detail["message"]),
+            {"code": code} if code else None,
+        )
+    return _error_envelope(request, exc.status_code, str(detail))
 
 
 @app.exception_handler(RequestValidationError)
@@ -301,16 +311,20 @@ app.include_router(ai.router)
 app.include_router(knowledge.router)
 app.include_router(compliance.router)
 app.include_router(security.router)
-app.include_router(sales.router)
-app.include_router(sales_lead_finder.router)
-app.include_router(support.router)
-app.include_router(automation.router)
-app.include_router(integrations.router)
 app.include_router(trust_center.router)
 app.include_router(search.router)
-app.include_router(reporting.router)
-app.include_router(recommendations.router)
-app.include_router(briefing.router)
 app.include_router(memory.router)
 app.include_router(rules_engine.router)
 app.include_router(marketing.router)
+
+# Retired from the product when Veyntra narrowed to compliance: sales,
+# sales_lead_finder, support, automation, integrations, reporting,
+# recommendations and briefing.
+#
+# Their modules are deliberately still importable, and their tables still
+# exist. `app.compliance.dsar` reads Lead, Contact, Customer and Ticket
+# during data discovery — personal data lives in those tables, and a
+# subject access request that cannot see them would be quietly wrong in a
+# way the requester could never detect. What is withdrawn is the HTTP
+# surface: no route means no way for a customer to reach a module this
+# product no longer offers or supports.

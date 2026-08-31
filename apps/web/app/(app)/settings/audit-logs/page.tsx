@@ -2,156 +2,191 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
+import { Search, ShieldCheck } from "lucide-react";
 
+import { AuditEventCard } from "@/components/audit/audit-event-card";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { AuditEvent } from "@/lib/types";
 
-/** Common starting points. The trail is queried by action prefix rather
- * than by a fixed category list, so a module added later is filterable
- * the day it starts recording events — no registry to keep in step. */
-const FILTERS: { label: string; prefix: string }[] = [
-  { label: "Everything", prefix: "" },
-  { label: "Compliance", prefix: "compliance." },
-  { label: "Gaps & remediation", prefix: "compliance.gap" },
-  { label: "DSARs", prefix: "compliance.dsar" },
-  { label: "Vendors", prefix: "compliance.vendor" },
-  { label: "AI systems", prefix: "compliance.ai_system" },
-  { label: "Trust Center", prefix: "trust_center" },
-  { label: "Billing", prefix: "billing." },
-  { label: "Security", prefix: "security." },
+/** The audit trail, for the people who actually read one.
+ *
+ * This page used to render the stored row: a module chip, the machine
+ * action name, `after {"status":"pass"}` and a bare UUID. Everything a
+ * compliance manager wants from it — what changed, to what, by whom —
+ * was present in the database and absent from the screen.
+ *
+ * The translation now happens server-side (app/audit/presentation.py) so
+ * every surface says the same words. This page arranges them and keeps
+ * the raw record one click away, under Technical details.
+ */
+
+/** Where an event belongs. Matched against `category` from the server,
+ * so a module added later is filterable the day it starts recording. */
+const CATEGORIES: { label: string; value: string }[] = [
+  { label: "All", value: "" },
+  { label: "Compliance", value: "compliance" },
+  { label: "Evidence & documents", value: "evidence" },
+  { label: "Gaps & remediation", value: "gaps" },
+  { label: "Policies", value: "policies" },
+  { label: "AI systems", value: "ai_systems" },
+  { label: "Privacy", value: "privacy" },
+  { label: "Vendors", value: "vendors" },
+  { label: "Security", value: "security" },
 ];
 
-function humanizeAction(action: string): string {
-  const [, ...rest] = action.split(".");
-  return rest.join(" ").replace(/_/g, " ") || action;
-}
+/** Who did it. A separate axis from *what area* — "show me everything
+ * Veyntra did on its own last week" is a different question from "show
+ * me the privacy events", and folding them into one chip row would make
+ * neither answerable. */
+const ACTORS: { label: string; value: string }[] = [
+  { label: "All actors", value: "" },
+  { label: "People", value: "person" },
+  { label: "Veyntra AI", value: "ai" },
+  { label: "Veyntra System", value: "system" },
+  { label: "Integrations", value: "integration" },
+];
 
-function moduleOf(action: string): string {
-  return action.split(".")[0] ?? "";
+function Chip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        active
+          ? "rounded-full bg-[var(--brand-primary)] px-3 py-1 text-xs font-medium text-[var(--fg-on-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+          : "rounded-full border border-[var(--border-default)] px-3 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]"
+      }
+    >
+      {label}
+    </button>
+  );
 }
 
 export default function AuditLogsPage() {
-  const [prefix, setPrefix] = useState("");
-  const [objectId, setObjectId] = useState("");
+  const [category, setCategory] = useState("");
+  const [actorKind, setActorKind] = useState("");
+  const [search, setSearch] = useState("");
 
   const { data, isLoading, error } = useQuery<AuditEvent[]>({
-    queryKey: ["audit-events", prefix, objectId],
+    queryKey: ["audit-events", category, actorKind, search],
     queryFn: () => {
       const params = new URLSearchParams({ limit: "200" });
-      if (prefix) params.set("action_prefix", prefix);
-      if (objectId.trim()) params.set("object_id", objectId.trim());
+      if (actorKind) params.set("actor_kind", actorKind);
+      if (search.trim()) params.set("q", search.trim());
       return apiFetch<AuditEvent[]>(`/api/v1/audit-events?${params.toString()}`);
     },
   });
+
+  // Category is applied here rather than as another query parameter:
+  // the server already labels each event's category, and filtering a
+  // loaded page keeps the chips instant while search and actor — which
+  // genuinely change which rows exist — go to the database.
+  const events = (data ?? []).filter(
+    (event) => !category || event.category === category
+  );
 
   return (
     <div>
       <PageHeader
         title="Audit Logs"
-        description="Who did what, and when. Records are append-only — they cannot be edited or deleted after the fact, including by an administrator."
+        description="What changed, to what, and who changed it."
       />
 
-      <Card className="mb-6">
-        <CardContent className="pt-6">
+      <Card className="mb-5">
+        <CardContent className="py-4">
           <p className="flex items-start gap-2 text-sm leading-relaxed text-[var(--fg-muted)]">
             <ShieldCheck
               className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success-600)]"
               aria-hidden="true"
             />
-            Entries are written as a side effect of the action they describe, and the database
-            rejects any attempt to change or remove one. There is no API for creating an entry
-            directly — an endpoint that allowed it would allow forging history.
+            Audit records are immutable. Veyntra records important human, AI and system actions
+            so changes can be traced over time.
           </p>
         </CardContent>
       </Card>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.label}
-            type="button"
-            onClick={() => setPrefix(filter.prefix)}
-            className={
-              prefix === filter.prefix
-                ? "rounded-full bg-[var(--brand-primary)] px-3 py-1 text-xs font-medium text-[var(--fg-on-primary)]"
-                : "rounded-full border border-[var(--border-default)] px-3 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-surface-hover)]"
-            }
-          >
-            {filter.label}
-          </button>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by area">
+          {CATEGORIES.map((option) => (
+            <Chip
+              key={option.value}
+              label={option.label}
+              active={category === option.value}
+              onClick={() => setCategory(option.value)}
+            />
+          ))}
+        </div>
+
+        <div className="relative ml-auto w-full sm:w-80">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--fg-subtle)]"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            aria-label="Search audit log"
+            placeholder="Search by person, control, framework, document or ID"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+      </div>
+
+      <div
+        className="mb-5 flex flex-wrap gap-2"
+        role="group"
+        aria-label="Filter by who performed the action"
+      >
+        {ACTORS.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            active={actorKind === option.value}
+            onClick={() => setActorKind(option.value)}
+          />
         ))}
-        <Input
-          placeholder="Trace one record by id"
-          value={objectId}
-          onChange={(e) => setObjectId(e.target.value)}
-          className="ml-auto max-w-xs"
-        />
       </div>
 
       {isLoading && <p className="text-sm text-[var(--fg-muted)]">Loading…</p>}
 
       {error && (
         <p className="text-sm text-[var(--critical-600)]">
-          {error instanceof ApiError
-            ? error.message
-            : "Could not load the audit trail."}
+          {error instanceof ApiError ? error.message : "Could not load the audit trail."}
         </p>
       )}
 
-      {data?.length === 0 && (
+      {data && events.length === 0 && (
         <p className="text-sm text-[var(--fg-muted)]">
-          No events match this filter yet.
+          {search.trim()
+            ? `Nothing in the audit trail matches “${search.trim()}”.`
+            : "No events match this filter yet."}
         </p>
       )}
 
-      <div className="flex flex-col gap-2">
-        {data?.map((event) => (
-          <Card key={event.id}>
-            <CardContent className="pt-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{moduleOf(event.action)}</Badge>
-                  <span className="font-medium text-[var(--fg-default)]">
-                    {humanizeAction(event.action)}
-                  </span>
-                  <span className="text-xs text-[var(--fg-subtle)]">{event.object_type}</span>
-                </div>
-                <span className="text-xs tabular-nums text-[var(--fg-subtle)]">
-                  {new Date(event.created_at).toLocaleString()}
-                </span>
-              </div>
-
-              {(event.before_state || event.after_state) && (
-                <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--fg-muted)]">
-                  {event.before_state && (
-                    <span>
-                      <span className="text-[var(--fg-subtle)]">before</span>{" "}
-                      {JSON.stringify(event.before_state)}
-                    </span>
-                  )}
-                  {event.after_state && (
-                    <span>
-                      <span className="text-[var(--fg-subtle)]">after</span>{" "}
-                      {JSON.stringify(event.after_state)}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {event.object_id && (
-                <p className="mt-1 font-mono text-[11px] text-[var(--fg-subtle)]">
-                  {event.object_id}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+      <ul className="flex flex-col gap-2">
+        {events.map((event) => (
+          <AuditEventCard key={event.id} event={event} />
         ))}
-      </div>
+      </ul>
+
+      {events.length > 0 && (
+        <p className="mt-4 text-xs text-[var(--fg-subtle)]">
+          Showing {events.length} event{events.length === 1 ? "" : "s"}, most recent first.
+        </p>
+      )}
     </div>
   );
 }

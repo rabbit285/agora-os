@@ -3,9 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { OnboardingStepper } from "@/components/auth/onboarding-stepper";
+import { DocumentLibrary } from "@/components/compliance/document-library";
+import { FrameworkApplicability } from "@/components/compliance/framework-applicability";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,33 +15,60 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { isSafeRedirectTarget } from "@/lib/auth-redirect";
-import {
-  ONBOARDING_GOALS,
-  type Framework,
-  type OnboardingProfile,
-  type Readiness,
-} from "@/lib/types";
+import type { AISystem, OnboardingProfile, Readiness } from "@/lib/types";
 
-// spec §68's 10 named steps, condensed to 9 real screens here: step 1
-// ("Company") and step 2 ("Business profile") are collected together on
-// one screen since spec gives step 1 no fields of its own beyond the
-// organization identity already captured at signup — see
-// docs/DECISIONS.md for the full reasoning.
+/** AI-first onboarding.
+ *
+ * The old flow asked for a sales focus and a list of support channels
+ * before it asked anything that decided a compliance obligation. This one
+ * collects only what changes the answer — what the company is, what AI it
+ * runs, and its documents — and each step leaves the product measurably
+ * more useful than the one before.
+ *
+ * Every step reuses the component that owns that job elsewhere in the
+ * product rather than a simplified copy. A customer who fills something
+ * in during onboarding and finds a different screen for it afterwards has
+ * been taught the wrong thing twice.
+ */
+
 const SCREEN_LABELS = [
   "Company",
-  "Goals",
-  "Compliance profile",
-  "Security profile",
-  "Sales profile",
-  "Support profile",
-  "Connect tools",
-  "Upload knowledge",
-  "AI analysis",
+  "What applies",
+  "AI systems",
+  "Documents",
+  "Readiness",
 ];
 
 const EMPLOYEE_RANGES = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
 
 const ONBOARDING_STEPS = SCREEN_LABELS.map((label) => ({ label }));
+
+function StepShell({
+  title,
+  description,
+  children,
+  onSkip,
+  skipLabel = "Skip for now",
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  onSkip?: () => void;
+  skipLabel?: string;
+}) {
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-[var(--fg-default)]">{title}</h2>
+      <p className="mb-4 mt-1 text-sm leading-relaxed text-[var(--fg-muted)]">{description}</p>
+      {children}
+      {onSkip && (
+        <Button variant="outline" size="sm" className="mt-4" onClick={onSkip}>
+          {skipLabel}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 function CompanyStep({ onDone }: { onDone: () => void }) {
   const [industry, setIndustry] = useState("");
@@ -55,288 +84,121 @@ function CompanyStep({ onDone }: { onDone: () => void }) {
   });
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">
-          Tell us about your company.
-        </p>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="industry">Industry</Label>
-          <Input id="industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="employee_count">Employee count</Label>
-          <select
-            id="employee_count"
-            className="flex h-9 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
-            value={employeeCountRange}
-            onChange={(e) => setEmployeeCountRange(e.target.value)}
+    <StepShell
+      title="Tell us about your company"
+      description="Two questions that shape everything after this."
+    >
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-6">
+          <div>
+            <Label htmlFor="industry">Industry</Label>
+            <Input
+              id="industry"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="B2B SaaS / AI software"
+            />
+          </div>
+          <div>
+            <Label htmlFor="employees">Employee count</Label>
+            <select
+              id="employees"
+              className="flex h-9 w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm text-[var(--fg-default)]"
+              value={employeeCountRange}
+              onChange={(e) => setEmployeeCountRange(e.target.value)}
+            >
+              {EMPLOYEE_RANGES.map((range) => (
+                <option key={range} value={range}>
+                  {range}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            className="self-start"
+            disabled={submit.isPending}
+            onClick={() => submit.mutate()}
           >
-            {EMPLOYEE_RANGES.map((range) => (
-              <option key={range} value={range}>
-                {range}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button
-          className="self-start"
-          disabled={!industry.trim() || submit.isPending}
-          onClick={() => submit.mutate()}
-        >
-          Continue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function GoalsStep({ onDone }: { onDone: () => void }) {
-  const [selected, setSelected] = useState<string[]>([]);
-
-  const submit = useMutation({
-    mutationFn: () =>
-      apiFetch<OnboardingProfile>("/api/v1/onboarding/goals", {
-        method: "PUT",
-        body: { selected_goals: selected },
-      }),
-    onSuccess: onDone,
-  });
-
-  function toggle(key: string) {
-    setSelected((prev) => (prev.includes(key) ? prev.filter((g) => g !== key) : [...prev, key]));
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">
-          What do you want to improve? Choose any that apply.
-        </p>
-        <div className="flex flex-col gap-2">
-          {ONBOARDING_GOALS.map((goal) => (
-            <label key={goal.key} className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
-              <input
-                type="checkbox"
-                checked={selected.includes(goal.key)}
-                onChange={() => toggle(goal.key)}
-              />
-              {goal.label}
-            </label>
-          ))}
-        </div>
-        <Button
-          className="self-start"
-          disabled={selected.length === 0 || submit.isPending}
-          onClick={() => submit.mutate()}
-        >
-          Continue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ComplianceProfileStep({ onDone }: { onDone: () => void }) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const { data: frameworks } = useQuery<Framework[]>({
-    queryKey: ["compliance", "frameworks"],
-    queryFn: () => apiFetch<Framework[]>("/api/v1/compliance/frameworks"),
-  });
-
-  const submit = useMutation({
-    mutationFn: () =>
-      apiFetch<OnboardingProfile>("/api/v1/onboarding/compliance-profile", {
-        method: "PUT",
-        body: { selected_framework_keys: selected },
-      }),
-    onSuccess: onDone,
-  });
-
-  function toggle(key: string) {
-    setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">
-          Which compliance frameworks matter to you?
-        </p>
-        <div className="flex flex-col gap-2">
-          {frameworks?.map((framework) => (
-            <label key={framework.key} className="flex items-center gap-2 text-sm text-[var(--fg-muted)]">
-              <input
-                type="checkbox"
-                checked={selected.includes(framework.key)}
-                onChange={() => toggle(framework.key)}
-              />
-              {framework.name}
-            </label>
-          ))}
-          {frameworks?.length === 0 && (
-            <p className="text-sm text-[var(--fg-subtle)]">No frameworks in the catalog yet.</p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button disabled={submit.isPending} onClick={() => submit.mutate()}>
             Continue
           </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </StepShell>
   );
 }
 
-function SecurityProfileStep({ onDone }: { onDone: () => void }) {
-  const [provider, setProvider] = useState("none");
+/** Adding an AI system during onboarding.
+ *
+ * Deliberately asks for the minimum that makes an inventory entry worth
+ * having — a name and a purpose. The governance detail that decides its
+ * obligations is asked for on the AI Systems screen, where the record can
+ * be filled in over time by the people who actually know the answers.
+ */
+function AISystemsStep({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [purpose, setPurpose] = useState("");
 
-  const submit = useMutation({
+  const { data: systems, refetch } = useQuery<AISystem[]>({
+    queryKey: ["compliance", "ai-systems"],
+    queryFn: () => apiFetch<AISystem[]>("/api/v1/compliance/ai-systems"),
+  });
+
+  const add = useMutation({
     mutationFn: () =>
-      apiFetch<OnboardingProfile>("/api/v1/onboarding/security-profile", {
-        method: "PUT",
-        body: { primary_cloud_provider: provider },
+      apiFetch("/api/v1/compliance/ai-systems", {
+        method: "POST",
+        body: { name, purpose },
       }),
-    onSuccess: onDone,
+    onSuccess: () => {
+      setName("");
+      setPurpose("");
+      void refetch();
+    },
   });
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">
-          What&apos;s your primary cloud provider?
-        </p>
-        <select
-          aria-label="Primary cloud provider"
-          className="flex h-9 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1 text-sm shadow-sm"
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
-        >
-          <option value="none">None / Not sure</option>
-          <option value="aws">AWS</option>
-          <option value="azure">Azure</option>
-          <option value="gcp">GCP</option>
-        </select>
-        <Button className="self-start" disabled={submit.isPending} onClick={() => submit.mutate()}>
-          Continue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
+    <StepShell
+      title="What AI do you run?"
+      description="Anything that uses a model — a support agent, an internal copilot, a feature in your own product. Third-party tools count: using ChatGPT or Copilot makes you a deployer under the EU AI Act."
+      onSkip={onDone}
+      skipLabel={systems?.length ? "Continue" : "We don't use AI yet"}
+    >
+      <Card className="mb-3">
+        <CardContent className="flex flex-col gap-3 pt-6">
+          <Input
+            placeholder="Name, e.g. Customer Support AI"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Input
+            placeholder="What it does, e.g. drafts replies from our knowledge base"
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+          />
+          <Button
+            className="self-start"
+            size="sm"
+            disabled={!name.trim() || !purpose.trim() || add.isPending}
+            onClick={() => add.mutate()}
+          >
+            Add AI system
+          </Button>
+        </CardContent>
+      </Card>
 
-function SalesProfileStep({ onDone }: { onDone: () => void }) {
-  const [focus, setFocus] = useState("");
-
-  const submit = useMutation({
-    mutationFn: () =>
-      apiFetch<OnboardingProfile>("/api/v1/onboarding/sales-profile", {
-        method: "PUT",
-        body: { sales_focus: focus },
-      }),
-    onSuccess: onDone,
-  });
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">What&apos;s your sales focus?</p>
-        <Input
-          placeholder="e.g. Enterprise SaaS accounts in Europe"
-          value={focus}
-          onChange={(e) => setFocus(e.target.value)}
-        />
-        <Button
-          className="self-start"
-          disabled={!focus.trim() || submit.isPending}
-          onClick={() => submit.mutate()}
-        >
-          Continue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-const SUPPORT_CHANNEL_OPTIONS = ["email", "chat", "phone"];
-
-function SupportProfileStep({ onDone }: { onDone: () => void }) {
-  const [selected, setSelected] = useState<string[]>([]);
-
-  const submit = useMutation({
-    mutationFn: () =>
-      apiFetch<OnboardingProfile>("/api/v1/onboarding/support-profile", {
-        method: "PUT",
-        body: { support_channels: selected },
-      }),
-    onSuccess: onDone,
-  });
-
-  function toggle(channel: string) {
-    setSelected((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
-    );
-  }
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <p className="text-sm text-[var(--fg-muted)]">
-          Which support channels do you use?
-        </p>
+      {(systems ?? []).length > 0 && (
         <div className="flex flex-col gap-2">
-          {SUPPORT_CHANNEL_OPTIONS.map((channel) => (
-            <label key={channel} className="flex items-center gap-2 text-sm capitalize text-[var(--fg-muted)]">
-              <input
-                type="checkbox"
-                checked={selected.includes(channel)}
-                onChange={() => toggle(channel)}
-              />
-              {channel}
-            </label>
+          {(systems ?? []).map((system) => (
+            <Card key={system.id}>
+              <CardContent className="py-3">
+                <div className="font-medium text-[var(--fg-default)]">{system.name}</div>
+                <div className="text-xs text-[var(--fg-subtle)]">{system.purpose}</div>
+              </CardContent>
+            </Card>
           ))}
         </div>
-        <Button disabled={submit.isPending} onClick={() => submit.mutate()}>
-          Continue
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PassThroughStep({
-  title,
-  description,
-  linkHref,
-  linkLabel,
-  onDone,
-}: {
-  title: string;
-  description: string;
-  linkHref: string;
-  linkLabel: string;
-  onDone: () => void;
-}) {
-  const advance = useMutation({
-    mutationFn: () => apiFetch<OnboardingProfile>("/api/v1/onboarding/advance", { method: "POST" }),
-    onSuccess: onDone,
-  });
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <div>
-          <h3 className="font-medium text-[var(--fg-default)]">{title}</h3>
-          <p className="text-sm text-[var(--fg-muted)]">{description}</p>
-        </div>
-        <Link href={linkHref} target="_blank" className="self-start">
-          <Button variant="outline">{linkLabel}</Button>
-        </Link>
-        <Button className="self-start" disabled={advance.isPending} onClick={() => advance.mutate()}>
-          Configure later
-        </Button>
-      </CardContent>
-    </Card>
+      )}
+    </StepShell>
   );
 }
 
@@ -349,12 +211,9 @@ function ReadinessStep() {
   });
 
   const complete = useMutation({
-    mutationFn: () => apiFetch<OnboardingProfile>("/api/v1/onboarding/complete", { method: "POST" }),
+    mutationFn: () =>
+      apiFetch<OnboardingProfile>("/api/v1/onboarding/complete", { method: "POST" }),
     onSuccess: () => {
-      // Honors a redirect carried through from signup (a visitor who hit
-      // a protected route while unauthenticated, then created a new
-      // account instead of logging in) — falls back to the dashboard for
-      // the overwhelmingly common case of no pending redirect.
       const requestedRedirect = searchParams.get("redirect");
       router.push(isSafeRedirectTarget(requestedRedirect) ? requestedRedirect : "/dashboard");
     },
@@ -362,53 +221,65 @@ function ReadinessStep() {
 
   const dimensions = readiness
     ? [
+        readiness.framework_adoption,
         readiness.compliance,
+        readiness.evidence_coverage,
         readiness.security,
-        readiness.sales_automation,
-        readiness.support_automation,
-        readiness.process_automation,
       ]
     : [];
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 pt-6">
-        <h3 className="font-medium text-[var(--fg-default)]">Your Business AI Readiness</h3>
-        {isLoading && <p className="text-sm text-[var(--fg-muted)]">Computing…</p>}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {dimensions.map((dimension) => (
-            <div key={dimension.label} className="rounded border border-[var(--border-default)] p-3 text-center">
-              <div className="text-2xl font-semibold text-[var(--fg-default)]">{dimension.percent}%</div>
-              <div className="text-xs text-[var(--fg-muted)]">{dimension.label}</div>
-            </div>
-          ))}
-        </div>
-        {readiness && readiness.opportunities.length > 0 && (
-          <div>
-            <h4 className="mb-2 text-sm font-medium text-[var(--fg-default)]">Top opportunities</h4>
-            <ul className="flex flex-col gap-1.5">
-              {readiness.opportunities.map((opportunity) => (
-                <li key={opportunity.title} className="text-sm text-[var(--fg-muted)]">
-                  <span className="font-medium">{opportunity.title}</span> — {opportunity.detail}
-                </li>
-              ))}
-            </ul>
+    <StepShell
+      title="Where you stand"
+      description="Computed from what is actually recorded, not a score we assigned you."
+    >
+      <Card>
+        <CardContent className="flex flex-col gap-4 pt-6">
+          {isLoading && <p className="text-sm text-[var(--fg-muted)]">Computing…</p>}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {dimensions.map((dimension) => (
+              <div
+                key={dimension.label}
+                className="rounded border border-[var(--border-default)] p-3 text-center"
+              >
+                <div className="text-2xl font-semibold text-[var(--fg-default)]">
+                  {dimension.percent}%
+                </div>
+                <div className="text-xs text-[var(--fg-muted)]">{dimension.label}</div>
+              </div>
+            ))}
           </div>
-        )}
-        <Button
-          className="self-start"
-          disabled={complete.isPending}
-          onClick={() => complete.mutate()}
-        >
-          Open Business Command Center
-        </Button>
-      </CardContent>
-    </Card>
+
+          {readiness && readiness.opportunities.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-[var(--fg-default)]">
+                What to do next
+              </h3>
+              <ul className="flex flex-col gap-1.5">
+                {readiness.opportunities.map((opportunity) => (
+                  <li key={opportunity.title} className="text-sm text-[var(--fg-muted)]">
+                    <span className="font-medium">{opportunity.title}</span> —{" "}
+                    {opportunity.detail}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Button
+            className="self-start"
+            disabled={complete.isPending}
+            onClick={() => complete.mutate()}
+          >
+            Go to my dashboard
+          </Button>
+        </CardContent>
+      </Card>
+    </StepShell>
   );
 }
 
 export default function OnboardingPage() {
-  const queryClient = useQueryClient();
   const [screen, setScreen] = useState<number | null>(null);
 
   const { data: status, isLoading } = useQuery<OnboardingProfile>({
@@ -416,58 +287,72 @@ export default function OnboardingPage() {
     queryFn: () => apiFetch<OnboardingProfile>("/api/v1/onboarding/status"),
   });
 
-  // `screen` overrides the resumed step once the user starts navigating
-  // within this session; before that, the resume point is derived
-  // directly from the fetched status at render time rather than synced
-  // via an effect.
-  const resumedScreen = status ? Math.min(status.current_step - 1, SCREEN_LABELS.length - 1) : null;
+  const resumedScreen = status
+    ? Math.min(status.current_step - 1, SCREEN_LABELS.length - 1)
+    : null;
   const effectiveScreen = screen ?? resumedScreen;
 
   function advanceScreen() {
-    queryClient.invalidateQueries({ queryKey: ["onboarding", "status"] });
     setScreen(Math.min((effectiveScreen ?? 0) + 1, SCREEN_LABELS.length - 1));
   }
 
   if (effectiveScreen === null) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Onboarding" description="A guided setup for your organization." />
+      <div className="mx-auto max-w-3xl">
+        <PageHeader title="Set up Veyntra" description="A few questions, then we get to work." />
         <p className="text-sm text-[var(--fg-muted)]">{isLoading ? "Loading…" : ""}</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader title="Onboarding" description="A guided setup for your organization — skip anything you'd rather configure later." />
+    <div className="mx-auto max-w-3xl">
+      <PageHeader
+        title="Set up Veyntra"
+        description="A few questions, then we get to work. Skip anything you would rather come back to."
+      />
       <div className="mb-8">
         <OnboardingStepper steps={ONBOARDING_STEPS} currentIndex={effectiveScreen} />
       </div>
+
       {effectiveScreen === 0 && <CompanyStep onDone={advanceScreen} />}
-      {effectiveScreen === 1 && <GoalsStep onDone={advanceScreen} />}
-      {effectiveScreen === 2 && <ComplianceProfileStep onDone={advanceScreen} />}
-      {effectiveScreen === 3 && <SecurityProfileStep onDone={advanceScreen} />}
-      {effectiveScreen === 4 && <SalesProfileStep onDone={advanceScreen} />}
-      {effectiveScreen === 5 && <SupportProfileStep onDone={advanceScreen} />}
-      {effectiveScreen === 6 && (
-        <PassThroughStep
-          title="Connect tools"
-          description="Connect a real integration now, or configure it later from Settings."
-          linkHref="/settings/integrations"
-          linkLabel="Open Integrations"
-          onDone={advanceScreen}
-        />
+
+      {effectiveScreen === 1 && (
+        <StepShell
+          title="What applies to you"
+          description="Answer these and Veyntra works out which frameworks you are held to, and explains why. Adopting one builds its control set, which is what your documents map to."
+          onSkip={advanceScreen}
+          skipLabel="Continue"
+        >
+          {/* The same component the Compliance screen uses. A customer who
+              answers these here and meets a different form later has been
+              taught the wrong thing twice. */}
+          <FrameworkApplicability />
+        </StepShell>
       )}
-      {effectiveScreen === 7 && (
-        <PassThroughStep
-          title="Upload knowledge"
-          description="Upload a document now, or add it later from Knowledge."
-          linkHref="/knowledge"
-          linkLabel="Open Knowledge"
-          onDone={advanceScreen}
-        />
+
+      {effectiveScreen === 2 && <AISystemsStep onDone={advanceScreen} />}
+
+      {effectiveScreen === 3 && (
+        <StepShell
+          title="Upload your documents"
+          description="Privacy notice, security policy, DPA, AI policy — whatever you already have. Veyntra reads each one and proposes which controls it evidences. You do not need to map anything by hand."
+          onSkip={advanceScreen}
+          skipLabel="Continue"
+        >
+          <DocumentLibrary />
+          <p className="mt-2 text-xs text-[var(--fg-subtle)]">
+            Processing continues in the background — you can move on without waiting, and
+            review the proposals from{" "}
+            <Link href="/documents" className="underline">
+              Documents
+            </Link>{" "}
+            at any time.
+          </p>
+        </StepShell>
       )}
-      {effectiveScreen === 8 && <ReadinessStep />}
+
+      {effectiveScreen === 4 && <ReadinessStep />}
     </div>
   );
 }

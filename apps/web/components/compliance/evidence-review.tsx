@@ -1,18 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, Quote, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Check, Quote, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApiError, apiFetch } from "@/lib/api";
-import { uploadFile } from "@/lib/upload";
 import type { Control, EvidenceSuggestion } from "@/lib/types";
 
-/** Upload a document, let the model propose where it belongs, approve or
- * reject each proposal.
+/** Review the mappings the model proposed, and approve or reject each one.
+ *
+ * Uploading lives in `DocumentLibrary`, immediately above this on the
+ * page. There was briefly a second uploader here, which meant two boxes
+ * doing the same job with different behaviour — one analysed on upload,
+ * the other needed a second click. Reviewing is the job here.
  *
  * The screen is built around the fact that a proposal is *not* evidence.
  * Every card leads with the passage the model quoted and whether that
@@ -24,12 +26,6 @@ import type { Control, EvidenceSuggestion } from "@/lib/types";
  */
 export function EvidenceReview() {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [lastRun, setLastRun] = useState<{
-    controls_considered: number;
-    unverifiable_count: number;
-  } | null>(null);
 
   const { data: suggestions } = useQuery<EvidenceSuggestion[]>({
     queryKey: ["compliance", "evidence-suggestions"],
@@ -45,31 +41,10 @@ export function EvidenceReview() {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["compliance", "evidence-suggestions"] });
     void queryClient.invalidateQueries({ queryKey: ["compliance", "evidence"] });
+    // The readiness panel is the visible end of this chain, so it has
+    // to move when evidence does.
+    void queryClient.invalidateQueries({ queryKey: ["compliance", "overview"] });
   };
-
-  const analyze = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("Choose a document first.");
-      const fileId = await uploadFile(file, { classification: "confidential" });
-      return apiFetch<{
-        suggestions: EvidenceSuggestion[];
-        controls_considered: number;
-        unverifiable_count: number;
-      }>("/api/v1/compliance/evidence/analyze", {
-        method: "POST",
-        body: { file_id: fileId },
-      });
-    },
-    onSuccess: (data) => {
-      setLastRun({
-        controls_considered: data.controls_considered,
-        unverifiable_count: data.unverifiable_count,
-      });
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      refresh();
-    },
-  });
 
   const approve = useMutation({
     mutationFn: (id: string) =>
@@ -91,62 +66,25 @@ export function EvidenceReview() {
 
   const pending = (suggestions ?? []).filter((s) => s.status === "proposed");
   const unverifiable = (suggestions ?? []).filter((s) => s.status === "unverifiable");
-  const error = analyze.error ?? approve.error ?? reject.error;
+  const error = approve.error ?? reject.error;
 
   return (
     <div className="mb-8">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
-        Document intelligence
+        Evidence awaiting your review
       </h2>
 
-      <Card className="mb-4">
-        <CardContent className="pt-6">
-          <p className="mb-3 text-sm leading-relaxed text-[var(--fg-muted)]">
-            Upload a policy or procedure and Veyntra will read it against your controls and
-            propose where it belongs. Proposals are not evidence — nothing reaches your
-            compliance status until you approve it.
-          </p>
-
-          <div className="flex flex-col gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="text-sm text-[var(--fg-muted)] file:mr-3 file:rounded-[var(--radius-md)] file:border file:border-[var(--border-default)] file:bg-[var(--bg-surface)] file:px-3 file:py-1.5 file:text-sm file:text-[var(--fg-default)]"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-            <div>
-              <Button disabled={!file || analyze.isPending} onClick={() => analyze.mutate()}>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                {analyze.isPending ? "Reading the document…" : "Analyze for evidence"}
-              </Button>
-            </div>
-          </div>
-
-          {lastRun && (
-            <p className="mt-3 text-xs text-[var(--fg-subtle)]">
-              Checked against {lastRun.controls_considered} control
-              {lastRun.controls_considered === 1 ? "" : "s"}.
-              {lastRun.unverifiable_count > 0 && (
-                <>
-                  {" "}
-                  {lastRun.unverifiable_count} proposal
-                  {lastRun.unverifiable_count === 1 ? " was" : "s were"} discarded because the
-                  quoted passage could not be found in the document.
-                </>
-              )}
-            </p>
-          )}
-
-          {error && (
-            <p className="mt-3 text-sm text-[var(--critical-600)]">
-              {error instanceof ApiError ? error.message : (error as Error).message}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {error && (
+        <p className="mb-3 text-sm text-[var(--critical-600)]">
+          {error instanceof ApiError ? error.message : (error as Error).message}
+        </p>
+      )}
 
       {pending.length === 0 && unverifiable.length === 0 && (
-        <p className="text-sm text-[var(--fg-muted)]">No proposals awaiting review.</p>
+        <p className="text-sm text-[var(--fg-muted)]">
+          No proposals awaiting review. Upload a document above and Veyntra will propose which
+          controls it evidences.
+        </p>
       )}
 
       <div className="flex flex-col gap-3">
@@ -175,9 +113,21 @@ export function EvidenceReview() {
                   className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--fg-subtle)]"
                   aria-hidden="true"
                 />
-                <p className="text-sm italic leading-relaxed text-[var(--fg-default)]">
-                  {suggestion.quoted_passage}
-                </p>
+                <div>
+                  <p className="text-sm italic leading-relaxed text-[var(--fg-default)]">
+                    {suggestion.quoted_passage}
+                  </p>
+                  {/* Where to look. Without it, checking a citation means
+                      re-reading the whole document. */}
+                  {suggestion.source_location && (
+                    <p className="mt-1.5 text-xs text-[var(--fg-subtle)]">
+                      {suggestion.source_location}
+                      {suggestion.evidence_type
+                        ? ` · ${suggestion.evidence_type.replace(/_/g, " ")}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
               </blockquote>
 
               <div className="flex flex-wrap items-center gap-2">

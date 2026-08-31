@@ -24,11 +24,10 @@ const schema = z.object({
   primary_interest: z.enum([
     "compliance",
     "security",
-    "sales",
-    "support",
-    "automation",
+    "document_intelligence",
+    "privacy",
+    "vendor_assurance",
     "ai_governance",
-    "knowledge_management",
     "ai_copilot",
     "other",
   ]),
@@ -40,12 +39,11 @@ type FormValues = z.infer<typeof schema>;
 const INTEREST_LABELS: Record<FormValues["primary_interest"], string> = {
   compliance: "Compliance",
   security: "Security",
-  sales: "Sales",
-  support: "Customer Support",
-  automation: "Workflow Automation",
+  document_intelligence: "Document Intelligence",
+  privacy: "Privacy & Data Requests",
+  vendor_assurance: "Vendor Assurance",
   ai_governance: "AI Governance",
-  knowledge_management: "Knowledge Management",
-  ai_copilot: "AI Copilot",
+  ai_copilot: "Compliance Copilot",
   other: "Other",
 };
 

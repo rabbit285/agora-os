@@ -17,7 +17,7 @@ export function FinalCTA() {
       <div className="relative mx-auto max-w-3xl px-4 py-24 text-center sm:px-6 lg:px-8">
         <LogoMark size={56} className="mx-auto" idSuffix="final-cta" />
         <h2 className="mt-8 text-[length:var(--text-3xl)] font-semibold tracking-tight text-white">
-          Bring your compliance, security, sales, and operations into one intelligent workspace.
+          Stop mapping documents to controls by hand.
         </h2>
         <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">

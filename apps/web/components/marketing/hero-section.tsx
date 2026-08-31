@@ -29,18 +29,18 @@ export function HeroSection() {
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)]/80 px-3 py-1 text-xs font-medium text-[var(--fg-muted)] shadow-[var(--shadow-sm)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-[var(--brand-spark)]" aria-hidden="true" />
-            Governed AI for SMEs
+            Governed AI for compliance teams
           </p>
 
           <h1 className="mt-6 text-[length:var(--text-display-2)] font-semibold leading-[1.06] tracking-tight text-[var(--fg-default)] sm:text-[length:var(--text-display-1)]">
-            Run compliance, security, sales, and operations{" "}
-            <span className="brand-gradient-text">from one secure AI platform</span>.
+            Upload your policies.{" "}
+            <span className="brand-gradient-text">AI does the compliance work</span>.
           </h1>
 
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--fg-muted)]">
-            Veyntra helps SMEs manage compliance, reduce security risk, find
-            customers, support users, and automate daily operations from one intelligent
-            workspace.
+            Veyntra reads your documents, proposes which controls they evidence, and shows
+            you exactly where the gaps are — for GDPR, the EU AI Act, ISO 27001 and more.
+            You approve the mappings. Nothing counts as evidence until you do.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -57,8 +57,8 @@ export function HeroSection() {
               className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand-teal)]"
               aria-hidden="true"
             />
-            Designed for growing businesses that need practical AI with governance,
-            visibility, and control.
+            Every proposal quotes your document, and every quote is checked against the
+            source before you are asked to approve it.
           </p>
         </div>
 
@@ -72,7 +72,7 @@ export function HeroSection() {
           <div className="relative">
             <Image
               src="/images/hero-workspace.png"
-              alt="Teams across compliance, security, sales, and customer support working from shared dashboards"
+              alt="A compliance team reviewing AI-proposed control mappings against their uploaded policies"
               width={1536}
               height={1024}
               // Largest element above the fold, so it is the likely LCP

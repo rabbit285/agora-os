@@ -101,8 +101,13 @@ async def test_employee_role_can_create_tasks_and_use_knowledge_and_copilot(
     creation = await client.post("/api/v1/tasks", json={"title": "Employees can do this"})
     assert creation.status_code == 201
 
-    # Still has no module-specific manage permission (e.g. Sales).
-    forbidden = await client.post("/api/v1/sales/accounts", json={"name": "Should be forbidden"})
+    # Still has no module-specific manage permission. Uses a compliance
+    # endpoint rather than the sales one this originally asserted against:
+    # sales was withdrawn from the product, and a 404 from a missing route
+    # would pass for a denial without proving anything about RBAC.
+    forbidden = await client.post(
+        "/api/v1/compliance/controls", json={"title": "Should be forbidden"}
+    )
     assert forbidden.status_code == 403
 
 

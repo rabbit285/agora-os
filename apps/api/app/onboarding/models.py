@@ -39,6 +39,26 @@ class OnboardingProfile(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     selected_goals: Mapped[list[str]] = mapped_column(JSON, default=list)
     # Step 4: Compliance profile — which seeded Frameworks matter to them.
     selected_framework_keys: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Company facts that determine which frameworks are in scope. Kept
+    # here rather than inferred, because framework applicability is a
+    # legal question and every recommendation has to be traceable to
+    # something the organization actually declared — see
+    # app.compliance.framework_applicability.
+    #
+    # All default False: an unanswered question must never manufacture an
+    # obligation.
+    operates_in_eu: Mapped[bool] = mapped_column(default=False, nullable=False)
+    sells_to_eu_customers: Mapped[bool] = mapped_column(default=False, nullable=False)
+    processes_personal_data: Mapped[bool] = mapped_column(default=False, nullable=False)
+    processes_special_category_data: Mapped[bool] = mapped_column(
+        default=False, nullable=False
+    )
+    uses_third_party_ai: Mapped[bool] = mapped_column(default=False, nullable=False)
+    builds_ai_features: Mapped[bool] = mapped_column(default=False, nullable=False)
+    is_data_processor: Mapped[bool] = mapped_column(default=False, nullable=False)
+    sells_to_enterprise: Mapped[bool] = mapped_column(default=False, nullable=False)
+    sector: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
     # Step 5: Security profile.
     primary_cloud_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Step 6: Sales profile.

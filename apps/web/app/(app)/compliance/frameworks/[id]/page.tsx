@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, CircleDashed, FileWarning, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  FileWarning,
+  Info,
+  MoreHorizontal,
+} from "lucide-react";
 
 import { AttachEvidence } from "@/components/compliance/attach-evidence";
 import { MapControl } from "@/components/compliance/map-control";
@@ -11,29 +18,134 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApiError, apiFetch } from "@/lib/api";
 import type {
   ComplianceGap,
   FrameworkActivation,
   FrameworkAssessmentResult,
   FrameworkDashboard,
-  RequirementEvaluation,
+  FrameworkDashboardRequirement,
+  RequirementStatus,
 } from "@/lib/types";
 
 /** How each assessed position is presented. The labels avoid asserting a
  * legal conclusion: "Evidence missing" describes the state of our record,
  * where "Non-compliant" would be a verdict this system is not entitled to
  * reach. See app/compliance/assessment.py for the same reasoning. */
+/** One label per state, and the labels say what the state means.
+ *
+ * The previous map had `partial` reading "Needs review" and
+ * `needs_review` reading "Assessment failed" — two states crossed over
+ * each other, which is why one requirement could show "Needs review"
+ * beside a confirmed gap and a Remediating badge. */
 const STATUS_PRESENTATION: Record<
-  RequirementEvaluation["status"],
+  RequirementStatus,
   { label: string; variant: "success" | "destructive" | "secondary" | "outline"; icon: typeof Info }
 > = {
   satisfied: { label: "Satisfied", variant: "success", icon: CheckCircle2 },
-  partial: { label: "Needs review", variant: "secondary", icon: Info },
-  needs_review: { label: "Assessment failed", variant: "destructive", icon: AlertTriangle },
+  needs_review: { label: "Awaiting review", variant: "secondary", icon: Info },
+  deficient: { label: "Gap identified", variant: "destructive", icon: AlertTriangle },
+  assessment_failed: { label: "Assessment failed", variant: "destructive", icon: AlertTriangle },
   evidence_missing: { label: "Evidence missing", variant: "destructive", icon: FileWarning },
   not_assessed: { label: "No control mapped", variant: "outline", icon: CircleDashed },
+  not_applicable: { label: "Does not apply", variant: "outline", icon: CircleDashed },
 };
+
+/** The last recorded human verdict, in words.
+ *
+ * Null means nobody has recorded one — which is "Assessment pending",
+ * not "none" and certainly not the internal `nothing yet` this used to
+ * surface. A missing assessment is a step not yet taken, and saying so
+ * tells the reader what happens next. */
+const ASSESSMENT_LABEL: Record<string, string> = {
+  pass: "Assessed as passing",
+  fail: "Assessed as failing",
+  partial: "Partially assessed",
+  not_assessed: "Assessment pending",
+};
+
+/** Manual mapping and attachment, demoted.
+ *
+ * These are the escape hatch for when document intelligence did not
+ * find something — real, but not the path the product wants anyone on.
+ * Keeping them as primary buttons beside every requirement taught the
+ * customer to do by hand the work they bought this to avoid. */
+function RequirementActions({
+  requirement,
+  frameworkId,
+  onChanged,
+}: {
+  requirement: FrameworkDashboardRequirement;
+  frameworkId: string;
+  onChanged: () => void;
+}) {
+  const [mapping, setMapping] = useState(false);
+  const [attachingTo, setAttachingTo] = useState<string | null>(null);
+
+  return (
+    <div className="w-full">
+      {!mapping && attachingTo === null && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost">
+              <MoreHorizontal className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              More
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Do this by hand</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setMapping(true)}>
+              Map another control
+            </DropdownMenuItem>
+            {/* Offered per mapped control rather than once per
+                requirement: evidence attaches to a control, and a
+                requirement answered by two controls needs to say which
+                one a document supports. */}
+            {requirement.controls.map((control) => (
+              <DropdownMenuItem
+                key={control.id}
+                onSelect={() => setAttachingTo(control.id)}
+              >
+                {requirement.controls.length > 1
+                  ? `Attach evidence to ${control.title}`
+                  : "Attach evidence"}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      <MapControl
+        requirementId={requirement.id}
+        requirementCode={requirement.reference_code}
+        frameworkId={frameworkId}
+        mappedControlIds={requirement.controls.map((c) => c.id)}
+        open={mapping}
+        onOpenChange={setMapping}
+      />
+
+      {requirement.controls.map((control) => (
+        <AttachEvidence
+          key={control.id}
+          controlId={control.id}
+          compact
+          open={attachingTo === control.id}
+          onOpenChange={(next) => setAttachingTo(next ? control.id : null)}
+          onAttached={onChanged}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function FrameworkDashboardPage({
   params,
@@ -138,6 +250,7 @@ export default function FrameworkDashboardPage({
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-center gap-6">
+              <Stat label="Readiness" value={`${result.readiness.percent}%`} />
               <Stat label="Satisfied" value={`${result.satisfied_count}/${result.requirements.length}`} />
               <Stat label="Evidence coverage" value={`${result.evidence_coverage_percent}%`} />
               <Stat label="Open gaps" value={String(result.gap_count)} />
@@ -145,7 +258,15 @@ export default function FrameworkDashboardPage({
                 Assessed {new Date(result.assessed_at).toLocaleString()}
               </p>
             </div>
-            <p className="mt-4 text-xs leading-relaxed text-[var(--fg-subtle)]">
+
+            {/* The score never appears without its arithmetic. A bare
+                percentage is not something the person accountable for it
+                can act on — their next question is always "which ones". */}
+            <p className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-app)] p-3 text-sm leading-relaxed text-[var(--fg-default)]">
+              {result.readiness.explanation}
+            </p>
+
+            <p className="mt-3 text-xs leading-relaxed text-[var(--fg-subtle)]">
               Statuses are computed from mapped controls, attached evidence, and recorded
               assessments — not inferred. A requirement with no evidence means nothing
               demonstrating it has been found in Veyntra, which is not a finding that the
@@ -208,44 +329,62 @@ export default function FrameworkDashboardPage({
                   </p>
                 )}
 
-                {evaluation && (
+                {evaluation && evaluation.missing_conditions.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--fg-subtle)]">
+                      Not covered by the evidence on file
+                    </p>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {evaluation.missing_conditions.map((condition) => (
+                        <li
+                          key={condition}
+                          className="flex items-start gap-2 text-sm text-[var(--fg-muted)]"
+                        >
+                          <FileWarning className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span>{condition}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {evaluation && evaluation.status !== "not_applicable" && (
                   <p className="mt-2 text-xs text-[var(--fg-subtle)]">
                     {evaluation.evidence_count} evidence item
                     {evaluation.evidence_count === 1 ? "" : "s"} ·{" "}
                     {evaluation.control_ids.length} control
-                    {evaluation.control_ids.length === 1 ? "" : "s"} · last assessment:{" "}
-                    {evaluation.latest_assessment_status ?? "none"}
+                    {evaluation.control_ids.length === 1 ? "" : "s"} ·{" "}
+                    {ASSESSMENT_LABEL[evaluation.latest_assessment_status ?? ""] ??
+                      "Assessment pending"}
                   </p>
                 )}
 
+                {/* Mapping and attaching by hand are the fallback, not the
+                    workflow. Once a control is mapped they are demoted to a
+                    More menu: the product's own answer to "what do I do
+                    next" is to upload a document and let it be read, and a
+                    row of manual buttons beside every requirement argues
+                    the opposite. They stay primary while nothing is mapped,
+                    because then there genuinely is nothing else to do. */}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <MapControl
-                    requirementId={requirement.id}
-                    requirementCode={requirement.reference_code}
-                    frameworkId={id}
-                    mappedControlIds={requirement.controls.map((c) => c.id)}
-                  />
-                  {/* Offered per mapped control rather than once per
-                      requirement: evidence attaches to a control, and a
-                      requirement answered by two controls needs to say
-                      which one a document supports. */}
-                  {requirement.controls.map((control) => (
-                    <AttachEvidence
-                      key={control.id}
-                      controlId={control.id}
-                      label={
-                        requirement.controls.length > 1
-                          ? `Attach evidence to ${control.title}`
-                          : "Attach evidence"
-                      }
-                      compact
-                      onAttached={() => {
+                  {requirement.controls.length === 0 ? (
+                    <MapControl
+                      requirementId={requirement.id}
+                      requirementCode={requirement.reference_code}
+                      frameworkId={id}
+                      mappedControlIds={[]}
+                    />
+                  ) : (
+                    <RequirementActions
+                      requirement={requirement}
+                      frameworkId={id}
+                      onChanged={() => {
                         void queryClient.invalidateQueries({
                           queryKey: ["compliance", "frameworks", id, "dashboard"],
                         });
                       }}
                     />
-                  ))}
+                  )}
                 </div>
 
                 {gap && gap.status !== "resolved" && (
@@ -269,6 +408,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+const SEVERITY_LABEL: Record<string, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
 /** The gap, its recommendation, and the two actions that move it forward.
  * Kept inline with the requirement rather than on a separate screen: the
  * reader is already looking at the thing that is deficient. */
@@ -285,11 +430,15 @@ function GapPanel({ gap, frameworkId }: { gap: ComplianceGap; frameworkId: strin
     onSuccess: invalidate,
   });
 
+  // Empty body on purpose. The remediation plan already carries a
+  // priority derived from severity and a due date derived from how long
+  // the work actually takes; sending "high / 7 days" from here gave a
+  // training programme the same deadline as a one-line policy edit.
   const createTask = useMutation({
     mutationFn: () =>
       apiFetch(`/api/v1/compliance/gaps/${gap.id}/task`, {
         method: "POST",
-        body: { due_in_days: 7, priority: "high" },
+        body: {},
       }),
     onSuccess: invalidate,
   });
@@ -300,7 +449,7 @@ function GapPanel({ gap, frameworkId }: { gap: ComplianceGap; frameworkId: strin
     <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--warning-500)]/35 bg-[var(--warning-50)] p-4">
       <p className="flex items-center gap-2 text-sm font-semibold text-[var(--warning-700)]">
         <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-        Gap · {gap.severity} severity
+        Gap · {SEVERITY_LABEL[gap.severity] ?? "Medium"} severity
         {gap.status === "remediating" && (
           <Badge variant="secondary" className="ml-1">
             Remediating
@@ -308,7 +457,16 @@ function GapPanel({ gap, frameworkId }: { gap: ComplianceGap; frameworkId: strin
         )}
       </p>
 
-      {gap.recommendation ? (
+      {gap.remediation_plan ? (
+        <div className="mt-2 text-sm leading-relaxed text-[var(--warning-700)]">
+          <p>{gap.remediation_plan.problem}</p>
+          <p className="mt-2 font-medium">{gap.remediation_plan.action}</p>
+          <p className="mt-2 text-[var(--warning-700)]/80">
+            {gap.remediation_plan.checklist.length} steps · suggested owner{" "}
+            {gap.remediation_plan.owner}
+          </p>
+        </div>
+      ) : gap.recommendation ? (
         <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-[var(--warning-700)]">
           {gap.recommendation}
         </p>
@@ -325,7 +483,7 @@ function GapPanel({ gap, frameworkId }: { gap: ComplianceGap; frameworkId: strin
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {!gap.recommendation && (
+        {!gap.remediation_plan && (
           <Button
             size="sm"
             variant="outline"

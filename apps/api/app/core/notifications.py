@@ -72,12 +72,33 @@ async def notify(
     body: str | None = None,
     link: str | None = None,
     channels: list[str] | None = None,
+    idempotency_key: str | None = None,
 ) -> Notification:
     """Creates the in-app Notification row (always) and honestly attempts
     any additional requested channels. `channels` is the caller's *ask*
     beyond in-app (e.g. `["email"]`) — what actually got delivered is
     recorded on the returned row's `channels_delivered`, which callers can
-    inspect but are never required to."""
+    inspect but are never required to.
+
+    `idempotency_key` names the *state transition* rather than the
+    attempt. A retried background job passes the same key and this
+    returns the notification it already raised, unread state and all —
+    one document finishing analysis produced "Document analyzed" three
+    times when the job retried twice, which teaches people to ignore the
+    bell. Callers with no natural key omit it and keep the old
+    behaviour."""
+    if idempotency_key is not None:
+        existing = (
+            await db.execute(
+                select(Notification).where(
+                    Notification.user_id == user_id,
+                    Notification.idempotency_key == idempotency_key,
+                )
+            )
+        ).scalars().first()
+        if existing is not None:
+            return existing
+
     requested = ["in_app", *(channels or [])]
     delivered = ["in_app"]
 
@@ -120,6 +141,7 @@ async def notify(
     notification = Notification(
         organization_id=organization_id,
         user_id=user_id,
+        idempotency_key=idempotency_key,
         title=title,
         body=body,
         link=link,

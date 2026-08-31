@@ -96,7 +96,28 @@ async def test_compliance_manager_can_set_and_update_trust_center_item(
     )
     assert created.status_code == 201, created.text
 
+    # Updating in place: same category, so the same row is rewritten
+    # rather than a second one appearing.
     updated = await client.post(
+        "/api/v1/trust-center/items",
+        json={
+            "category": "security_overview",
+            "title": "Security Overview",
+            "content": "Updated content.",
+            "status": "in_progress",
+            "is_public": True,
+        },
+    )
+    assert updated.status_code == 201, updated.text
+    assert updated.json()["id"] == created.json()["id"]
+    assert updated.json()["status"] == "in_progress"
+
+    # But an attested status is not a status the product will take on
+    # trust. This test previously asserted that 'certified' could be set
+    # freely; the attestation guard now refuses it, and the guard is
+    # right — being certified is something an auditor does, not something
+    # implemented controls imply.
+    claimed = await client.post(
         "/api/v1/trust-center/items",
         json={
             "category": "security_overview",
@@ -106,12 +127,12 @@ async def test_compliance_manager_can_set_and_update_trust_center_item(
             "is_public": True,
         },
     )
-    assert updated.status_code == 201, updated.text
-    assert updated.json()["id"] == created.json()["id"]
-    assert updated.json()["status"] == "certified"
+    assert claimed.status_code == 422
+    assert "attach" in claimed.json()["error"]["message"].lower()
 
     listed = await client.get("/api/v1/trust-center/items")
     assert len(listed.json()) == 1
+    assert listed.json()[0]["status"] == "in_progress"
 
 
 async def test_public_endpoint_returns_only_public_items(client: AsyncClient) -> None:

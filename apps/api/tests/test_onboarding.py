@@ -47,11 +47,11 @@ async def test_steps_advance_current_step_and_persist_data(client: AsyncClient) 
 
     goals = await client.put(
         "/api/v1/onboarding/goals",
-        json={"selected_goals": ["improve_compliance", "find_more_customers"]},
+        json={"selected_goals": ["improve_compliance", "prepare_for_audit"]},
     )
     assert goals.status_code == 200
     assert goals.json()["current_step"] == 3
-    assert goals.json()["selected_goals"] == ["improve_compliance", "find_more_customers"]
+    assert goals.json()["selected_goals"] == ["improve_compliance", "prepare_for_audit"]
 
     status = await client.get("/api/v1/onboarding/status")
     assert status.json()["industry"] == "Software"
@@ -65,7 +65,7 @@ async def test_goals_step_rejects_an_unknown_goal_key(client: AsyncClient) -> No
     assert response.status_code == 422
 
 
-async def test_full_step_sequence_reaches_step_nine_before_readiness(
+async def test_full_step_sequence_reaches_the_readiness_screen(
     client: AsyncClient,
 ) -> None:
     await _signup(client, "onboard4b@example.com", "Onboard Org 4b")
@@ -79,14 +79,13 @@ async def test_full_step_sequence_reaches_step_nine_before_readiness(
     await client.put(
         "/api/v1/onboarding/security-profile", json={"primary_cloud_provider": "aws"}
     )
-    await client.put("/api/v1/onboarding/sales-profile", json={"sales_focus": "Enterprise"})
-    await client.put(
-        "/api/v1/onboarding/support-profile", json={"support_channels": ["email"]}
-    )
-    connect = await client.post("/api/v1/onboarding/advance")
-    assert connect.json()["current_step"] == 8
-    knowledge = await client.post("/api/v1/onboarding/advance")
-    assert knowledge.json()["current_step"] == 9
+    # The sales and support profile steps were removed with those modules;
+    # the flow now runs company -> goals -> compliance -> security ->
+    # adopt frameworks -> upload a document -> readiness.
+    frameworks = await client.post("/api/v1/onboarding/advance")
+    assert frameworks.json()["current_step"] == 6
+    upload = await client.post("/api/v1/onboarding/advance")
+    assert upload.json()["current_step"] == 7
 
 
 async def test_complete_sets_completed_at_and_step_ten(client: AsyncClient) -> None:
@@ -107,8 +106,8 @@ async def test_readiness_is_honestly_zero_for_a_brand_new_organization(
     body = response.json()
     assert body["compliance"]["percent"] == 0.0
     assert body["security"]["percent"] == 100.0  # no findings/alerts yet -> nothing to deduct
-    assert body["sales_automation"]["percent"] == 0.0
-    assert body["support_automation"]["percent"] == 0.0
+    assert body["evidence_coverage"]["percent"] == 0.0
+    assert body["framework_adoption"]["percent"] == 0.0
 
 
 async def test_readiness_compliance_percent_reflects_implemented_controls(

@@ -50,9 +50,27 @@ PERMISSIONS: dict[str, str] = {
     "compliance.privacy.manage": "Manage processing activities, DPIAs, DSARs, and data transfers",
     "compliance.vendors.manage": "Create vendors and record vendor risk assessments",
     "compliance.questionnaires.manage": "Create questionnaires, questions, and answers",
+    # Permanently destroying a compliance record is a different act from
+    # working on one, so it is a different permission. Deliberately NOT
+    # in COMPLIANCE_PERMISSIONS: a compliance manager archives, an
+    # organization admin destroys. Archiving is always available, so
+    # withholding this takes nothing away that anybody needs day to day.
+    "compliance.questionnaires.delete": "Permanently delete a draft questionnaire",
+    "compliance.audits.delete": "Permanently delete a planned audit",
     "compliance.audits.manage": "Create audits and record audit findings",
     "compliance.trust_center.manage": "Manage Trust Center content and evidence requests",
-    "compliance.security_reviews.manage": "Start, sync, and clear Enterprise Sales Security Reviews",
+    "compliance.security_reviews.manage": "Manage customer security reviews",
+    # Generating a customer-facing package is sending something outside
+    # the organization. Preparing a preview is reading — anybody who can
+    # see the review can see what would go in it — but turning that into
+    # a deliverable is a separate act, and this is the permission for it.
+    "compliance.review_exports.generate": "Generate customer assurance packages",
+    # Including a document nobody cleared for sharing. Stronger than
+    # generating, because the person doing it is overriding a disclosure
+    # decision somebody else made.
+    "compliance.review_exports.override_disclosure": (
+        "Include internal documents in a customer package"
+    ),
     "security.assets.manage": "Create and update the security asset inventory",
     "security.findings.manage": "Create and update security findings",
     "security.alerts.manage": "Triage and update security alerts",
@@ -102,6 +120,10 @@ COMPLIANCE_PERMISSIONS = [
     "compliance.audits.manage",
     "compliance.trust_center.manage",
     "compliance.security_reviews.manage",
+    # A compliance manager prepares and sends customer packages; that is
+    # the job. Overriding a disclosure decision is deliberately not in
+    # this set — see below.
+    "compliance.review_exports.generate",
 ]
 
 AI_GOVERNANCE_PERMISSIONS = [

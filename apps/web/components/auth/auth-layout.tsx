@@ -4,9 +4,9 @@ import { CheckCircle2 } from "lucide-react";
 import { Logo } from "@/components/logo";
 
 const VALUE_POINTS = [
-  "Tenant-isolated, permission-aware by default",
-  "Every action is reviewable and auditable",
-  "Compliance, security, sales, and support — one workspace",
+  "GDPR, EU AI Act, ISO 27001, NIS2, DORA and SOC 2",
+  "Every AI proposal quotes your document — and the quote is verified",
+  "Assessments are deterministic, never a model's opinion",
 ];
 
 type AuthLayoutProps = {
@@ -26,8 +26,8 @@ type AuthLayoutProps = {
  * focusable, so there is no visual/focus order mismatch to worry about. */
 export function AuthLayout({
   children,
-  sideTitle = "One governed workspace for compliance, security, sales, and support.",
-  sideDescription = "Every action stays permission-aware, reviewable, and auditable.",
+  sideTitle = "Upload once. AI does the compliance work.",
+  sideDescription = "Veyntra reads your policies and proposes what they evidence. You approve every mapping, and every action stays permission-aware, reviewable, and auditable.",
 }: AuthLayoutProps) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">

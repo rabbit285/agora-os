@@ -11,15 +11,15 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-      <SectionHeader eyebrow="About" title="The secure AI operating system for SMEs" />
+      <SectionHeader eyebrow="About" title="Compliance evidence, without the manual mapping" />
       <div className="mx-auto mt-10 flex max-w-2xl flex-col gap-6 text-sm leading-relaxed text-[var(--fg-muted)]">
         <p>
-          Growing businesses accumulate tools faster than they can govern them. Compliance lives
-          in spreadsheets, security findings live in a separate dashboard, sales data lives in a
-          CRM nobody fully trusts, and support tickets live somewhere else entirely. Veyntra
-          exists to bring that back into one governed workspace — not by replacing every tool you
-          already use, but by connecting them and adding the compliance, security, and
-          automation layer most growing companies don&apos;t have time to build themselves.
+          Most compliance work is not judgement — it is transcription. Someone reads a policy,
+          decides which control it supports, and records that link in a spreadsheet. Multiply
+          that by every document and every framework and it becomes a job nobody has time to do
+          properly, which is why the evidence trail is usually reconstructed the week before an
+          audit. Veyntra exists to do the reading, propose the links, and leave the judgement
+          where it belongs — with a person who approves each one.
         </p>
         <p>
           We build for organizations that need practical AI with governance, visibility, and

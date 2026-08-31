@@ -85,12 +85,13 @@ a seventh reuse of the "creates a tracked consequence" hook shape (spec
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance import privacy_deadlines
 from app.compliance.models import (
     DPIA,
     DSAR,
@@ -120,7 +121,12 @@ from app.sales.models import Opportunity
 _HIGH_RISK_TIERS = {"high", "unacceptable"}
 _HIGH_VENDOR_RISK_TIERS = {"high", "critical"}
 _HIGH_FINDING_SEVERITIES = {"high", "critical"}
-DSAR_RESPONSE_WINDOW_DAYS = 30
+# The response window is one month from receipt, not thirty days.
+# Those are different dates for most of the year: a request received on
+# 31 January is due on 28 February, and adding thirty days answers on
+# 2 March — two days past the deadline, with the product's own screen
+# saying the request is on time. See `privacy_deadlines`.
+DSAR_RESPONSE_WINDOW_MONTHS = 1
 # A judgment call (documented in ADR-0035): an opportunity at or above
 # this value is material enough that clearing its security review
 # requires a real Approval, not just "no open gaps."
@@ -136,6 +142,19 @@ async def record_assessment(
     notes: str | None,
     assessed_by: uuid.UUID | None,
 ) -> ControlAssessment:
+    # Read before anything moves, so the audit event can say what the
+    # control was as well as what it became. An entry that records only
+    # the new value leaves the reader unable to tell a confirmation from
+    # a reversal.
+    previous = (
+        await db.execute(
+            select(ControlAssessment)
+            .where(ControlAssessment.control_id == control.id)
+            .order_by(ControlAssessment.created_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+
     assessment = ControlAssessment(
         organization_id=organization_id,
         control_id=control.id,
@@ -167,7 +186,12 @@ async def record_assessment(
         action="compliance.control.assessed",
         object_type="control",
         object_id=str(control.id),
-        after_state={"status": status},
+        before_state={"status": previous.status} if previous else None,
+        # The reviewer's own words travel with the event. "Why was this
+        # marked Passed" is the question a human override exists to
+        # answer, and it was previously answerable only by opening the
+        # control and reading the latest assessment.
+        after_state={"status": status, **({"notes": notes} if notes else {})},
     )
     return assessment
 
@@ -435,13 +459,19 @@ async def create_dsar(
     request_type: str,
     assigned_to: uuid.UUID | None,
     actor_user_id: uuid.UUID | None,
+    # When the request arrived, which is not always when it was logged.
+    # The clock runs from receipt, so a request entered three days late
+    # does not get three extra days.
+    received_at: datetime | None = None,
 ) -> DSAR:
+    received = received_at or utcnow()
     dsar = DSAR(
         organization_id=organization_id,
         requester_name=requester_name,
         requester_email=requester_email,
         request_type=request_type,
-        due_at=utcnow() + timedelta(days=DSAR_RESPONSE_WINDOW_DAYS),
+        received_at=received,
+        due_at=privacy_deadlines.response_due(received),
         assigned_to=assigned_to,
     )
     db.add(dsar)
@@ -453,7 +483,11 @@ async def create_dsar(
         action="compliance.dsar.received",
         object_type="dsar",
         object_id=str(dsar.id),
-        after_state={"request_type": request_type, "due_at": dsar.due_at.isoformat()},
+        after_state={
+            "request_type": request_type,
+            "received_at": dsar.received_at.isoformat(),
+            "due_at": dsar.due_at.isoformat(),
+        },
     )
     return dsar
 
@@ -652,8 +686,8 @@ async def add_questionnaire_question(
 ) -> QuestionnaireQuestion:
     """Adds a question and its (initially empty) answer row in the same
     call — every question has exactly one current answer from the
-    moment it exists, even before anyone has drafted one (spec §69's
-    "identify missing answers" step reads this as `status="missing"`)."""
+    moment it exists, even before anyone has drafted one, which reads as
+    `unanswered` until Veyntra or a person puts something there."""
     question = QuestionnaireQuestion(
         organization_id=organization_id,
         questionnaire_id=questionnaire.id,
@@ -668,7 +702,7 @@ async def add_questionnaire_question(
         QuestionnaireAnswer(
             organization_id=organization_id,
             question_id=question.id,
-            status="missing",
+            status="unanswered",
         )
     )
 
@@ -745,12 +779,21 @@ async def suggest_questionnaire_answer(
         answer.answer_text = copilot_answer.text
         answer.status = "draft"
         answer.source_type = "ai_suggested"
+        # The citation shape the rest of the product uses: a reference a
+        # person can look up and a link that opens it. This previously
+        # stored `chunk_id` and `score`, which stopped existing when
+        # citations were resolved server-side — the read crashed, and the
+        # values were never renderable anyway.
         answer.citations = [
             {
+                "reference": c.reference,
+                "document_title": c.document_title,
+                "section": c.section,
+                "page": c.page,
+                "passage": c.passage,
+                "source_type": c.source_type,
                 "document_id": str(c.document_id),
-                "chunk_id": str(c.chunk_id),
-                "chunk_index": c.chunk_index,
-                "score": c.score,
+                "href": c.href,
             }
             for c in copilot_answer.citations
         ]
@@ -783,6 +826,15 @@ async def update_questionnaire_answer(
         answer.answer_text = answer_text
         answer.source_type = "manual"
     answer.status = status
+    if status == "approved":
+        # What was approved, as approved. An edit afterwards leaves this
+        # behind, which is what makes the discrepancy detectable.
+        answer.approved_text = answer.answer_text
+    elif before_status == "approved":
+        # Reopened. There is no approved text any more, and leaving the
+        # old one would let a later export quote something the record no
+        # longer stands behind.
+        answer.approved_text = None
     if evidence_id is not None:
         answer.evidence_id = evidence_id
     if control_id is not None:
@@ -862,6 +914,17 @@ async def update_audit_finding_status(
     new_status: str,
     actor_user_id: uuid.UUID | None,
 ) -> AuditFinding:
+    if new_status == "closed":
+        # Closure is a verification, and a verification has a note and an
+        # auditor attached to it. Letting a status update produce one
+        # would put a closed finding in the record with nobody's name on
+        # it — see app.compliance.audit_findings.verify_and_close.
+        raise ValueError(
+            "A finding is closed by verifying it, not by setting its status. "
+            "Use the audit's verify action so the closure records who "
+            "checked it and what they relied on."
+        )
+
     before_status = finding.status
     finding.status = new_status
     await record_event(
@@ -1007,7 +1070,9 @@ async def sync_security_review(
             )
         ).scalar_one()
 
-        if answer.status == "missing":
+        # Anything nobody has answered yet. `missing` was the old name
+        # for this state and no longer exists.
+        if answer.status == "unanswered":
             answer = await suggest_questionnaire_answer(
                 db,
                 organization_id=review.organization_id,
@@ -1084,6 +1149,18 @@ async def clear_security_review(
     clear while gaps remain or a required Approval is still pending —
     mirroring `decide_ai_system_status`'s gate (ADR-0027), not a new
     pattern."""
+    if review.questionnaire_id is None:
+        # The trust-package flow was built around a review holding exactly
+        # one questionnaire, which is no longer what a review is. Reviews
+        # created since carry no `questionnaire_id`, and this used to walk
+        # into an assertion on the None and return a 500.
+        raise ValueError(
+            "Generating a trust package is only available on reviews created "
+            "with the earlier single-questionnaire flow. Approve the answers "
+            "in each questionnaire; the review completes when they are all "
+            "approved."
+        )
+
     gaps = await list_security_review_gaps(db, questionnaire_id=review.questionnaire_id)
     if gaps:
         raise ValueError(f"Cannot clear: {len(gaps)} unresolved question(s) remain")

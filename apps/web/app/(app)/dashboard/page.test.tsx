@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Approval, Control, SecurityOverview, Task } from "@/lib/types";
+import type { ComplianceDashboard } from "@/lib/types";
 
 import DashboardPage from "./page";
 
@@ -14,68 +14,113 @@ import { apiFetch } from "@/lib/api";
 
 const mockedApiFetch = vi.mocked(apiFetch);
 
-const tasks: Task[] = [
-  { id: "t1", title: "Task 1", status: "open" } as Task,
-  { id: "t2", title: "Task 2", status: "done" } as Task,
-];
-const approvals: Approval[] = [
-  { id: "a1", status: "pending", action_type: "test.action", risk_class: "low", module: "compliance" } as Approval,
-];
-const controls: Control[] = [
-  { id: "c1", status: "implemented" } as Control,
-  { id: "c2", status: "not_started" } as Control,
-];
-const securityOverview: SecurityOverview = {
-  security_score: 74,
-  critical_alerts: 0,
-  high_risks: 0,
-  assets_monitored: 0,
-  vulnerabilities_open: 0,
-  identity_issues_open: 0,
-  cloud_misconfigurations_open: 0,
-  open_incidents: 0,
-  evidence_coverage_percent: 0,
+const dashboard: ComplianceDashboard = {
+  readiness_percent: 41.5,
+  readiness_explanation:
+    "41.5% across 2 adopted frameworks, weighted by their 43 requirements. This measures the evidence held in Veyntra, not a legal conclusion about compliance.",
+  critical_gap_count: 4,
+  open_risk_count: 7,
+  ai_system_count: 3,
+  high_risk_ai_system_count: 1,
+  overdue_action_count: 2,
+  frameworks: [
+    {
+      framework_id: "f1",
+      key: "gdpr",
+      name: "GDPR",
+      readiness_percent: 52,
+      explanation: "52% because ...",
+      open_gap_count: 3,
+    },
+  ],
+  critical_issues: [],
+  systems_at_risk: [
+    {
+      ai_system_id: "s1",
+      name: "Customer Support AI",
+      risk_classification: "limited",
+      readiness_percent: 30,
+      open_action_count: 2,
+    },
+  ],
+  recent_activity: [{ count: 8, label: "evidence mappings accepted automatically" }],
+  recommended_next_actions: [
+    {
+      title: "Review 5 evidence mappings",
+      detail: "Approving evidence can close gaps without any remediation work.",
+      href: "/review",
+      priority: "high",
+    },
+  ],
 };
 
 function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <DashboardPage />
     </QueryClientProvider>,
   );
 }
 
 describe("DashboardPage", () => {
-  it("computes Compliance Health and Security Posture from real data, not a placeholder", async () => {
-    mockedApiFetch.mockImplementation(async (path: string) => {
-      if (path === "/api/v1/tasks") return tasks;
-      if (path === "/api/v1/approvals") return approvals;
-      if (path === "/api/v1/compliance/controls") return controls;
-      if (path === "/api/v1/security/overview") return securityOverview;
-      throw new Error(`Unmocked path: ${path}`);
-    });
-
+  it("shows readiness together with the arithmetic behind it", async () => {
+    // The number must never appear alone: a bare percentage invites the
+    // reader to treat it as a verdict, and it is not one.
+    mockedApiFetch.mockResolvedValue(dashboard);
     renderPage();
 
-    // Open Tasks and Pending Approvals both resolve to "1" — assert the
-    // count rather than picking one via findByText.
-    expect((await screen.findAllByText("1")).length).toBe(2);
-    expect(await screen.findByText("50%")).toBeInTheDocument(); // 1 of 2 controls implemented
-    expect(await screen.findByText("74/100")).toBeInTheDocument(); // security score
+    expect(await screen.findByText("41.5%")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/weighted by their 43 requirements/),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/not a legal conclusion about compliance/),
+    ).toBeInTheDocument();
   });
 
-  it("shows an honest empty state instead of 0% when the org has no controls yet", async () => {
-    mockedApiFetch.mockImplementation(async (path: string) => {
-      if (path === "/api/v1/tasks") return [];
-      if (path === "/api/v1/approvals") return [];
-      if (path === "/api/v1/compliance/controls") return [];
-      if (path === "/api/v1/security/overview") return securityOverview;
-      throw new Error(`Unmocked path: ${path}`);
-    });
-
+  it("renders the headline counts from real data rather than placeholders", async () => {
+    mockedApiFetch.mockResolvedValue(dashboard);
     renderPage();
 
-    expect(await screen.findByText("No controls yet")).toBeInTheDocument();
+    expect(await screen.findByText("Critical gaps")).toBeInTheDocument();
+    expect(await screen.findByText("4")).toBeInTheDocument();
+    expect(await screen.findByText("7")).toBeInTheDocument();
+    expect(await screen.findByText("Overdue actions")).toBeInTheDocument();
+  });
+
+  it("tells the customer what to do next, linking to where it is done", async () => {
+    mockedApiFetch.mockResolvedValue(dashboard);
+    renderPage();
+
+    const action = await screen.findByText("Review 5 evidence mappings");
+    expect(action).toBeInTheDocument();
+    expect(action.closest("a")).toHaveAttribute("href", "/review");
+  });
+
+  it("attributes recent activity to the audit trail rather than narrating it", async () => {
+    mockedApiFetch.mockResolvedValue(dashboard);
+    renderPage();
+
+    expect(
+      await screen.findByText(/evidence mappings accepted automatically/),
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/Counted from your audit trail/)).toBeInTheDocument();
+  });
+
+  it("says plainly that nothing is adopted rather than showing a bare 0%", async () => {
+    mockedApiFetch.mockResolvedValue({
+      ...dashboard,
+      readiness_percent: 0,
+      readiness_explanation:
+        "No framework adopted yet, so there is nothing to measure against.",
+      frameworks: [],
+    } satisfies ComplianceDashboard);
+    renderPage();
+
+    expect(
+      await screen.findByText(/No framework adopted yet, so there is nothing to measure/),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("No framework adopted yet.")).toBeInTheDocument();
   });
 });

@@ -1,39 +1,46 @@
-// Application navigation tree (spec section 6). `implemented: false` items
-// render in the sidebar (so the module switcher always shows the full
-// product) but link to /coming-soon instead of a working page or a dead
-// link — see docs/ROUTES_AND_SCREENS.md and spec section 82 (No Fake
-// Features). `permission` is an optional gate: the item is hidden entirely
-// unless the current user holds at least one of the listed permission
-// keys — omit it for anything readable by every org member.
+// Application navigation tree.
+//
+// Veyntra ships as a dedicated compliance platform. The sales, support,
+// automation and knowledge-base modules are deliberately absent: their
+// code remains in the repository and their tables still exist (DSAR data
+// discovery reads them — personal data lives in those tables and a
+// subject access request has to find it), but they are not part of the
+// product a customer sees. `middleware.ts` rejects their routes so a
+// stale bookmark cannot reach a screen the product no longer has.
+//
+// Every entry below resolves to a real page — a route, never an anchor.
+// The compliance entries used to point at `#frameworks`, `#controls`,
+// `#privacy` and so on, all of which were sections of one 1,500-line
+// screen. A sidebar whose items all lead to the same page is not
+// navigation, and the customer could not tell which of the fifteen
+// stacked workflows the product had actually taken them to. Each is now
+// a page that answers one question; /compliance itself redirects the old
+// anchors so existing bookmarks still land in the right place.
+//
+// `implemented: false` items render but link to /coming-soon rather than
+// a dead link (spec section 82, No Fake Features). `permission` is an
+// optional gate: the item is hidden entirely unless the current user
+// holds at least one of the listed permission keys.
 
 import type { LucideIcon } from "lucide-react";
 import {
   Bell,
   BookOpen,
-  Boxes,
   Brain,
-  Briefcase,
   Building2,
-  Cpu,
   ClipboardCheck,
+  Cpu,
   CreditCard,
   Database,
-  FileBarChart2,
   FileClock,
   Gauge,
   GitBranch,
-  Headset,
   KeyRound,
-  Lightbulb,
-  Lock,
-  Newspaper,
   Plug,
   ScrollText,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Users,
-  Workflow,
 } from "lucide-react";
 
 export type NavItem = {
@@ -54,95 +61,73 @@ export type NavGroup = {
 
 export const NAVIGATION: NavGroup[] = [
   {
-    label: "Command Center",
+    label: "Overview",
     items: [
-      { label: "Overview", href: "/dashboard", implemented: true, icon: Gauge },
-      { label: "AI Copilot", href: "/copilot", implemented: true, icon: Sparkles },
-      { label: "Tasks", href: "/tasks", implemented: true, icon: ClipboardCheck },
+      { label: "Dashboard", href: "/dashboard", implemented: true, icon: Gauge },
+      { label: "Review Center", href: "/review", implemented: true, icon: ShieldCheck },
+      { label: "Compliance Copilot", href: "/copilot", implemented: true, icon: Sparkles },
+    ],
+  },
+  {
+    label: "Compliance",
+    items: [
+      { label: "Documents", href: "/documents", implemented: true, icon: BookOpen },
+      // Directly after Documents: a policy record is created from a
+      // document, so this is where the reader looks next.
+      {
+        label: "Policies",
+        href: "/compliance/policies",
+        implemented: true,
+        icon: ScrollText,
+      },
+      { label: "AI Systems", href: "/ai-systems", implemented: true, icon: Cpu },
+      {
+        label: "Frameworks",
+        href: "/compliance/frameworks",
+        implemented: true,
+        icon: ScrollText,
+      },
+      {
+        label: "Controls & Risk",
+        href: "/compliance/controls",
+        implemented: true,
+        icon: ClipboardCheck,
+      },
+      {
+        label: "Assessments",
+        href: "/compliance/assessments",
+        implemented: true,
+        icon: FileClock,
+      },
+      { label: "Privacy", href: "/compliance/privacy", implemented: true, icon: Users },
+      {
+        label: "Vendors & Trust",
+        href: "/compliance/vendors",
+        implemented: true,
+        icon: Building2,
+      },
+    ],
+  },
+  {
+    label: "Act",
+    items: [
+      // Remediation *is* the shared task system — a compliance gap becomes
+      // a Task with an owner and a due date. Labelled for what it does
+      // here rather than for the table behind it.
+      { label: "Remediation", href: "/tasks", implemented: true, icon: ClipboardCheck },
       { label: "Approvals", href: "/approvals", implemented: true, icon: ShieldCheck },
-      { label: "Recommendations", href: "/recommendations", implemented: true, icon: Lightbulb },
-      { label: "Daily Briefing", href: "/briefing", implemented: true, icon: Newspaper },
-      { label: "Reports", href: "/reports", implemented: true, icon: FileBarChart2 },
       { label: "Notifications", href: "/notifications", implemented: true, icon: Bell },
     ],
   },
   {
-    label: "Governance",
+    label: "Assurance",
     items: [
-      { label: "Compliance", href: "/compliance", implemented: true, icon: ScrollText },
-      { label: "Security", href: "/security", implemented: true, icon: ShieldAlert },
+      { label: "Integrations", href: "/integrations", implemented: true, icon: Plug },
+      { label: "Audit Log", href: "/settings/audit-logs", implemented: true, icon: FileClock },
     ],
   },
   {
-    label: "Growth",
-    items: [
-      {
-        label: "Sales",
-        href: "/sales",
-        implemented: true,
-        icon: Briefcase,
-        children: [
-          {
-            label: "Lead Finder",
-            href: "/sales/lead-finder",
-            implemented: true,
-            permission: ["sales.lead_finder.view"],
-          },
-          { label: "ICP Builder", href: "/sales/icp", implemented: true },
-          { label: "Sales Inbox", href: "/sales/inbox", implemented: true },
-          { label: "Meetings", href: "/sales/meetings", implemented: true },
-          { label: "Campaigns", href: "/sales/campaigns", implemented: true },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Customer Operations",
-    items: [
-      {
-        label: "Support",
-        href: "/support",
-        implemented: true,
-        icon: Headset,
-        children: [
-          { label: "Conversations", href: "/support/conversations", implemented: true },
-          { label: "Knowledge Base", href: "/support/knowledge", implemented: true },
-          { label: "AI Agent", href: "/support/ai-agent", implemented: true },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      {
-        label: "Automation",
-        href: "/automation",
-        implemented: true,
-        icon: Workflow,
-        children: [
-          { label: "Connections", href: "/automation/connections", implemented: true },
-          { label: "Templates", href: "/automation/templates", implemented: true },
-        ],
-      },
-      {
-        label: "Integrations",
-        href: "/settings/integrations",
-        implemented: true,
-        icon: Plug,
-        permission: ["integrations.connections.manage"],
-      },
-    ],
-  },
-  {
-    label: "Knowledge",
-    items: [
-      { label: "Documents", href: "/knowledge", implemented: true, icon: BookOpen },
-      { label: "Knowledge Graph", href: "/knowledge/graph", implemented: true, icon: Boxes },
-    ],
-  },
-  {
-    label: "Administration",
+    label: "Settings",
     items: [
       {
         label: "Organization",
@@ -165,21 +150,41 @@ export const NAVIGATION: NavGroup[] = [
         permission: ["org.users.manage"],
       },
       { label: "Billing", href: "/settings/billing", implemented: true, icon: CreditCard },
-      { label: "AI Providers", href: "/settings/ai-providers", implemented: true, icon: Cpu },
-      { label: "Business Memory", href: "/settings/memory", implemented: true, icon: Brain },
-      { label: "Business Rules", href: "/settings/business-rules", implemented: true, icon: GitBranch },
-      { label: "Data Management", href: "/settings/data-management", implemented: true, icon: Database },
-      { label: "Audit Logs", href: "/settings/audit-logs", implemented: true, icon: FileClock },
-      { label: "Security", href: "/settings/security", implemented: true, icon: Lock },
+      { label: "AI Providers", href: "/settings/ai-providers", implemented: true, icon: Brain },
+      {
+        label: "Business Rules",
+        href: "/settings/business-rules",
+        implemented: true,
+        icon: GitBranch,
+      },
+      {
+        label: "Data Management",
+        href: "/settings/data-management",
+        implemented: true,
+        icon: Database,
+      },
+      {
+        label: "Account Security",
+        href: "/settings/security",
+        implemented: true,
+        icon: KeyRound,
+      },
     ],
   },
 ];
 
+// The top-bar switcher. Security is deliberately absent: it was a
+// separate product module, and security-relevant controls now live
+// inside compliance. Two navigations describing different old products
+// is how a customer ends up unsure which one they are actually in.
 export const MODULES = [
-  { key: "overview", label: "Business Overview", href: "/dashboard", implemented: true },
-  { key: "compliance", label: "Compliance", href: "/compliance", implemented: true },
-  { key: "security", label: "Security", href: "/security", implemented: true },
-  { key: "sales", label: "Sales", href: "/sales", implemented: true },
-  { key: "support", label: "Support", href: "/support", implemented: true },
-  { key: "automation", label: "Automation", href: "/automation", implemented: true },
+  { key: "overview", label: "Overview", href: "/dashboard", implemented: true },
+  {
+    key: "compliance",
+    label: "Compliance",
+    // The frameworks screen, not the old stacked page: "how ready are
+    // we" is the question someone switching into Compliance is asking.
+    href: "/compliance/frameworks",
+    implemented: true,
+  },
 ];

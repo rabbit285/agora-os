@@ -21,9 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.evidence_ai import (
+    DocumentAnalysis,
     ProposedMapping,
-    ProposedMappings,
     build_prompt,
+    route_suggestion,
+    split_into_sections,
     suggest_evidence_mappings,
     verify_quote,
 )
@@ -64,13 +66,25 @@ async def _signup(client: AsyncClient, email: str) -> None:
 class _StubGateway:
     """Stands in for the model. Returns whatever the test scripted."""
 
-    def __init__(self, mappings: list[ProposedMapping]) -> None:
+    def __init__(
+        self,
+        mappings: list[ProposedMapping],
+        *,
+        document_type: str = "Information Security Policy",
+        document_domain: str = "Security",
+    ) -> None:
         self._mappings = mappings
+        self._document_type = document_type
+        self._document_domain = document_domain
         self.prompts: list[str] = []
 
     async def generate_structured(self, db, *, organization_id, requested_by, request, schema):  # type: ignore[no-untyped-def]
         self.prompts.append(request.prompt)
-        return ProposedMappings(mappings=self._mappings)
+        return DocumentAnalysis(
+            document_type=self._document_type,
+            document_domain=self._document_domain,
+            mappings=self._mappings,
+        )
 
 
 # --- Citation verification -------------------------------------------
@@ -109,9 +123,12 @@ def test_prompt_identifies_controls_by_index() -> None:
     whole formatted line — name, requirement codes and description — and
     nothing matched. An integer cannot be garbled by formatting."""
     control = Control(id=uuid.uuid4(), organization_id=uuid.uuid4(), title="Maintain RoPA")
-    prompt = build_prompt(DOCUMENT, [(control, ["Art. 30"])])
+    prompt = build_prompt(split_into_sections(DOCUMENT), [(control, ["Art. 30"])])
     assert "[1] Maintain RoPA (mapped to Art. 30)" in prompt
     assert "control_index" in prompt
+    # Sections are numbered too, so a citation can name where it came from.
+    assert "section_index" in prompt
+    assert "DOCUMENT SECTIONS:" in prompt
 
 
 # --- The service ------------------------------------------------------
@@ -158,6 +175,7 @@ async def test_verified_proposal_becomes_a_reviewable_suggestion(
     gateway = _StubGateway(
         [
             ProposedMapping(
+                section_index=1,
                 control_index=1,
                 confidence=0.9,
                 rationale="Section 4 describes maintaining a RoPA.",
@@ -178,9 +196,15 @@ async def test_verified_proposal_becomes_a_reviewable_suggestion(
     assert outcome.unverifiable_count == 0
     assert len(outcome.suggestions) == 1
     suggestion = outcome.suggestions[0]
-    assert suggestion.status == "proposed"
+    # Verified quote, ordinary requirement, high confidence: this is the
+    # narrow case that stands without a person. The routing reason is
+    # recorded so the decision can be explained later.
+    assert suggestion.status == "auto_approved"
+    assert suggestion.routing_reason
     assert suggestion.quote_verified is True
     assert suggestion.control_id == control.id
+    # And it became real evidence, not just a label on a proposal.
+    assert suggestion.evidence_id is not None
 
 
 async def test_fabricated_citation_is_marked_unverifiable(
@@ -194,6 +218,7 @@ async def test_fabricated_citation_is_marked_unverifiable(
     gateway = _StubGateway(
         [
             ProposedMapping(
+                section_index=1,
                 control_index=1,
                 confidence=0.99,
                 rationale="The policy clearly covers this.",
@@ -225,6 +250,7 @@ async def test_proposal_naming_a_control_that_does_not_exist_is_dropped(
     gateway = _StubGateway(
         [
             ProposedMapping(
+                section_index=1,
                 control_index=99,
                 confidence=0.9,
                 rationale="…",
@@ -251,9 +277,14 @@ async def test_reanalysing_replaces_undecided_proposals(
     document."""
     await _signup(client, "ev-ai-rerun@example.com")
     control, file_record = await _control_and_file(client, db_session)
+    # Confidence below the auto-approval floor, so the proposal stays
+    # undecided — which is the state this test is about. A confident,
+    # verified mapping against an ordinary requirement now auto-approves
+    # and is deliberately not re-proposed on a later run.
     mapping = ProposedMapping(
+        section_index=1,
         control_index=1,
-        confidence=0.9,
+        confidence=0.55,
         rationale="Section 4.",
         quoted_passage="We maintain a Record of Processing Activities covering the "
         "processing purposes",
@@ -408,3 +439,52 @@ async def test_approval_is_audited_with_the_verification_result(
     approved = [e for e in events if e["action"] == "compliance.evidence.suggestion_approved"]
     assert approved
     assert approved[0]["after_state"]["quote_verified"] is True
+
+
+# --- Which proposals reach a person -----------------------------------
+
+
+def test_a_fabricated_quote_is_never_auto_approved() -> None:
+    """Confidence is checked last and is never sufficient alone. A model
+    that is confident and wrong is the failure this feature is built
+    around."""
+    decision = route_suggestion(
+        quote_verified=False, confidence=0.99, requirement_sensitivity="standard"
+    )
+    assert decision.status == "unverifiable"
+
+
+def test_a_sensitive_requirement_always_reaches_a_person() -> None:
+    """Breach notification, DPIA, prohibited AI practices, human
+    oversight. A wrong mapping against one of these is expensive to
+    discover later, so no confidence score bypasses review."""
+    decision = route_suggestion(
+        quote_verified=True, confidence=1.0, requirement_sensitivity="high"
+    )
+    assert decision.status == "proposed"
+    assert decision.reason
+
+
+def test_low_confidence_reaches_a_person_even_when_verified() -> None:
+    decision = route_suggestion(
+        quote_verified=True, confidence=0.4, requirement_sensitivity="standard"
+    )
+    assert decision.status == "proposed"
+
+
+def test_an_unmapped_control_does_not_auto_approve_by_default() -> None:
+    """A control with no requirement has no sensitivity to check. Absent
+    that, the safe reading is that we do not know — so it goes to a
+    person rather than through."""
+    decision = route_suggestion(
+        quote_verified=True, confidence=0.99, requirement_sensitivity=None
+    )
+    assert decision.status == "auto_approved"
+
+
+def test_sections_carry_the_documents_own_labels() -> None:
+    """A citation an auditor cannot look up is not traceability."""
+    sections = split_into_sections(DOCUMENT)
+    assert sections
+    assert all(section.label for section in sections)
+    assert any("Section 4" in section.label for section in sections)

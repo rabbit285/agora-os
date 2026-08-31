@@ -45,6 +45,18 @@ export type TaskComment = {
   created_at: string;
 };
 
+/** A stored file as `/api/v1/files/{id}` returns it. Kept minimal — the
+ * only reason to look one up outside the document library is to name it. */
+export type FileRecord = {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  classification: string;
+  created_at: string;
+  download_url: string | null;
+};
+
 export type TaskEvidence = {
   id: string;
   file_id: string;
@@ -54,6 +66,9 @@ export type TaskEvidence = {
 
 export type TaskActivity = {
   action: string;
+  /** The event as a sentence, phrased server-side. Render this — never
+   * `action`, which is an internal name. */
+  label: string;
   actor_user_id: string | null;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
@@ -151,9 +166,9 @@ export type OnboardingProfile = {
 export const ONBOARDING_GOALS: { key: string; label: string }[] = [
   { key: "improve_compliance", label: "Improve compliance" },
   { key: "improve_security", label: "Improve security" },
-  { key: "find_more_customers", label: "Find more customers" },
-  { key: "automate_customer_support", label: "Automate customer support" },
-  { key: "automate_business_operations", label: "Automate business operations" },
+  { key: "prepare_for_audit", label: "Prepare for an audit" },
+  { key: "govern_ai_systems", label: "Govern our AI systems" },
+  { key: "handle_privacy_requests", label: "Handle privacy requests" },
 ];
 
 export type ReadinessDimension = {
@@ -167,11 +182,14 @@ export type ReadinessOpportunity = {
 };
 
 export type Readiness = {
+  /** Controls marked implemented. */
   compliance: ReadinessDimension;
+  /** Controls with at least one piece of evidence attached — reported
+   * separately from `compliance` because a control ticked as implemented
+   * but never evidenced is the first thing an auditor finds. */
+  evidence_coverage: ReadinessDimension;
+  framework_adoption: ReadinessDimension;
   security: ReadinessDimension;
-  sales_automation: ReadinessDimension;
-  support_automation: ReadinessDimension;
-  process_automation: ReadinessDimension;
   opportunities: ReadinessOpportunity[];
 };
 
@@ -262,7 +280,12 @@ export type NotificationPreference = {
   enabled: boolean;
 };
 
-export const NOTIFICATION_CHANNELS = ["email", "slack", "teams", "webhook"] as const;
+export const NOTIFICATION_CHANNELS = [
+  "email",
+  "slack",
+  "teams",
+  "webhook",
+] as const;
 
 export type ReportType = {
   key: string;
@@ -340,8 +363,18 @@ export const BUSINESS_RULE_TRIGGER_TYPES = [
   "ai_system_registered",
 ] as const;
 
-export const BUSINESS_RULE_OPERATORS = ["==", "!=", ">", ">=", "<", "<="] as const;
-export const BUSINESS_RULE_ACTION_TYPES = ["notify", "require_approval"] as const;
+export const BUSINESS_RULE_OPERATORS = [
+  "==",
+  "!=",
+  ">",
+  ">=",
+  "<",
+  "<=",
+] as const;
+export const BUSINESS_RULE_ACTION_TYPES = [
+  "notify",
+  "require_approval",
+] as const;
 
 export type BusinessRule = {
   id: string;
@@ -387,11 +420,7 @@ export type KnowledgeBase = {
 };
 
 export type DocumentStatus =
-  | "pending"
-  | "processing"
-  | "ready"
-  | "failed"
-  | "unsupported_format";
+  "pending" | "processing" | "ready" | "failed" | "unsupported_format";
 
 export type KnowledgeDocument = {
   id: string;
@@ -409,13 +438,49 @@ export type DocumentChunk = {
   chunk_index: number;
   content: string;
   token_count: number;
+  section_label: string | null;
+  page_number: number | null;
 };
 
+/** One source, already resolved to somewhere a person can look.
+ *
+ * There is no `chunk_id`, `chunk_index` or `score` here, and that is
+ * deliberate — the API does not send them. They still exist server-side
+ * against the AI request record, where an auditor can trace exactly what
+ * the model read; "chunk 5" is simply not something anyone can find in
+ * their own copy of a PDF.
+ *
+ * `document_id` is the sole identifier that survives, purely so clicking
+ * a citation can open the document. It is a link target, never text.
+ *
+ * `href` comes from the server too. This component used to build it, and
+ * went on pointing at `/knowledge/<id>` long after that module was
+ * withdrawn — the middleware rewrote every such link to a 404. Routes are
+ * decided in one place now (app.ai.citations.DOCUMENT_ROUTE); nothing
+ * here composes a URL. */
 export type Citation = {
+  /** "AI Governance Policy — §7 Monitoring", composed server-side. */
+  reference: string;
+  document_title: string;
+  section: string | null;
+  page: number | null;
+  passage: string;
+  source_type: string | null;
   document_id: string;
-  chunk_id: string;
-  chunk_index: number;
-  score: number;
+  /** Render this as-is. Do not build a URL from `document_id`. */
+  href: string;
+};
+
+/** A value read from Veyntra's compliance records, not from a document.
+ *
+ * Separate from `Citation` on purpose. "Current status: Needs review" is
+ * a determination this product made; no uploaded document says it, and
+ * showing it under a document citation would send the reader to argue
+ * with a PDF about it. */
+export type ComplianceFact = {
+  label: string;
+  value: string;
+  detail: string | null;
 };
 
 export type CopilotAnswer = {
@@ -423,10 +488,24 @@ export type CopilotAnswer = {
   provider: string;
   model: string;
   grounded: boolean;
+  facts: ComplianceFact[];
   citations: Citation[];
 };
 
+/** A colleague, as a form offers them. Name and email only — enough to
+ * pick a person and no more. */
+export type OrganizationPerson = {
+  id: string;
+  full_name: string | null;
+  email: string;
+};
+
 export type Framework = {
+  /** What an audit against this framework covers, in the domains its own
+   * requirements fall into. Offered to fill an empty scope box; never
+   * applied over something a person wrote. Null for a framework the
+   * product has no wording for, including an organization's own. */
+  suggested_audit_scope?: string | null;
   id: string;
   key: string;
   name: string;
@@ -434,14 +513,78 @@ export type Framework = {
   is_custom: boolean;
 };
 
+/** Where a policy sits in its governance lifecycle.
+ *
+ * `draft`/`published` were the whole vocabulary before, which could not
+ * express "somebody owns this, nobody has approved it, and a review is
+ * overdue". Detection creates records at `needs_review`. */
+export type PolicyStatus =
+  | "needs_review"
+  | "draft"
+  | "approved"
+  | "review_due"
+  | "superseded"
+  | "retired";
+
+/** Whether a review is coming, late, or unscheduled. Derived on read so
+ * it cannot go stale against the calendar. */
+export type PolicyReviewState =
+  "scheduled" | "due_soon" | "overdue" | "not_scheduled" | "not_applicable";
+
 export type Policy = {
   id: string;
   title: string;
   file_id: string | null;
-  status: "draft" | "published";
+  status: PolicyStatus;
+  category: string | null;
   owner_id: string | null;
+  version: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  effective_date: string | null;
+  next_review_at: string | null;
+  review_frequency_months: number | null;
+  /** True when classification created this record rather than a person. */
+  detected_automatically: boolean;
   ai_system_id: string | null;
   created_at: string;
+  review_state: PolicyReviewState;
+  /** Days until review; negative when overdue. Computed server-side
+   * because a `Date.now()` in a render is impure. */
+  days_until_review: number | null;
+  /** What a person still has to tell us. Empty means complete. */
+  missing_governance: string[];
+  document_filename: string | null;
+  /** Where that document opens — the same Document Detail route the
+   * library, the evidence list and a Copilot citation use. */
+  document_href: string | null;
+  evidence_count: number;
+  control_count: number;
+  framework_names: string[];
+};
+
+export type PolicyVersion = {
+  id: string;
+  file_id: string;
+  filename: string | null;
+  version: string | null;
+  status: "current" | "superseded";
+  approved_at: string | null;
+  superseded_at: string | null;
+  created_at: string;
+};
+
+export type PolicyControl = {
+  id: string;
+  title: string;
+  assessment_status: ControlAssessmentStatus;
+  assessment_label: string;
+};
+
+export type PolicyDetail = Policy & {
+  versions: PolicyVersion[];
+  controls: PolicyControl[];
+  document_index_status: string | null;
 };
 
 export type FrameworkDashboardControl = {
@@ -470,7 +613,8 @@ export type Requirement = {
   description: string | null;
 };
 
-export type ControlStatus = "not_started" | "in_progress" | "implemented" | "needs_review";
+export type ControlStatus =
+  "not_started" | "in_progress" | "implemented" | "needs_review";
 
 export type Control = {
   id: string;
@@ -480,11 +624,75 @@ export type Control = {
    * would fit nobody and need extending forever. */
   category: string | null;
   priority: "low" | "medium" | "high";
-  /** Workflow state only. Whether a control is *evidenced* is derived
-   * from what is attached to it, never declared here. */
+  /** Workflow state only — has anyone declared this control
+   * operational. Secondary metadata: never the primary badge, and not
+   * the same question as whether the evidence supports it. */
   status: ControlStatus;
+  /** The derived assessment, from the one shared service. This is what
+   * every screen shows. See apps/api/app/compliance/control_assessment.py. */
+  /** What the user acts on: the human verdict where one exists, the
+   * derived assessment otherwise. Decided once, server-side. */
+  assessment_status: ControlAssessmentStatus;
+  assessment_label: string;
+  /** What Veyntra derived. Never overwritten by a human decision. */
+  ai_assessment_status: ControlAssessmentStatus;
+  ai_assessment_label: string;
+  /** The human verdict, if one was recorded. */
+  human_assessment_status: ControlAssessmentStatus | null;
+  human_assessment_label: string | null;
+  human_reviewed_at: string | null;
+  human_reviewed_by: string | null;
+  /** Whether a person still has to decide. Drives the Review Center. */
+  review_required: boolean;
+  /** How much supporting evidence exists — a measurement, never part of
+   * the status. Rendered separately for that reason. */
+  coverage_percent: number;
+  evidence_count: number;
+  applicable_requirement_count: number;
+  mapped_requirement_count: number;
   owner_id: string | null;
   created_at: string;
+};
+
+/** Each state is a range of `coverage_percent`, not an independent
+ * judgement — the server derives one from the other, so
+ * `partially_evidenced` at 0% cannot occur:
+ *
+ *   evidenced             100%
+ *   partially_evidenced   >0% and <100%
+ *   evidence_insufficient evidence exists, 0% demonstrated, cause known
+ *   needs_review          evidence exists, 0% demonstrated, cause unclear
+ *   no_evidence           no evidence items
+ *   not_applicable        no applicable requirements */
+export type ControlAssessmentStatus =
+  | "evidenced"
+  | "partially_evidenced"
+  | "evidence_insufficient"
+  | "needs_review"
+  | "no_evidence"
+  | "not_applicable"
+  // Human verdicts. Same vocabulary because they answer the same
+  // question — what state is this control in — and a reader should not
+  // have to learn which scale a word came from.
+  | "passed"
+  | "failed"
+  | "partially_implemented";
+
+/** Whether a requirement binds this organization, and how sure we are.
+ * Only `not_applicable` is excluded from coverage and readiness. */
+export type RequirementApplicabilityStatus =
+  "applicable" | "likely_applicable" | "needs_review" | "not_applicable";
+
+export type RequirementCoverageLine = {
+  requirement_id: string;
+  reference_code: string;
+  title: string;
+  framework_key: string;
+  applicability: RequirementApplicabilityStatus;
+  applicability_reason: string;
+  coverage:
+    "satisfied" | "deficient" | "uncertain" | "no_evidence" | "not_applicable";
+  missing_conditions: string[];
 };
 
 export type ControlAssessment = {
@@ -495,9 +703,91 @@ export type ControlAssessment = {
   created_at: string;
 };
 
+export type EvidenceMapping = {
+  evidence_id: string;
+  control_id: string;
+  control_title: string;
+  source_location: string | null;
+  evidence_type: string | null;
+  quoted_passage: string | null;
+  confidence: number | null;
+  mapped_by: "auto" | "human" | "manual";
+};
+
+/** One source document with everything it evidences. The mappings are
+ * unchanged in the database — this is presentation: one document, many
+ * statements, many controls. */
+export type GroupedEvidence = {
+  file_id: string;
+  filename: string;
+  /** The document name, and where it opens. Composed server-side so this
+   * list, the document library and a Copilot citation all point at the
+   * one Document Detail page. Null when it has no indexed document. */
+  title: string;
+  document_href: string | null;
+  document_type: string | null;
+  document_domain: string | null;
+  processing_status: string;
+  evidence_count: number;
+  control_count: number;
+  mappings: EvidenceMapping[];
+};
+
+export type EvidenceProvenance = {
+  evidence_id: string;
+  file_id: string;
+  filename: string;
+  title: string;
+  /** Where the document this came from opens. Null when it has no
+   * indexed document, so the filename renders without a link rather than
+   * with one that 404s. */
+  document_href: string | null;
+  /** Null for evidence attached by hand — there is no citation behind
+   * it, and inventing one would misrepresent how it got here. */
+  source_location: string | null;
+  evidence_type: string | null;
+  model_confidence: number | null;
+  quoted_passage: string | null;
+  mapped_by: "auto" | "human" | "manual";
+};
+
+/** What the evidence on file supports. Derived on read, so it cannot go
+ * stale against the evidence it describes. */
+export type ControlAssessmentView = {
+  control_id: string;
+  status: ControlAssessmentStatus;
+  confidence: number;
+  why: string;
+  missing: string | null;
+  evidence: EvidenceProvenance[];
+  requirement_codes: string[];
+  /** Per requirement, so the percentage can be checked against the same
+   * list rather than taken on trust. */
+  requirements: RequirementCoverageLine[];
+  label: string;
+  ai_status: ControlAssessmentStatus;
+  ai_label: string;
+  human_status: ControlAssessmentStatus | null;
+  human_label: string | null;
+  effective_status: ControlAssessmentStatus;
+  review_required: boolean;
+  recorded_by: string | null;
+  applicable_count: number;
+  satisfied_count: number;
+  /** The last human verdict. Shown beside the derived one, never
+   * replaced by it. */
+  recorded_status: string | null;
+  recorded_at: string | null;
+};
+
 export type ControlDetail = Control & {
   requirements: Requirement[];
+  /** Human-recorded verdicts, oldest to newest. */
   assessments: ControlAssessment[];
+  evidence: Evidence[];
+  /** What the evidence on file supports. Null only if the server could
+   * not derive one. */
+  assessment: ControlAssessmentView | null;
 };
 
 export type Evidence = {
@@ -532,7 +822,8 @@ export type Risk = {
   created_at: string;
 };
 
-export type AIRiskClassification = "minimal" | "limited" | "high" | "unacceptable";
+export type AIRiskClassification =
+  "minimal" | "limited" | "high" | "unacceptable";
 export type AISystemStatus = "in_review" | "approved" | "rejected" | "retired";
 
 export type AISystem = {
@@ -556,6 +847,10 @@ export type AISystem = {
   governance_owner_id: string | null;
   last_reviewed_at: string | null;
   risk_classification: AIRiskClassification;
+  /** Whether post-market obligations have begun. A high-risk system in
+   * development is subject to the design-time articles and not yet to
+   * Art. 72. */
+  deployment_status: "development" | "pilot" | "production" | "retired";
   status: AISystemStatus;
   owner_id: string | null;
   approval_id: string | null;
@@ -622,7 +917,8 @@ export type DPIA = {
   created_at: string;
 };
 
-export type DSARRequestType = "access" | "deletion" | "rectification" | "portability";
+export type DSARRequestType =
+  "access" | "deletion" | "rectification" | "portability";
 export type DSARStatus = "received" | "in_progress" | "fulfilled" | "rejected";
 
 export type DSAR = {
@@ -640,7 +936,23 @@ export type DSAR = {
   discovery_findings: DsarDiscovery | null;
   discovery_run_at: string | null;
   export_generated_at: string | null;
+  /** When the request arrived — not when somebody logged it. The
+   * response clock runs from receipt. */
+  received_at: string | null;
+  /** One month from receipt, plus any recorded extension. */
   due_at: string;
+  /** The deadline before any extension, so the screen can say
+   * "extended to" rather than showing a later date as the deadline. */
+  base_due_at: string | null;
+  extension_months: number;
+  extension_reason: string | null;
+  extension_granted_at: string | null;
+  /** Derived server-side on read. A stored "overdue" is wrong the
+   * moment the clock passes it and nobody has run a job. */
+  days_remaining: number | null;
+  overdue: boolean;
+  due_soon: boolean;
+  deadline_label: string | null;
   fulfilled_at: string | null;
   notes: string | null;
   assigned_to: string | null;
@@ -736,19 +1048,142 @@ export type VendorDetail = Vendor & {
 };
 
 export type QuestionnaireSource = "customer_provided" | "internal_template";
-export type QuestionnaireStatus = "draft" | "in_progress" | "completed";
+/** How far the work got — never where the record lives.
+ *
+ * Derived by the server from the answers themselves, so every screen
+ * reports the same thing. `completed` is the exception: it means the
+ * questionnaire went back to the customer, which reading the answers
+ * cannot tell us, so a person sets it.
+ *
+ * Orthogonal to `archived_at`. "Archived · Ready to share" is a valid
+ * and common combination. */
+export type QuestionnaireStatus =
+  | "needs_setup"
+  | "draft"
+  | "in_review"
+  | "ready_to_share"
+  | "completed";
+
+/** One reason a questionnaire cannot go back to the customer.
+ *
+ * `code` is what a row keys its action off — `customer_required` puts a
+ * "Set customer" button on it. `message` is the sentence to show, and it
+ * is the same sentence the API returns when it refuses the transition. */
+export type ReadinessBlocker = {
+  code:
+    | "customer_required"
+    | "review_required"
+    | "no_questions"
+    | "unanswered_questions"
+    | "needs_review";
+  message: string;
+};
+
+/** Whether a questionnaire can be shared, decided by the server.
+ *
+ * The rule lives in `app/compliance/questionnaire_status.py` and is the
+ * same one that writes the stored status and refuses the transition. The
+ * UI renders this; it never recomputes it from `progress`, which is how
+ * a detail page came to say "Ready to share" over a record stored as
+ * something else. */
+export type QuestionnaireReadiness = {
+  ready: boolean;
+  blockers: ReadinessBlocker[];
+  /** Something no amount of answering will fix — no customer, or no
+   * review to belong to. */
+  needs_setup: boolean;
+};
+
+/** What is left to do, in the four states work moves through.
+ *
+ * `percent_complete` counts approved answers only. A drafted answer
+ * nobody has read is not progress towards sending the questionnaire
+ * back, and counting it as such would say "nearly done" when nobody has
+ * checked anything. */
+export type QuestionnaireProgress = {
+  total: number;
+  approved: number;
+  needs_review: number;
+  draft: number;
+  unanswered: number;
+  percent_complete: number;
+  ready_to_share: boolean;
+};
+
+/** One line of an import, and what Veyntra made of it.
+ *
+ * `possible_duplicate` is importable on purpose: it is the reader's
+ * decision, which is the whole reason it is flagged rather than merged.
+ * Silently collapsing two similarly-worded questions would drop one a
+ * customer actually asked. */
+export type AnalyzedLine = {
+  text: string;
+  outcome: "new" | "duplicate" | "possible_duplicate" | "unparsed";
+  category: string;
+  /** The question already on the questionnaire this one resembles. */
+  matches: string | null;
+  similarity: number;
+  /** Why a line was not read as a question, in words worth acting on. */
+  reason: string | null;
+  importable: boolean;
+};
+
+/** What an import would do, before anything is created. */
+export type ImportAnalysis = {
+  headline: string;
+  detected: number;
+  new: number;
+  duplicates: number;
+  possible_duplicates: number;
+  unparsed: number;
+  lines: AnalyzedLine[];
+  supported_formats: string[];
+  source_filename: string | null;
+};
+
+/** What the import actually did. */
+export type ImportResult = {
+  created: number;
+  duplicates_skipped: number;
+  unparsed: number;
+  /** True while answers are still being drafted in the background. */
+  drafting: boolean;
+  status_before: string | null;
+  status_after: string | null;
+};
 
 export type Questionnaire = {
+  /** Whether this may be permanently deleted, decided by the server from
+   * what has actually happened to it — never by the client from a status
+   * field. The menu is drawn from it; the endpoint checks again anyway,
+   * so a stale list cannot talk anybody into destroying an approval. */
+  can_delete: boolean;
+  /** Why not, in words meant for the person who clicked Delete. */
+  delete_blocked_reason: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
   id: string;
   title: string;
+  /** Who is asking, and by when. */
+  customer_name: string | null;
+  due_at: string | null;
   source: QuestionnaireSource;
   status: QuestionnaireStatus;
+  /** The words for that status, chosen server-side. */
+  status_label: string;
+  readiness: QuestionnaireReadiness;
+  /** The title reads like one of the questions rather than the name of
+   * the questionnaire. Flagged so it can be offered for rename — never
+   * acted on, because a plausible replacement is still a guess. */
+  title_looks_like_a_question: boolean;
   opportunity_id: string | null;
   owner_id: string | null;
   created_at: string;
+  progress: QuestionnaireProgress;
 };
 
-export type QuestionCategory = "compliance" | "security";
+export type QuestionCategory =
+  "compliance" | "security" | "privacy" | "ai_governance";
 
 export type QuestionnaireQuestion = {
   id: string;
@@ -759,16 +1194,46 @@ export type QuestionnaireQuestion = {
   created_at: string;
 };
 
-export type AnswerStatus = "draft" | "approved" | "missing";
-export type AnswerSourceType = "ai_suggested" | "manual" | "reused_from_library" | null;
+/** `missing` is gone: it described the row being empty rather than what
+ * the reader has to do about it, and the screen printed it verbatim. */
+export type AnswerStatus =
+  "unanswered" | "draft" | "needs_review" | "approved" | "rejected";
+export type AnswerSourceType =
+  "ai_suggested" | "manual" | "reused_from_library" | null;
+
+/** One source behind a drafted answer, already resolved to something a
+ * person can look up — never a chunk id. Same shape the Copilot uses. */
+export type AnswerCitation = {
+  reference: string;
+  document_title: string;
+  section: string | null;
+  page: number | null;
+  passage: string;
+  source_type: string | null;
+  document_id: string;
+  href: string | null;
+};
 
 export type QuestionnaireAnswer = {
   id: string;
   question_id: string;
   answer_text: string | null;
   status: AnswerStatus;
+  /** The word the screen shows for that status, phrased server-side. */
+  status_label: string;
   source_type: AnswerSourceType;
-  citations: Record<string, unknown>[] | null;
+  citations: AnswerCitation[] | null;
+  /** What the model said about its own output. Shown, never used alone
+   * to decide whether a person must look at it. */
+  confidence: number | null;
+  /** Why this needs a human, in words they can act on. */
+  review_reason: string | null;
+  /** Whether Approve is available at all, and why not when it is not —
+   * so a disabled button can explain itself. */
+  can_approve: boolean;
+  approval_blocked_reason: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
   evidence_id: string | null;
   control_id: string | null;
   answered_by: string | null;
@@ -781,38 +1246,483 @@ export type QuestionnaireQuestionDetail = QuestionnaireQuestion & {
 
 export type QuestionnaireDetail = Questionnaire & {
   questions: QuestionnaireQuestionDetail[];
+  /** The formats a questionnaire file can be imported from, named by the
+   * server so the UI offers what actually works. */
+  supported_import_formats: string[];
+  /** The customer engagement this belongs to, when a customer sent it.
+   * Null for internal assessments — those are nobody's engagement but
+   * our own, and that distinction is the point of the field. */
+  security_review_id: string | null;
+  security_review_title: string | null;
+  security_review_href: string | null;
+  /** The engagement's own state. Two dimensions, kept apart: how far the
+   * review got, and whether it is still open. "Ready to share" and
+   * "Archived" together is what a finished engagement looks like. */
+  security_review_status: string | null;
+  security_review_status_label: string | null;
+  security_review_archived_at: string | null;
+  /** Set only for a customer questionnaire with no customer recorded on
+   * it, and therefore no engagement. Most of these predate the column.
+   * The suggestion is what the title appears to say — offered to a
+   * person, never applied on its own. */
+  needs_customer: boolean;
+  suggested_customer: string | null;
+  suggested_customer_reason: string | null;
+};
+
+/** What naming a customer did. */
+export type CustomerLinkResult = {
+  questionnaire_id: string;
+  customer_name: string;
+  security_review_id: string | null;
+  security_review_title: string | null;
+  review_created: boolean;
+};
+
+/** A questionnaire the reconciliation would not name a customer for. */
+export type NeedsCustomer = {
+  questionnaire_id: string;
+  title: string;
+  archived: boolean;
+  suggested_customer: string | null;
+  reason: string | null;
+};
+
+/** What a customer-review reconciliation linked, and what it left alone. */
+export type ReviewBackfillReport = {
+  examined: number;
+  linked: number;
+  linked_from_title: number;
+  reviews_created: number;
+  reviews_archived: number;
+  unnamed: number;
+  suggested: number;
+  already_linked: number;
+  needs_customer: NeedsCustomer[];
+  dry_run: boolean;
 };
 
 export type AuditStatus = "planned" | "in_progress" | "completed";
 
 export type Audit = {
+  finding_count: number;
+  /** Whether this may be permanently deleted, decided by the server from
+   * what has actually happened to it — never by the client from a status
+   * field. The menu is drawn from it; the endpoint checks again anyway,
+   * so a stale list cannot talk anybody into destroying an approval. */
+  can_delete: boolean;
+  /** Why not, in words meant for the person who clicked Delete. */
+  delete_blocked_reason: string | null;
+  archived_at: string | null;
+  archived_by: string | null;
   id: string;
   title: string;
   framework_id: string | null;
+  /** The framework as it was named when the audit ran, so a completed
+   * audit still says what it was against after a catalog rename. */
+  framework_name: string | null;
+  /** Set when a colleague ran the audit, so the trail carries a real
+   * identity. Null for an external firm, where the name is genuinely all
+   * we have — the two cases are distinguishable rather than flattened. */
+  auditor_user_id: string | null;
   auditor_name: string | null;
+  /** internal | external | null when nobody has established which.
+   * Never inferred from whether an account is linked. */
+  auditor_type: "internal" | "external" | null;
+  auditor_organization: string | null;
+  /** What the engagement covers, in the auditor's words. No amount of
+   * data infers this — two ISO 42001 audits can scope different systems. */
+  scope: string | null;
   status: AuditStatus;
+  status_label: string;
   scheduled_at: string | null;
+  /** The timestamps are the state, not decoration beside it. A planned
+   * audit has neither; one in progress has a start and no completion.
+   * They move with `status` and never contradict it — which they did,
+   * which is why an audit could read "Planned · Completed 8/26/2026". */
+  started_at: string | null;
   completed_at: string | null;
+  prepared_at: string | null;
   owner_id: string | null;
   created_at: string;
+  progress: AuditProgress;
 };
 
-export type FindingStatus = "open" | "remediated";
+/** How far through the scope the auditor is.
+ *
+ * Review progress, not compliance readiness. "12 of 18 reviewed" and
+ * "67% evidenced" are different numbers about different things. */
+export type AuditProgress = {
+  scoped: number;
+  reviewed: number;
+  unreviewed: number;
+  percent_reviewed: number;
+  no_finding: number;
+  observations: number;
+  minor: number;
+  major: number;
+  critical: number;
+  needs_evidence: number;
+  open_findings: number;
+  ready_for_verification: number;
+  evidence_reviewed: number;
+  remediation_completed: number;
+  /** Scope, so "3 requirements" is never left unexplained. */
+  not_applicable: number;
+  excluded: number;
+  /** Remediation is the work attached to a finding, not the finding.
+   * Collapsing them is why a completed audit read "3 open findings" when
+   * all three were observations with fixes under way. */
+  remediation_open: number;
+  remediation_in_progress: number;
+  remediation_ready: number;
+  remediation_closed: number;
+  accepted_risk: number;
+};
+
+/** One requirement, and why it is or is not in this audit. */
+export type AuditScopeLine = {
+  requirement_id: string | null;
+  reference_code: string;
+  title: string;
+  disposition: "included" | "not_applicable" | "excluded";
+  reason: string | null;
+  excluded_at: string | null;
+};
+
+export type AuditScope = {
+  framework_name: string | null;
+  included: number;
+  not_applicable: number;
+  excluded: number;
+  lines: AuditScopeLine[];
+};
+
+/** Fixing is not closing. The team can reach `ready_for_verification`;
+ * only an auditor reaches `closed`, and only with a note. */
+export type FindingStatus =
+  | "open"
+  | "remediation_in_progress"
+  | "ready_for_verification"
+  | "closed"
+  | "accepted_risk";
+
+/** What the auditor concluded about one scoped requirement. */
+export type AuditDecision =
+  | "no_finding"
+  | "observation"
+  | "minor"
+  | "major"
+  | "critical"
+  | "needs_evidence";
+
+/** One piece of evidence as the audit shows it. No chunk identifiers —
+ * `source_location` is the readable place and `document_href` opens it. */
+export type AuditEvidence = {
+  evidence_id: string | null;
+  file_id: string | null;
+  title: string;
+  document_href: string | null;
+  source_location: string | null;
+  evidence_type: string | null;
+  model_confidence: number | null;
+};
+
+/** One scoped requirement, with everything needed to decide on it.
+ *
+ * Everything prefixed `prepared_` is the snapshot taken when the audit
+ * was prepared — what was true when the auditor looked. */
+export type AuditItem = {
+  id: string;
+  requirement_id: string;
+  reference_code: string;
+  requirement_title: string;
+  framework_key: string | null;
+  control_id: string | null;
+  control_title: string | null;
+  prepared_status: string;
+  prepared_status_label: string;
+  prepared_confidence: number;
+  prepared_why: string | null;
+  prepared_missing: string | null;
+  evidence_snapshot: AuditEvidence[];
+  /** Attached since the audit was prepared — shown as new rather than
+   * folded into the snapshot. */
+  new_evidence: AuditEvidence[];
+  applicability: string | null;
+  applicability_reason: string | null;
+  /** What the auditor concluded. Kept apart from `prepared_status`,
+   * which is what Veyntra makes of the evidence — two claims by two
+   * parties, and a screen that shows them as adjacent unlabelled badges
+   * asks the reader to work out which is which. */
+  decision: AuditDecision | null;
+  decision_label: string | null;
+  decision_note: string | null;
+  decided_at: string | null;
+  finding_id: string | null;
+  finding_status: FindingStatus | null;
+  finding_status_label: string | null;
+  finding_severity: Severity | null;
+  remediation_task_id: string | null;
+  /** Excluded from this audit only. The organization's framework
+   * applicability is a different question and is left as it was. */
+  excluded_at: string | null;
+  exclusion_reason: string | null;
+  /** Where the requirement stands today, against the snapshot the
+   * auditor assessed. Null when nothing has moved. */
+  current_status: string | null;
+  current_status_label: string | null;
+  section: string;
+};
+
+export type AuditSection = {
+  key: string;
+  label: string;
+  items: AuditItem[];
+};
+
+export type AuditDecisionResult = {
+  item: AuditItem;
+  finding: AuditFinding | null;
+  finding_created: boolean;
+  /** True when the finding was attached to remediation that already
+   * existed for this requirement rather than opening a second task. */
+  remediation_reused: boolean;
+  related_task_id: string | null;
+};
+
+export type AuditPreparation = {
+  applicable: number;
+  satisfied: number;
+  needs_review: number;
+  gaps: number;
+  evidence: number;
+  open_remediation: number;
+  created: number;
+  updated: number;
+  not_applicable: number;
+};
 
 export type AuditFinding = {
   id: string;
   audit_id: string;
+  audit_item_id: string | null;
   control_id: string | null;
+  /** Copied when the finding was raised, so it keeps reading correctly
+   * after the catalog is renamed or the control retired. */
+  requirement_id: string | null;
+  requirement_code: string | null;
+  control_title: string | null;
   title: string;
   description: string | null;
   severity: Severity;
   status: FindingStatus;
+  status_label: string;
+  /** What the auditor was looking at when they raised it. */
+  evidence_snapshot: AuditEvidence[];
   related_task_id: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  verification_note: string | null;
   created_at: string;
+  /** Set when the auditor replaced this conclusion with a later one on
+   * the same requirement. The finding keeps its severity, its status and
+   * its verification; it stops counting as a live finding. Without this,
+   * a completed audit read "18 conclusions, 19 findings" and nothing on
+   * screen accounted for the extra one. */
+  superseded_at: string | null;
+  superseded_by_id: string | null;
+  superseded_reason: string | null;
+};
+
+export type AuditReportConclusion = {
+  reference_code: string;
+  requirement_title: string;
+  control_title: string | null;
+  evidence_state: string | null;
+  evidence_state_label: string | null;
+  decision: string | null;
+  /** The auditor's conclusion. Frozen — it came from a person. */
+  decision_label: string;
+  decision_note: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  evidence_count: number;
+  finding_id: string | null;
+  current_remediation: string | null;
+  /** Where the work stands now. Moves after the audit closes; the
+   * conclusion above does not. */
+  current_remediation_label: string | null;
+};
+
+export type AuditReportFinding = {
+  id: string;
+  reference_code: string | null;
+  /** The requirement this is about, and the heading of the block.
+   * `title` is what the finding was named — sometimes a diagnostic
+   * sentence, and never the heading. */
+  requirement_title: string | null;
+  title: string;
+  description: string | null;
+  severity: Severity;
+  /** "Minor finding", not "medium". */
+  conclusion_label: string;
+  current_status: string;
+  current_status_label: string;
+  control_title: string | null;
+  evidence_state: string | null;
+  evidence_state_label: string | null;
+  /** A report-grade sentence for what Veyntra could establish, derived
+   * from the evidence state rather than quoting the diagnostic. */
+  assessment: string | null;
+  not_evidenced: string | null;
+  /** The auditor's reason, where they recorded one. Never invented. */
+  auditor_note: string | null;
+  /** The conclusion and the evidence state disagree and nobody wrote
+   * down why. Said out loud rather than left to look contradictory. */
+  rationale_gap: boolean;
+  evidence_count: number;
+  verified_at: string | null;
+  verified_by: string | null;
+  verification_note: string | null;
+  remediation_task: string | null;
+  remediation_owner: string | null;
+  remediation_due: string | null;
+  superseded_at: string | null;
+  superseded_reason: string | null;
+};
+
+export type AuditorIdentity = {
+  name: string | null;
+  /** internal | external | null when nobody has established which.
+   * Never inferred from whether an account is linked. */
+  auditor_type: "internal" | "external" | null;
+  type_label: string | null;
+  /** The firm, for an external auditor only. */
+  organization: string | null;
+  unresolved: boolean;
+};
+
+export type AuditReportMetric = {
+  label: string;
+  value: string;
+  emphasis: boolean;
+};
+
+export type AuditReportSignOff = {
+  auditor: AuditorIdentity;
+  completed_at: string | null;
+  generated_at: string;
+  generated_by: string | null;
+  report_version: number;
+  approved_by: string | null;
+  approved_at: string | null;
+};
+
+export type AuditReportPreview = {
+  audit_id: string;
+  title: string;
+  audit_title: string;
+  organization_name: string | null;
+  framework_name: string | null;
+  framework_basis: string | null;
+  auditor_name: string | null;
+  /** internal | external | null when nobody has established which.
+   * Never inferred from whether an account is linked. */
+  auditor_type: "internal" | "external" | null;
+  auditor_organization: string | null;
+  auditor: AuditorIdentity;
+  scope: string | null;
+  status: string;
+  status_label: string;
+  started_at: string | null;
+  completed_at: string | null;
+  prepared_at: string | null;
+  classification: string;
+  /** False when the organization record has no usable name. The report
+   * says so rather than substituting anything derived from a person. */
+  organization_name_configured: boolean;
+  /** The result in sentences, before any table. */
+  executive_summary: string[];
+  metrics: AuditReportMetric[];
+  methodology: string[];
+  conclusion_summary: AuditReportMetric[];
+  progress: {
+    scoped: number;
+    reviewed: number;
+    percent_reviewed: number;
+    excluded: number;
+    findings: number;
+    superseded: number;
+  };
+  conclusions: AuditReportConclusion[];
+  conclusion_counts: Record<string, number>;
+  findings: AuditReportFinding[];
+  findings_by_severity: {
+    key: string;
+    severity: Severity;
+    label: string;
+    count: number;
+    findings: AuditReportFinding[];
+  }[];
+  superseded_findings: AuditReportFinding[];
+  remediation: { status: string; label: string; count: number }[];
+  remediation_rows: AuditReportFinding[];
+  verification: AuditReportFinding[];
+  evidence_index: {
+    title: string;
+    filename: string | null;
+    document_href: string | null;
+    /** As reviewed at audit preparation. A document revised since must
+     * not change what the report says was reviewed. */
+    version: string | null;
+    version_label: string;
+    version_source: string;
+    evidence_states: string[];
+    requirement_codes: string[];
+  }[];
+  limitations: string[];
+  disclaimer: string;
+  sign_off: AuditReportSignOff;
+  generated_for: string;
+  /** Handed back on generate. What makes it "issue what I read" rather
+   * than "issue whatever is true now". */
+  digest: string;
+  next_version: number;
+  blockers: { code: string; message: string }[];
+  ready: boolean;
+};
+
+export type AuditReportRecord = {
+  id: string;
+  audit_id: string;
+  title: string;
+  version: number;
+  file_format: string;
+  file_id: string | null;
+  generated_by: string | null;
+  generated_by_name: string | null;
+  generated_at: string;
+  /** The audit has moved since this was generated. The report itself is
+   * unchanged; this only means a new version can be offered. */
+  stale: boolean;
+  findings_count: number;
+  requirements_reviewed: number;
+};
+
+export type AuditCompletionBlocker = {
+  code: string;
+  message: string;
 };
 
 export type AuditDetail = Audit & {
   findings: AuditFinding[];
+  /** The scope, grouped the way an auditor works through it: gaps first,
+   * clean rows last. Empty sections are left out. */
+  sections: AuditSection[];
+  /** What stands between this audit and being called finished. Empty
+   * means it can be completed; the endpoint checks again regardless. */
+  completion_blockers: AuditCompletionBlocker[];
 };
 
 export type TrustCenterCategory =
@@ -883,22 +1793,158 @@ export type TrustCenterPublic = {
 
 export type SecurityReviewStatus = "in_progress" | "blocked" | "cleared";
 
+/** One customer's security review: the engagement questionnaires
+ * belong to.
+ *
+ * `opportunity_id` and `questionnaire_id` are the sales-coupled model
+ * this replaced — carried by rows predating the change, set by nothing
+ * new. The engagement is identified by `customer_name`, a name rather
+ * than a key into a CRM this product does not have. */
 export type SecurityReview = {
   id: string;
-  opportunity_id: string;
-  questionnaire_id: string;
+  title: string | null;
+  customer_name: string | null;
+  status: string;
+  status_label: string;
+  progress: ReviewProgress;
+  archived_at: string | null;
+  archived_by: string | null;
+  opportunity_id: string | null;
+  questionnaire_id: string | null;
   approval_id: string | null;
   trust_package_file_id: string | null;
-  status: SecurityReviewStatus;
   is_deal_blocker: boolean;
   created_at: string;
 };
 
+/** A review's work, added up across every questionnaire in it. */
+export type ReviewProgress = {
+  questionnaires: number;
+  total: number;
+  approved: number;
+  needs_review: number;
+  draft: number;
+  unanswered: number;
+  percent_complete: number;
+  ready_to_share: boolean;
+};
+
+/** One questionnaire inside an engagement.
+ *
+ * Two dimensions, kept apart: `status` is how far it got, and
+ * `archived_at` is whether it is still on the working list. A finished
+ * engagement is a list of archived questionnaires that are each still
+ * "ready to share". */
+export type ReviewQuestionnaire = {
+  id: string;
+  title: string;
+  source: string;
+  status: QuestionnaireStatus;
+  href: string;
+  archived_at: string | null;
+  progress: QuestionnaireProgress;
+};
+
+export type ExportOutputType = "summary" | "questionnaire" | "evidence_pack";
+
+export type ExportBlocker = { code: string; message: string };
+
+/** One question and the answer approved for it.
+ *
+ * No confidence and no model reasoning: those are internal numbers about
+ * our process, not facts about the customer's security. */
+export type ExportAnswer = {
+  question_id: string;
+  question: string;
+  category: string | null;
+  answer: string;
+  approved_at: string | null;
+  sources: string[];
+  /** The answer carries a limitation, which goes out with it rather than
+   * being summarised away. */
+  qualified: boolean;
+};
+
+/** A document that could go in the package, and whether it may.
+ *
+ * `eligible` is the product's answer; `included` is the person's. An
+ * ineligible document is never on by default. */
+export type ExportDocument = {
+  file_id: string;
+  title: string;
+  kind: string;
+  disclosure: string;
+  disclosure_label: string;
+  eligible: boolean;
+  reason: string | null;
+  version: string | null;
+  status: string | null;
+  superseded: boolean;
+  supports: string[];
+  included: boolean;
+};
+
+/** Exactly what the customer would receive, before any file exists. */
+export type ExportPreview = {
+  output_type: ExportOutputType;
+  output_label: string;
+  file_format: string;
+  title: string;
+  customer_name: string | null;
+  review_title: string;
+  review_status: string;
+  review_status_label: string;
+  /** History rather than a live position, and the reader is told. */
+  review_archived: boolean;
+  review_date: string;
+  progress: ReviewProgress;
+  answers: ExportAnswer[];
+  documents: ExportDocument[];
+  disclosures: string[];
+  blockers: ExportBlocker[];
+  sections: string[];
+  section_labels: Record<string, string>;
+  introduction: string | null;
+  disclaimer: string;
+  ready: boolean;
+  /** Sent back on generate, so the server knows the person is confirming
+   * what they were shown rather than whatever is true by the time they
+   * click. */
+  digest: string;
+  next_version: number;
+  column_mapping: Record<string, string>;
+  source_filename: string | null;
+};
+
+/** One generated package. Never edited — regenerating adds a version. */
+export type ReviewExportRecord = {
+  id: string;
+  security_review_id: string;
+  output_type: ExportOutputType;
+  output_label: string;
+  file_format: string;
+  title: string;
+  version: number;
+  file_id: string | null;
+  generated_by: string | null;
+  generated_at: string;
+  shared_at: string | null;
+  /** The review has moved since this was generated. The package itself
+   * is unchanged; this only means a new version can be offered. */
+  stale: boolean;
+  answer_count: number;
+  document_count: number;
+};
+
 export type SecurityReviewDetail = SecurityReview & {
-  opportunity_title: string;
+  /** Every questionnaire in the engagement, oldest first. */
+  questionnaires: ReviewQuestionnaire[];
+  /** The sales-coupled fields this replaced. Null on anything created
+   * since; carried by rows that predate the change so they still open. */
+  opportunity_title: string | null;
   approval_status: string | null;
   gap_count: number;
-  questionnaire: QuestionnaireDetail;
+  questionnaire: QuestionnaireDetail | null;
 };
 
 export type SecurityReviewSyncResult = {
@@ -906,7 +1952,8 @@ export type SecurityReviewSyncResult = {
   tasks_created: number;
 };
 
-export type TransferMechanism = "adequacy_decision" | "sccs" | "bcrs" | "derogation";
+export type TransferMechanism =
+  "adequacy_decision" | "sccs" | "bcrs" | "derogation";
 export type DataTransferStatus = "active" | "under_review" | "terminated";
 
 export type DataTransfer = {
@@ -946,7 +1993,8 @@ export type SecurityFinding = {
   category: "vulnerability" | "cloud_misconfiguration" | "identity" | "other";
   severity: Severity;
   cve: string | null;
-  status: "open" | "investigating" | "resolved" | "false_positive" | "risk_accepted";
+  status:
+    "open" | "investigating" | "resolved" | "false_positive" | "risk_accepted";
   asset_id: string | null;
   owner_id: string | null;
   due_at: string | null;
@@ -1477,7 +2525,8 @@ export type SupportCustomer = {
   created_at: string;
 };
 
-export type TicketCategory = "billing" | "technical" | "account" | "security" | "general";
+export type TicketCategory =
+  "billing" | "technical" | "account" | "security" | "general";
 export type TicketPriority = "low" | "medium" | "high" | "urgent";
 export type TicketStatus = "open" | "pending" | "resolved" | "closed";
 
@@ -1663,7 +2712,8 @@ export type WorkflowStep = {
   config: Record<string, unknown>;
 };
 
-export type WorkflowStatus = "draft" | "testing" | "active" | "paused" | "archived";
+export type WorkflowStatus =
+  "draft" | "testing" | "active" | "paused" | "archived";
 
 export type Workflow = {
   id: string;
@@ -1678,7 +2728,8 @@ export type Workflow = {
   created_at: string;
 };
 
-export type WorkflowRunStatus = "running" | "succeeded" | "failed" | "awaiting_approval";
+export type WorkflowRunStatus =
+  "running" | "succeeded" | "failed" | "awaiting_approval";
 
 export type WorkflowRun = {
   id: string;
@@ -1808,6 +2859,8 @@ export type SearchResult = {
   id: string;
   label: string;
   module: string;
+  /** Where to open it. Computed server-side so this cannot drift. */
+  href: string;
 };
 
 export type SearchResponse = {
@@ -1821,16 +2874,49 @@ export type FrameworkActivation = {
   activated_at: string | null;
 };
 
+/** The structured fix behind a gap.
+ *
+ * Assembled from playbooks written against the regulation, not
+ * generated — see apps/api/app/compliance/remediation.py. Arrives whole
+ * so the UI can render the checklist as a checklist and the required
+ * evidence as an upload target, rather than asking the reader to parse
+ * a paragraph. */
+export type RemediationPlan = {
+  problem: string;
+  why: string;
+  action: string;
+  /** A team, not a person — we do not know the customer's org chart. */
+  owner: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  due_in_days: number;
+  required_evidence: string[];
+  checklist: string[];
+  evidence_reviewed: string[];
+  missing_conditions: string[];
+  missing_evidence: string;
+  requirement_code: string;
+  requirement_title: string;
+  framework_name: string;
+  control_title: string | null;
+  affected_ai_systems: string[];
+};
+
 export type ComplianceGap = {
   id: string;
   framework_id: string;
   requirement_id: string;
   control_id: string | null;
-  kind: "no_control" | "evidence_missing" | "evidence_partial" | "assessment_failed";
+  kind:
+    | "no_control"
+    | "evidence_missing"
+    | "evidence_partial"
+    | "assessment_failed";
   status: "open" | "remediating" | "resolved";
   severity: "low" | "medium" | "high";
   summary: string;
   recommendation: string | null;
+  remediation_plan: RemediationPlan | null;
+  missing_conditions: string[];
   task_id: string | null;
   created_at: string;
 };
@@ -1839,16 +2925,37 @@ export type ComplianceGap = {
  * `latest_assessment_status` travel with the status deliberately — the
  * reader can see what the conclusion was computed from rather than being
  * asked to trust it. */
+/** Where one requirement sits in the lifecycle.
+ *
+ * The order is: no control -> evidence missing -> (evidence read) ->
+ * either a named deficiency, or needs_review while the conclusion is
+ * open, or satisfied. Only the first four are findings; `needs_review`
+ * deliberately carries no gap, because "nobody has confirmed this yet"
+ * is not the same as "something is wrong". */
+export type RequirementStatus =
+  | "not_applicable"
+  | "not_assessed"
+  | "evidence_missing"
+  | "assessment_failed"
+  | "deficient"
+  | "needs_review"
+  | "satisfied";
+
 export type RequirementEvaluation = {
   requirement_id: string;
   reference_code: string;
   title: string;
-  status: "not_assessed" | "evidence_missing" | "needs_review" | "partial" | "satisfied";
+  status: RequirementStatus;
   control_ids: string[];
   evidence_count: number;
   latest_assessment_status: string | null;
   summary: string;
   gap_id: string | null;
+  /** The conditions the evidence does not meet, named. Populated only
+   * when the status is `deficient`. */
+  missing_conditions: string[];
+  /** Why no conclusion was reached, when the status is `needs_review`. */
+  uncertainty: string | null;
 };
 
 export type FrameworkAssessmentResult = {
@@ -1860,17 +2967,65 @@ export type FrameworkAssessmentResult = {
   /** Requirements actually backed by evidence — the number that must not
    * move when an unrelated document is uploaded. */
   evidence_coverage_percent: number;
+  readiness: ReadinessBreakdown;
 };
+
+/** One field that moved, already in words. `before` is null where the
+ * event recorded only a new value — most writes do, and inventing a
+ * previous value to fill the arrow would be a claim the record does not
+ * make. */
+export type AuditChange = {
+  label: string;
+  before: string | null;
+  after: string;
+};
+
+/** What an event happened to, by name rather than by id. `available` is
+ * false when the record has since been deleted — the card says so
+ * instead of printing a UUID nobody can use. */
+export type AuditEntity = {
+  kind: string;
+  label: string;
+  href: string | null;
+  available: boolean;
+};
+
+/** Who or what performed an event.
+ *
+ * Classified server-side per action, never inferred from whether a user
+ * id happens to be recorded: "a model proposed this" and "our rules
+ * derived this" are exactly the distinction an auditor is reading the
+ * trail to find. */
+export type AuditActorKind =
+  "person" | "ai" | "system" | "integration" | "unknown";
 
 export type AuditEvent = {
   id: string;
+  // --- what a person reads ------------------------------------------
+  title: string;
+  category: string;
+  category_label: string;
+  entity: AuditEntity | null;
+  actor_name: string;
+  actor_kind: AuditActorKind;
+  changes: AuditChange[];
+  reason: string | null;
+  created_at: string;
+  // --- the technical record, for the details drawer ------------------
+  //
+  // Still here deliberately. The timeline hides these; it does not lose
+  // them, because the raw event is what makes the trail worth keeping.
   action: string;
   object_type: string;
   object_id: string | null;
   actor_user_id: string | null;
+  actor_email: string | null;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
-  created_at: string;
+  correlation_id: string | null;
+  /** The terser per-record phrasing used by a task or policy feed, where
+   * the record is already named on the page. */
+  label: string | null;
 };
 
 export type IndicatorCatalog = {
@@ -1909,11 +3064,416 @@ export type AIAssessmentDetail = {
 /** An AI proposal that a document evidences a control. Deliberately not
  * Evidence: the assessment ignores these entirely, and approving one is
  * what creates the real evidence row. */
+/** A document in the compliance library, with where it is in the
+ * processing pipeline. `extracted_characters` travels with the status so
+ * the UI can show that `ready` meant text was genuinely read, rather
+ * than asking the user to trust a green badge over an empty result. */
+export type ComplianceDocument = {
+  id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  classification: string;
+  processing_status:
+    // Resting state: uploaded elsewhere in Veyntra and never submitted
+    // for compliance analysis. Not a pipeline stage.
+    | "not_analyzed"
+    | "uploaded"
+    | "parsing"
+    | "analyzing"
+    | "ready"
+    | "failed"
+    | "unsupported";
+  processing_error: string | null;
+  processed_at: string | null;
+  /** Whether the Copilot can retrieve from this document. Separate
+   * from `processing_status`, which only says Document Intelligence
+   * finished — a document can be analysed and mapped perfectly while its
+   * embedding call failed, and calling that "Analyzed" sent people to
+   * ask the Copilot about a document it could not see. */
+  /** The governance record this document is, when it is a policy.
+   * Created automatically from the classification — see
+   * apps/api/app/compliance/policy_governance.py. */
+  policy_id: string | null;
+  policy_title: string | null;
+  policy_status: PolicyStatus | null;
+  index_status: "pending" | "indexed" | "failed" | "unsupported";
+  index_error: string | null;
+  indexed_at: string | null;
+  extracted_characters: number | null;
+  document_type: string | null;
+  document_domain: string | null;
+  created_at: string;
+  proposed_count: number;
+  approved_count: number;
+  unverifiable_count: number;
+  /** The document's name, cleaned of the sort prefix and extension. The
+   * filename is still shown underneath — it is how the customer finds
+   * the file on their own disk — but it is not the document's name. */
+  title: string;
+  /** The canonical Document Detail route, composed server-side. Null
+   * until the document is indexed: there is no page to open yet, and the
+   * row renders without a link rather than with one that 404s. */
+  document_id: string | null;
+  href: string | null;
+  /** How many versions of this document exist, this one included. The
+   * library lists logical documents, not uploads: a policy revised
+   * twice is one row that says "3 versions", not three rows a reader
+   * has to work out the relationship between. */
+  version_count: number;
+  version_label: string | null;
+  /** Why this document has the mappings it has — or none.
+   *
+   * `no_controls` is a normal state, not a failure: a new organization
+   * has nothing to map evidence to until it adopts a framework, and the
+   * document is fully read, classified, governed and searchable
+   * regardless. Distinguishing it from `no_matches` is the difference
+   * between "we are still setting up" and "your policy evidences
+   * nothing". */
+  mapping_state: "mapped" | "no_matches" | "no_controls" | "not_analyzed";
+  /** An undecided version question involves this row — either it might
+   * be a new version of something, or something might be a new version
+   * of it. Until a person decides, the library really does hold two
+   * rows for one document, and saying so beats looking broken. */
+  has_pending_version: boolean;
+};
+
+/** One version of a document, in the chain it belongs to. */
+export type DocumentVersion = {
+  file_id: string;
+  document_id: string | null;
+  href: string | null;
+  filename: string;
+  version_label: string | null;
+  status: "current" | "superseded";
+  uploaded_at: string;
+  uploaded_by: string | null;
+  evidence_count: number;
+};
+
+/** What Veyntra thinks an upload is a newer version of.
+ *
+ * A proposal, never a decision. `reasons` is the whole point: a person
+ * confirming a version link is agreeing with an argument, and an
+ * argument they cannot read is one they cannot disagree with. */
+export type VersionCandidate = {
+  file_id: string;
+  title: string;
+  confidence: "high" | "medium" | "low";
+  reasons: string[];
+  /** Both sides of the comparison. The reader decides from what the two
+   * documents say about themselves — a similarity score is not something
+   * anybody can check, and version numbers and dates are. Every field is
+   * null when the document does not state it; none of it is inferred. */
+  current_version: string | null;
+  current_effective_date: string | null;
+  current_approved_at: string | null;
+  current_filename: string | null;
+  detected_version: string | null;
+  detected_effective_date: string | null;
+  uploaded_filename: string | null;
+};
+
+/** One section of a document, and what happened to it between versions. */
+export type SectionChange = {
+  change: "added" | "removed" | "rewritten" | "reworded" | "unchanged";
+  section: string | null;
+  summary: string;
+  previous_text: string | null;
+  current_text: string | null;
+};
+
+/** What changed between two versions, as a person would describe it.
+ *
+ * Section-level, never line-level: a policy re-flowed by a word
+ * processor changes every line and says nothing new, while a reviewer
+ * needs to know that §7 now requires monthly review where it used to say
+ * "should be monitored". */
+export type VersionDiff = {
+  previous_file_id: string;
+  current_file_id: string;
+  previous_label: string | null;
+  current_label: string | null;
+  headline: string;
+  added: number;
+  removed: number;
+  modified: number;
+  unchanged: number;
+  changes: SectionChange[];
+};
+
+/** One thing Veyntra found in a document, and what it supports.
+ *
+ * The chain a reader follows is document → passage → control →
+ * requirement, so all four travel together. `status` is the suggestion's
+ * own state and is never flattened into "approved": a proposal awaiting
+ * a person and a mapping somebody stood behind are different claims. */
+export type DocumentEvidence = {
+  id: string;
+  source_location: string | null;
+  quoted_passage: string | null;
+  evidence_type: string | null;
+  status: string;
+  confidence: number | null;
+  control_id: string | null;
+  control_title: string | null;
+  requirement_id: string | null;
+  requirement_reference: string | null;
+  requirement_title: string | null;
+  framework_name: string | null;
+};
+
+/** Everything the Document Detail page shows, besides the text itself.
+ *
+ * Addressed by the knowledge document id — the same identifier a Copilot
+ * citation carries — so the library and a citation open one page. */
+export type DocumentDetail = {
+  document_id: string;
+  file_id: string;
+  href: string;
+  title: string;
+  filename: string;
+  document_type: string | null;
+  document_domain: string | null;
+  classification: string;
+  /** Document Intelligence: whether the compliance analysis ran. */
+  processing_status: string;
+  processing_error: string | null;
+  /** Whether the text is readable here — a different pipeline. A
+   * document can be ingested and readable while the compliance analysis
+   * was never asked for, which is the state every attachment that
+   * arrived from elsewhere is in. */
+  content_status: string;
+  content_error: string | null;
+  index_status: string;
+  index_error: string | null;
+  extracted_characters: number | null;
+  size_bytes: number;
+  created_at: string;
+  processed_at: string | null;
+  policy_id: string | null;
+  policy_title: string | null;
+  policy_status: PolicyStatus | null;
+  evidence_count: number;
+  control_count: number;
+  requirement_count: number;
+  proposed_count: number;
+  approved_count: number;
+  unverifiable_count: number;
+  evidence: DocumentEvidence[];
+  /** See ComplianceDocument.mapping_state. */
+  mapping_state: "mapped" | "no_matches" | "no_controls" | "not_analyzed";
+  /** Every version of this document, oldest first. One entry for a
+   * document uploaded only once. */
+  versions: DocumentVersion[];
+  version_label: string | null;
+  version_candidate: VersionCandidate | null;
+};
+
+/** A readiness percentage with the arithmetic behind it. The explanation
+ * is built from the same counts as the number, so the sentence can never
+ * drift from the figure it explains. */
+export type ReadinessBreakdown = {
+  percent: number;
+  satisfied: number;
+  needs_review: number;
+  deficient: number;
+  assessment_failed: number;
+  evidence_missing: number;
+  not_assessed: number;
+  /** Applicable requirements only — the denominator the percentage was
+   * actually computed against, never the raw count. */
+  total: number;
+  not_applicable: number;
+  explanation: string;
+};
+
+/** A framework we do or do not think applies, and why.
+ *
+ * `reasons` restates facts the organization declared, so the customer
+ * can disagree with a recommendation by changing a fact rather than
+ * arguing with a model. */
+export type Connector = {
+  key: string;
+  name: string;
+  category: string;
+  /** Never optimistic. A customer who believes a source is watching
+   * their systems, and is wrong, is worse off than one who knows. */
+  status: "available" | "coming_soon";
+  observes: string;
+};
+
+export type ConnectorCatalog = {
+  connectors: Connector[];
+  available_count: number;
+  coming_soon_count: number;
+};
+
+export type EvidenceEvent = {
+  id: string;
+  source: string;
+  event_type: string;
+  summary: string;
+  control_id: string | null;
+  observed_at: string;
+  triggered_reassessment: boolean;
+};
+
+export type ActivityLine = { count: number; label: string };
+
+export type NextAction = {
+  title: string;
+  detail: string;
+  href: string;
+  priority: "high" | "medium" | "low";
+};
+
+export type FrameworkStatus = {
+  framework_id: string;
+  key: string;
+  name: string;
+  readiness_percent: number;
+  /** The arithmetic behind the figure. Never shown without it. */
+  explanation: string;
+  open_gap_count: number;
+};
+
+export type SystemAtRisk = {
+  ai_system_id: string;
+  name: string;
+  risk_classification: string;
+  readiness_percent: number;
+  open_action_count: number;
+};
+
+export type ComplianceDashboard = {
+  readiness_percent: number;
+  readiness_explanation: string;
+  critical_gap_count: number;
+  open_risk_count: number;
+  ai_system_count: number;
+  high_risk_ai_system_count: number;
+  overdue_action_count: number;
+  frameworks: FrameworkStatus[];
+  critical_issues: NextAction[];
+  systems_at_risk: SystemAtRisk[];
+  /** Counted from the audit trail, never narrated. */
+  recent_activity: ActivityLine[];
+  recommended_next_actions: NextAction[];
+};
+
+export type ReviewItem = {
+  id: string;
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+  /** Where the decision is actually made. */
+  href: string;
+};
+
+export type ReviewCategory = {
+  key: string;
+  label: string;
+  description: string;
+  count: number;
+  items: ReviewItem[];
+};
+
+export type ReviewCenter = {
+  categories: ReviewCategory[];
+  total_needing_review: number;
+  /** Accepted without asking, over the same window. */
+  auto_accepted_recently: number;
+  proposals_recently: number;
+};
+
+export type RequiredAction = {
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+  /** The obligation behind this action. */
+  basis: string;
+};
+
+/** One AI system as the governance screen needs it — computed
+ * deterministically, never a model opinion. */
+export type AISystemGovernance = {
+  ai_system_id: string;
+  name: string;
+  risk_classification: string;
+  deployment_status: string;
+  vendor: string | null;
+  model_name: string | null;
+  documentation_completeness: number;
+  missing_documentation: string[];
+  applicable_regulations: string[];
+  open_risk_count: number;
+  open_incident_count: number;
+  has_current_screening: boolean;
+  required_actions: RequiredAction[];
+  readiness_percent: number;
+  explanation: string;
+};
+
+export type AIGovernanceOverview = {
+  systems: AISystemGovernance[];
+  total_systems: number;
+  high_risk_systems: number;
+  systems_without_screening: number;
+  total_open_actions: number;
+};
+
+export type FrameworkRecommendation = {
+  framework_key: string;
+  framework_id: string | null;
+  framework_name: string | null;
+  applicability: "required" | "likely" | "recommended" | "not_indicated";
+  reasons: string[];
+  uncertainties: string[];
+  requires_legal_review: boolean;
+  already_active: boolean;
+};
+
+export type FrameworkRecommendations = {
+  recommendations: FrameworkRecommendation[];
+  /** False until anything has been declared. An empty result must
+   * read as "we have not asked yet", never "nothing applies to you". */
+  facts_declared: boolean;
+};
+
+export type FrameworkReadiness = {
+  framework_id: string;
+  framework_key: string;
+  framework_name: string;
+  readiness: ReadinessBreakdown;
+  open_gap_count: number;
+};
+
+/** Where the organization stands, for the Compliance screen itself — so
+ * "assessment runs" and "readiness appears" are visible where the
+ * document was uploaded, not only on a framework detail page. */
+export type ComplianceOverview = {
+  frameworks: FrameworkReadiness[];
+  total_open_gaps: number;
+  proposals_awaiting_review: number;
+  documents_processing: number;
+  controls_needing_reassessment: number;
+};
+
 export type EvidenceSuggestion = {
   id: string;
   file_id: string;
   control_id: string;
-  status: "proposed" | "approved" | "rejected" | "unverifiable";
+  status:
+    "proposed" | "auto_approved" | "approved" | "rejected" | "unverifiable";
+  /** Where in the document the passage came from, as the document
+   * labels it. The difference between a citation a reviewer can
+   * follow and one they must take on trust. */
+  source_location: string | null;
+  evidence_type: string | null;
+  requirement_id: string | null;
+  /** Why this did or did not reach a human. */
+  routing_reason: string | null;
   /** The model's own confidence. Displayed, never used to decide
    * anything — a number a model assigns to its own output is not a
    * measurement. */
@@ -1925,4 +3485,36 @@ export type EvidenceSuggestion = {
   quote_verified: boolean;
   evidence_id: string | null;
   created_at: string;
+};
+
+// --- the privacy workspace ---------------------------------------------
+//
+// The overview derives "what needs a person" from the same records the
+// four lists show. Every metric and every attention item carries the
+// route to what it is about — a dashboard figure that leads nowhere is a
+// decoration.
+
+export type PrivacyMetric = {
+  key: string;
+  label: string;
+  value: number;
+  href: string;
+  /** "attention" where the number is itself a problem rather than a size. */
+  tone: "neutral" | "attention";
+};
+
+export type PrivacyAttention = {
+  key: string;
+  severity: "overdue" | "urgent" | "attention" | "info";
+  title: string;
+  detail: string;
+  href: string;
+  record_type: string;
+  record_id: string | null;
+};
+
+export type PrivacyOverview = {
+  metrics: PrivacyMetric[];
+  attention: PrivacyAttention[];
+  needs_attention: number;
 };
