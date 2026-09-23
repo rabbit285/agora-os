@@ -168,9 +168,17 @@ async def test_public_endpoint_returns_only_public_items(client: AsyncClient) ->
     await anonymous_client.aclose()
 
 
-async def test_public_endpoint_only_surfaces_a_published_linked_policy(
+async def test_a_public_entry_cannot_be_backed_by_a_draft_policy(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    """The claim is refused, not quietly stripped.
+
+    This used to create the entry and hide the policy from the public
+    view, which left a public claim standing with nothing behind it — a
+    reader saw "DPA availability" and no way to tell it rested on a
+    document nobody had signed off. Refusing the intent says so, to the
+    person who can fix it.
+    """
     _, org_id, org_slug = await _signup(client, "trust-policy1@example.com", "Trust Policy Org")
 
     draft_policy = Policy(organization_id=org_id, title="Draft DPA template", status="draft")
@@ -180,7 +188,7 @@ async def test_public_endpoint_only_surfaces_a_published_linked_policy(
     db_session.add_all([draft_policy, published_policy])
     await db_session.commit()
 
-    await client.post(
+    refused = await client.post(
         "/api/v1/trust-center/items",
         json={
             "category": "dpa_availability",
@@ -189,7 +197,16 @@ async def test_public_endpoint_only_surfaces_a_published_linked_policy(
             "policy_id": str(draft_policy.id),
         },
     )
-    await client.post(
+    # 422 rather than 403: the caller may publish Trust Center content,
+    # just not this claim in this state.
+    assert refused.status_code == 422, refused.text
+    message = refused.json()["error"]["message"]
+    # The message names the policy and the fix, so it reads as a
+    # correction rather than a wall.
+    assert "Draft DPA template" in message
+    assert "Publish the policy" in message
+
+    allowed = await client.post(
         "/api/v1/trust-center/items",
         json={
             "category": "security_overview",
@@ -198,13 +215,15 @@ async def test_public_endpoint_only_surfaces_a_published_linked_policy(
             "policy_id": str(published_policy.id),
         },
     )
+    assert allowed.status_code == 201, allowed.text
 
     transport = ASGITransport(app=app)
     anonymous_client = AsyncClient(transport=transport, base_url="http://test")
     response = await anonymous_client.get(f"/api/v1/trust-center/public/{org_slug}")
     assert response.status_code == 200
     items_by_category = {item["category"]: item for item in response.json()["items"]}
-    assert items_by_category["dpa_availability"]["policy"] is None
+    # The refused claim never became a public entry at all.
+    assert "dpa_availability" not in items_by_category
     assert items_by_category["security_overview"]["policy"]["title"] == "Published Security Policy"
     await anonymous_client.aclose()
 

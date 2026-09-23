@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance import artifacts
 from app.compliance.audit_render import render_audit_report_pdf
 from app.compliance.audit_report import AuditReportPreview, next_version
 from app.compliance.models import Audit, AuditReport
@@ -278,6 +279,21 @@ async def generate(
         generated_at=_now(),
     )
     db.add(report)
+    await db.flush()
+
+    # This is a result of the compliance record, not a source for it.
+    # Classified at generation because the generator is the only place
+    # that knows for certain — and a classification derived from a
+    # filename is one a customer can break by naming an upload "Audit
+    # Report v2".
+    artifacts.mark_generated(
+        file_record,
+        # The audit, not the report row: this is what the link opens
+        # and what circularity is about.
+        origin_type="audit_report",
+        origin_id=audit.id,
+        origin_label=audit.title,
+    )
     await db.flush()
 
     await record_event(

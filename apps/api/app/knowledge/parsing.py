@@ -95,10 +95,56 @@ def _extract_pdf(data: bytes) -> ExtractedDocument:
 
 
 def _extract_docx(data: bytes) -> str:
+    """Everything readable in the document, tables included.
+
+    `document.paragraphs` is only the top-level paragraph stream: it
+    excludes every cell of every table. That is not a small omission in
+    compliance documents, where the facts are routinely *in* the tables
+    — a RoPA's activity name, purpose, data subjects and retention; a
+    DPIA's risk register; a transfer's destination and mechanism. A
+    document whose tables were dropped reached evidence analysis, the
+    Copilot index and privacy extraction with its headings intact and
+    its content missing, which reads as an empty section rather than as
+    a failure.
+
+    Body children are walked in document order so a table stays with the
+    heading that introduces it, and each row is joined into one line so
+    a two-column "label | value" table reads back as "label: value" —
+    which is what it means, and what any reader downstream expects.
+    """
     import docx
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
 
     document = docx.Document(io.BytesIO(data))
-    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    lines: list[str] = []
+
+    for child in document.element.body.iterchildren():
+        tag = child.tag.split("}")[-1]
+        if tag == "p":
+            text = Paragraph(child, document).text.strip()
+            if text:
+                lines.append(text)
+        elif tag == "tbl":
+            for row in Table(child, document).rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                # A repeated cell is how python-docx reports a merge; one
+                # value said twice is noise in the text stream.
+                deduped: list[str] = []
+                for cell in cells:
+                    if cell and (not deduped or deduped[-1] != cell):
+                        deduped.append(cell)
+                if not deduped:
+                    continue
+                # Two columns are a label and its value almost every
+                # time, so they are written the way the rest of the
+                # pipeline already reads: "Purpose: …".
+                if len(deduped) == 2:
+                    lines.append(f"{deduped[0]}: {deduped[1]}")
+                else:
+                    lines.append(" | ".join(deduped))
+
+    return "\n".join(lines)
 
 
 def _extract_xlsx(data: bytes) -> str:

@@ -343,6 +343,17 @@ class Risk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # "reassessed and unchanged".
     residual_likelihood: Mapped[str | None] = mapped_column(String(10), nullable=True)
     residual_impact: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Who the risk lands on. A privacy risk without the people it affects
+    # is a statement about a system, and Article 35(7)(c) asks about the
+    # risk "to the rights and freedoms of data subjects" — which ones is
+    # part of the answer.
+    affected_data_subjects: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # What already reduces this risk, and what is being added. Kept apart:
+    # the first is the state of the world, the second is a commitment, and
+    # a residual rating justified by a safeguard nobody has built yet is
+    # the failure mode this separation exists to prevent.
+    existing_safeguards: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    additional_mitigations: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -604,6 +615,18 @@ class ProcessingActivity(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     data_categories: Mapped[list[str]] = mapped_column(JSON, default=list)
     data_subjects: Mapped[str] = mapped_column(String(300), nullable=False)
     retention_period: Mapped[str] = mapped_column(String(300), nullable=False)
+    # --- what a source document said, kept as what it is ---------------
+    #
+    # A document naming "OpenAI" is a claim in a file, not proof it means
+    # the vendor row of that name, so these are never promoted to a
+    # foreign key. They exist because acceptance used to discard them:
+    # the document knew there was a US transfer and the activity it
+    # became knew nothing, so transfer detection had nothing to work
+    # from and correctly proposed nothing.
+    processor_named: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    destination_country_named: Mapped[str | None] = mapped_column(
+        String(2), nullable=True
+    )
     # draft | active | needs_review | retired | archived
     #
     # A RoPA entry is a claim the organization keeps making about itself,
@@ -663,9 +686,16 @@ class DPIA(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("ai_systems.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
-    # low | medium | high — DPIA's own concluded risk level, not necessarily
-    # the same scale as AISystem.risk_classification
-    risk_level: Mapped[str] = mapped_column(String(20), default="low")
+    # low | medium | high, or null for "nobody has assessed this yet".
+    #
+    # Nullable deliberately. This defaulted to "low", so a DPIA with no
+    # risks raised against it reported `Inherent risk: Low` — an
+    # assessment nobody performed, stated as fact, on the document whose
+    # whole purpose is to record that somebody assessed the risk. A
+    # cautious default would be "high"; the honest one is nothing.
+    #
+    # Not the same scale as AISystem.risk_classification.
+    risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Article 35(7)'s required content. Held as named sections rather than
     # one `findings` blob because each is separately assessable and a DPO
     # reviewing one needs to see what is missing, not read prose looking
@@ -679,11 +709,157 @@ class DPIA(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     residual_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # What the screening concluded, and on what basis. Kept so the
     # decision to carry out (or skip) the DPIA is itself auditable.
+    # What the screening counted, and when.
     screening_outcome: Mapped[str | None] = mapped_column(String(20), nullable=True)
     screening_findings: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
-    # draft | in_review | approved | rejected
+    screened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # --- and what a person decided about it ----------------------------
+    #
+    # Kept apart from the outcome above, because they are different
+    # claims by different parties: Veyntra counted criteria against a
+    # published rule, and a controller decided whether a DPIA is
+    # required. A screen showing only the first implies the product made
+    # the call.
+    #
+    # required | not_required | null while nobody has decided.
+    screening_decision: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    screening_decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    screening_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Required when somebody decides a DPIA is *not* needed. "We looked
+    # and decided no" is a defensible record; an unexplained no is not.
+    screening_rationale: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # Which sections a person has actually signed off, as
+    # {section_key: {"approved_by": str, "approved_at": iso}}.
+    #
+    # Review state has to be recorded, not inferred. Completion used to
+    # test whether the text still began with Veyntra's draft marker,
+    # which means deleting one word from the front of a draft counted as
+    # having reviewed it — and a reviewer who agrees with the draft
+    # verbatim had no way to say so without editing it first.
+    section_reviews: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    # --- Article 35(2)/(9) consultation --------------------------------
+    #
+    # Null means nobody has resolved it, which is not the same as "no
+    # consultation happened" — that is itself a recorded answer. Veyntra
+    # never fills these in: whether a DPO advised is a fact about
+    # something that occurred, and drafting it would be inventing advice.
+    # This is the single authoritative consultation state:
+    #
+    #   None  -> nobody has decided
+    #   True  -> a consultation happened, and who/when/what is recorded
+    #   False -> a decision that none was needed, with the reason
+    #
+    # It used to compete with a section sign-off on `consultation_notes`,
+    # so the page could say "No consultation performed" and "Nobody has
+    # approved the consultation record" about the same fact. Recording
+    # the decision *is* the review — see dpia_workflow.NARRATIVE_SECTIONS.
+    consultation_performed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    consulted_party: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    consulted_role: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    consulted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Who resolved it and when — as opposed to who was consulted and
+    # when that happened, which is what the three fields above hold.
+    consultation_recorded_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    consultation_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # --- what the risk review concluded --------------------------------
+    #
+    #   None                -> nobody has reviewed the risks
+    #   "risks_identified"  -> at least one risk was accepted onto the register
+    #   "no_material_risks" -> reviewed, and none met the threshold
+    #
+    # The distinction the completion rule turns on. "No risks have been
+    # raised" used to block completion outright, which forced a reviewer
+    # who had genuinely concluded there were none to invent one. An
+    # unreviewed DPIA and a reviewed one that found nothing look the same
+    # in a risk count and are not the same claim, so they are stored
+    # apart.
+    risk_conclusion: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Required for "no_material_risks". A conclusion that nothing is
+    # risky is exactly the one an auditor asks to see reasoning for.
+    risk_conclusion_rationale: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )
+    risk_reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    risk_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # --- Article 9 signals, and the answer to them ---------------------
+    #
+    #   None  -> Veyntra flagged possible special-category data and
+    #            nobody has answered
+    #   True  -> confirmed present
+    #   False -> confirmed not applicable, with the reason
+    #
+    # Veyntra detects; a person decides. A processing record named
+    # "Employee medical-leave administration" strongly suggests health
+    # data, and the failure this prevents is the product reading "no
+    # categories recorded" and concluding there is nothing sensitive.
+    # Whether Article 9 applies, and on what condition, is never recorded
+    # here by the product.
+    special_category_confirmed: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    # Required when answering "not applicable" to a detected signal.
+    special_category_rationale: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )
+    special_category_decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    special_category_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set when a completed DPIA is found to have been signed off on
+    # content that would not pass the quality gates today. Never rewrites
+    # the snapshot — see dpia_quality_audit.
+    quality_review_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    # screening | not_required | draft | in_review | approved | completed
+    # | rejected
     status: Mapped[str] = mapped_column(String(20), default="draft")
     findings: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    # --- completion, and what was true when it happened ----------------
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    # The assessment as it stood at completion: context, screening,
+    # sections, risks, safeguards, residual rating, approvals, evidence
+    # references. Frozen rather than re-derived, because re-deriving it
+    # next quarter answers "what is true now", and a completed DPIA is a
+    # statement about what was assessed then. When the ROPA or the vendor
+    # moves afterwards, this does not quietly improve.
+    snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # A fingerprint of the processing this was assessed against, so
+    # "something underneath has changed" can be detected without diffing
+    # two snapshots on every page load.
+    source_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Why a completed DPIA is being flagged for another look. Set by
+    # change detection; never mutates the snapshot above.
+    review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    review_flagged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Set only when a `high`-risk-level DPIA is created directly (not via
     # the AISystem hook, which already has its own Approval) — see
     # app.compliance.service.create_dpia / decide_dpia_status.
@@ -710,13 +886,39 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # access | deletion | rectification | portability
     request_type: Mapped[str] = mapped_column(String(20), nullable=False)
     # received | in_progress | fulfilled | rejected
+    #
+    # Kept as the coarse outward status. Where the request actually *is*
+    # lives in "phase" below: "in progress" covers everything between
+    # logging a request and sending it, which is precisely the span
+    # somebody needs to know their way around.
     status: Mapped[str] = mapped_column(String(20), default="received")
+    # received | identity_verification | scope_review | discovery |
+    # response_review | ready_to_respond | completed | blocked
+    #
+    # Derived from the record rather than set by hand -- see
+    # app.compliance.dsar_workflow.derive_phase. Stored so lists can sort
+    # and filter on it without loading every request's children, and
+    # refreshed on every write that could move it.
+    phase: Mapped[str] = mapped_column(String(30), default="received", nullable=False)
+    # Why the request cannot proceed, when it cannot. Null whenever the
+    # phase is anything but blocked.
+    blocked_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    scope_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scope_confirmed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
     # pending | verified | failed. The gate on disclosure: fulfilling an
     # unverified access request hands one person's data to another, which
     # is itself a breach — the request is the attack. Article 12(6) exists
     # precisely so a controller can demand proof before answering.
     verification_status: Mapped[str] = mapped_column(String(20), default="pending")
     verification_method: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # What was actually done to establish identity, in the verifier's own
+    # words. The method is a category; this is the evidence, and it is
+    # what a regulator asking "how did you know it was her?" needs.
+    verification_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -757,6 +959,190 @@ class DSAR(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+
+class DsarScopeSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One place a request might reach, and the human decision about it.
+
+    Veyntra proposes; a person confirms. The proposal is persisted rather
+    than recomputed per request because the decision attaches to it: once
+    somebody has excluded "Employee medical-leave administration" for a
+    customer's request, re-running the suggestion must not quietly put it
+    back in scope.
+
+    Relevance ranks; it never filters. A source the product thinks is
+    unrelated is still shown, still listed, and still available to
+    include -- silently dropping a low-confidence source is how a
+    response ends up incomplete, and the product cannot know enough to
+    take that risk on somebody's behalf.
+    """
+
+    __tablename__ = "dsar_scope_sources"
+    __table_args__ = (
+        # One row per logical source per request. Re-running suggestion
+        # reconciles against this rather than appending, which is what
+        # keeps "Refresh" from tripling the list.
+        UniqueConstraint("dsar_id", "source_key", name="uq_dsar_scope_source_key"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    dsar_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("dsars.id"), nullable=False, index=True
+    )
+    # Derived from what the source *is* -- this activity, this vendor --
+    # never from the wording of the suggestion.
+    source_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    # processing_activity | ai_system | vendor | named_processor | manual
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Why this is on the list, in the reviewer's terms. Shown beside the
+    # checkbox so the decision is informed rather than trusting.
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # high | possible | low -- a ranking, not a filter, and computed
+    # from the requester and the register alone. Never from whether
+    # Veyntra happens to be able to search the source cheaply: that is a
+    # fact about our plumbing, not about where this person's data is.
+    relevance: Mapped[str] = mapped_column(String(10), default="possible", nullable=False)
+    # What the ranking was based on, so a reviewer can disagree with the
+    # reasoning rather than just the answer.
+    relevance_reason: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    # The systems this source's data actually sits in, named so the
+    # reviewer knows what confirming it will search.
+    linked_systems: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The actual data sources behind a processing activity, each with its
+    # own connection state:
+    # [{"name": str, "kind": str, "capability": str, "detail": str}, ...]
+    #
+    # A RoPA entry is compliance context, not a database. Knowing that
+    # "AI Customer Support" is in scope says where to look next; it does
+    # not say the person's records live in the activity itself.
+    potential_sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # searchable | manual_follow_up | processor_follow_up | not_connected
+    # | unsupported
+    #
+    # What Veyntra can actually do with this source, kept strictly apart
+    # from whether it is relevant. "Searchable" means a real adapter
+    # exists and the organization has connected it -- never that a table
+    # happens to sit in our own database.
+    search_capability: Mapped[str] = mapped_column(
+        String(30), default="manual_follow_up", nullable=False
+    )
+    # The human decision. Null until somebody decides -- distinct from
+    # False, which is a deliberate exclusion.
+    included: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Set when a person added a source Veyntra did not propose.
+    added_by_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Why a reviewer left a relevant source out. Required when excluding
+    # something Veyntra ranked high, so a narrowed scope carries its own
+    # justification rather than being an unexplained gap in the response.
+    exclusion_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    record_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+
+
+class DsarDiscoveredItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """What one source yielded, and what a person decided to do with it.
+
+    Rows are counts and references, never the personal data itself. A
+    discovery result that copied the records would make the DSAR record a
+    second uncontrolled copy of the data it was asked about.
+
+    The review decision lives here rather than being applied to the
+    findings blob, so re-running discovery updates what was *found*
+    without touching what a person *decided* -- the failure mode being
+    that somebody redacts an internal security note, hits refresh, and
+    silently un-redacts it.
+    """
+
+    __tablename__ = "dsar_discovered_items"
+    __table_args__ = (
+        UniqueConstraint("dsar_id", "source_key", name="uq_dsar_discovered_source_key"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    dsar_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("dsars.id"), nullable=False, index=True
+    )
+    source_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # not_searched | searched_none | searched_found | search_failed |
+    # manual_follow_up
+    #
+    # These are five different things and the old single "matches" number
+    # collapsed them into two. "Searched and found nothing" and "never
+    # searched" look identical in a count and mean opposite things to
+    # somebody signing a response.
+    search_state: Mapped[str] = mapped_column(String(30), nullable=False)
+    matches: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    record_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Why a search failed or could not run. Carries the operator detail
+    # a case worker needs without implying the source was clean.
+    state_detail: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # include | exclude | redact | needs_review -- the human decision
+    # about disclosure. Defaults to needs_review for anything Veyntra
+    # flagged; nothing reaches a response package undecided.
+    review_decision: Mapped[str] = mapped_column(
+        String(20), default="needs_review", nullable=False
+    )
+    review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # What Veyntra noticed that a person should look at -- third-party
+    # data, privileged content, security-sensitive material. A flag, and
+    # explicitly not an exemption decision: Article 15(4) is a legal
+    # judgement and the product does not make it.
+    sensitivity_flags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # The manual follow-up raised for a source Veyntra cannot search.
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("tasks.id"), nullable=True
+    )
+
+
+class DsarResponsePackage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The response as it was approved, frozen.
+
+    Same shape as AuditReport and for the same reason: what a person
+    previewed and approved is what gets sent. Regenerating at send time
+    would let the answer change between approval and delivery, which
+    makes the approval meaningless -- and for a DSAR the thing that
+    changed would be somebody's personal data.
+
+    The source digest is the fingerprint of the inputs at preview. If the
+    underlying request moves after approval the mismatch is visible
+    rather than silently absorbed.
+    """
+
+    __tablename__ = "dsar_response_packages"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    dsar_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("dsars.id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    # draft | approved | sent -- a package is drafted, approved once, and
+    # then recorded as sent. Approval does not send.
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    contents: Mapped[dict] = mapped_column(JSON, nullable=False)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    file_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("files.id"), nullable=True
     )
 
 
@@ -810,6 +1196,14 @@ class Vendor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     category: Mapped[str] = mapped_column(String(100), default="general")
     website: Mapped[str | None] = mapped_column(String(300), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Where the processor is, ISO 3166-1 alpha-2 — the same convention
+    # LegalEntity uses. Without it the product cannot tell whether
+    # sending data here is a third-country transfer, which is the one
+    # question a transfer record exists to answer. Null means nobody has
+    # recorded it, reported as unknown rather than assumed domestic.
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    # The detail a country code cannot carry: "EU region (Frankfurt)".
+    data_location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # low | medium | high | critical — current concluded risk tier, mirrors
     # the vocabulary Risk/SecurityAsset already use, kept updated by
     # record_vendor_assessment rather than a separate rollup job.
@@ -1527,6 +1921,19 @@ class DataTransfer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recipient_name: Mapped[str] = mapped_column(String(300), nullable=False)
     # ISO 3166-1 alpha-2, same convention as LegalEntity.country
     destination_country: Mapped[str] = mapped_column(String(2), nullable=False)
+    # The logical identity of a detected transfer, so re-running
+    # detection reconciles rather than duplicating. Derived from what the
+    # transfer is *about* — this activity, this recipient — never from
+    # the wording of the draft. Null on a manually logged transfer,
+    # which has no detection to reconcile with.
+    source_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Which edge detection followed to find this, so a reviewer can check
+    # the inference instead of trusting it.
+    detected_from: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Set when something underneath a confirmed transfer moves — a vendor
+    # changing country, a new DPA version. Never rewrites the confirmed
+    # record; it asks for another look.
+    review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     # adequacy_decision | sccs | bcrs | derogation (GDPR Articles 45-49)
     transfer_mechanism: Mapped[str] = mapped_column(String(30), nullable=False)
     safeguards_description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -1819,3 +2226,164 @@ class EvidenceSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProcessingActivityAISystem(Base):
+    """One processing activity, one AI system it runs through.
+
+    A join table rather than a column because both sides are plural in
+    practice: a support activity can run through two assistants, and one
+    assistant can serve support and sales. Navigable both ways, which is
+    the point — a person looking at an AI system should see which
+    processing depends on it without searching for it.
+    """
+
+    __tablename__ = "processing_activity_ai_systems"
+
+    processing_activity_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("processing_activities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    ai_system_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ai_systems.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
+class ProcessingActivityVendor(Base):
+    """One processing activity, one processor acting on it."""
+
+    __tablename__ = "processing_activity_vendors"
+
+    processing_activity_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("processing_activities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    vendor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("vendors.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
+class PrivacySuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A privacy record Veyntra thinks exists, that nobody has confirmed.
+
+    Deliberately not a ProcessingActivity and not a DataTransfer. The
+    organization's RoPA is a statement it makes to a regulator; a table
+    assembled from inference is not that, however good the inference.
+    So proposals accumulate here, the privacy screens and the overview
+    ignore them as records, and accepting one is what creates the real
+    row — with a person's judgement on the parts only a person can
+    supply.
+
+    Everything here is drawn from **facts the organization already
+    declared**: an AI system's stated purpose, the users it says it
+    affects, the data it says it processes, the vendor it names. Nothing
+    is inferred about lawfulness. `payload` never carries a lawful basis
+    or an Article 9 condition — those are the questions the review
+    exists to ask, and pre-filling them would answer the one thing the
+    reviewer was brought in for.
+
+    `source_key` is the logical identity of the proposal, so analysing
+    the same records again reconciles rather than duplicating. It is
+    derived from what the suggestion is *about* — this AI system, this
+    vendor pair — and never from the wording of the draft, which would
+    make identity only as stable as the phrasing.
+    """
+
+    __tablename__ = "privacy_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "kind",
+            "source_key",
+            name="uq_privacy_suggestion_identity",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    # processing_activity | transfer
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    # The stable identity of what is being proposed.
+    source_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    # proposed | accepted | dismissed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed")
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Which records this was read out of, so a reviewer can check the
+    # draft against its sources rather than taking it on trust.
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # The drafted facts. Never a lawful basis; see the class docstring.
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # What the record became once somebody accepted it.
+    created_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True
+    )
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class DpiaRiskSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A risk Veyntra thinks this processing carries, that nobody has
+    confirmed.
+
+    Deliberately not a `Risk`. A DPIA's risk register is the controller's
+    statement of what it believes threatens data subjects; a list
+    assembled from what a record happens to mention is not that. So
+    proposals accumulate here, the residual-risk arithmetic ignores them
+    entirely, and approving one is what creates the real `Risk` row —
+    with the likelihood and impact only a person can supply.
+
+    `source_key` is the logical identity of the proposal, so re-running
+    the analysis reconciles rather than duplicating. It is derived from
+    what the suggestion is *about* — an AI system being involved, a
+    processor being named, no retention being recorded — and never from
+    the wording, which would make identity only as stable as the phrasing
+    and turn every copy edit into a new unreviewed risk.
+    """
+
+    __tablename__ = "dpia_risk_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "dpia_id", "source_key", name="uq_dpia_risk_suggestion_identity"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
+    )
+    dpia_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("dpias.id"), nullable=False, index=True
+    )
+    source_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    # suggested | approved | dismissed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="suggested")
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # The fact on record that produced this, so a reviewer can check the
+    # proposal against its source instead of taking it on trust.
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    # Safeguards the record already shows, offered as a starting point.
+    # Never a likelihood or an impact: those are the judgement the review
+    # exists to make, and pre-filling them would answer the one question
+    # the reviewer was brought in for.
+    suggested_safeguards: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # The Risk this became once somebody approved it.
+    created_risk_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("risks.id"), nullable=True
+    )
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

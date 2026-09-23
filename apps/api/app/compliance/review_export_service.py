@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_event
+from app.compliance import artifacts
 from app.compliance.models import ReviewExport, SecurityReview
 from app.compliance.review_export import (
     OUTPUT_FORMATS,
@@ -199,6 +200,16 @@ async def generate(
         generated_at=_now(),
     )
     db.add(export)
+    await db.flush()
+
+    # A customer-facing deliverable derived from existing evidence is
+    # not itself evidence. Same rule as an audit report, same reason.
+    artifacts.mark_generated(
+        file_record,
+        origin_type="review_export",
+        origin_id=review.id,
+        origin_label=review.title or preview.customer_name,
+    )
     await db.flush()
 
     await record_event(

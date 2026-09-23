@@ -892,14 +892,32 @@ export type ProcessingActivity = {
 };
 
 export type DPIARiskLevel = "low" | "medium" | "high";
-export type DPIAStatus = "draft" | "in_review" | "approved" | "rejected";
+/** The DPIA lifecycle, in order:
+ *
+ *   screening → draft → in_review → approved → completed
+ *
+ * `not_required` sits off it entirely — somebody screened this and
+ * concluded no assessment is needed, which is a finished record rather
+ * than a stage of one. It used to be stored as `approved`, which read on
+ * every list as though the DPIA had been carried out and signed off. */
+export type DPIAStatus =
+  | "screening"
+  | "not_required"
+  | "draft"
+  | "in_review"
+  | "approved"
+  | "completed"
+  | "rejected";
 
 export type DPIA = {
   id: string;
   processing_activity_id: string | null;
   ai_system_id: string | null;
   title: string;
-  risk_level: DPIARiskLevel;
+  /** Null until somebody has assessed it. A DPIA with no risks raised
+   * against it has no inherent level — the column used to default to
+   * "low", which asserted an assessment nobody had performed. */
+  risk_level: DPIARiskLevel | null;
   status: DPIAStatus;
   findings: string | null;
   /** Article 35(7)'s required content, one field per section so a
@@ -912,6 +930,13 @@ export type DPIA = {
    * have been reassessed — a DPIA must not reach "low" by inaction. */
   residual_risk_level: DPIARiskLevel | null;
   screening_outcome: string | null;
+  /** Article 35(2). Null means nobody has resolved it, which is not the
+   * same as a recorded "no consultation was carried out". */
+  consultation_performed: boolean | null;
+  completed_at: string | null;
+  /** Set when the processing under a completed DPIA has moved on. A
+   * recommendation to reassess, never an edit to what was concluded. */
+  review_reason: string | null;
   approval_id: string | null;
   owner_id: string | null;
   created_at: string;
@@ -932,7 +957,16 @@ export type DSAR = {
    * person's data to whoever asked. */
   verification_status: "pending" | "verified" | "failed";
   verification_method: string | null;
+  /** What was actually done to establish identity. The method is a
+   * category; this is the evidence behind it. */
+  verification_notes: string | null;
   verified_at: string | null;
+  /** Where the request actually is. "In progress" covers everything
+   * between logging a request and sending it, which is exactly the span
+   * somebody needs to navigate. */
+  phase: DsarPhase;
+  blocked_reason: string | null;
+  scope_confirmed_at: string | null;
   discovery_findings: DsarDiscovery | null;
   discovery_run_at: string | null;
   export_generated_at: string | null;
@@ -969,6 +1003,200 @@ export type DsarDiscovery = {
   /** Says what was *not* searched, so a clean result is not read as
    * "there is nothing to disclose". */
   coverage_note: string;
+};
+
+export type DsarPhase =
+  | "received"
+  | "identity_verification"
+  | "scope_review"
+  | "discovery"
+  | "response_review"
+  | "ready_to_respond"
+  | "completed"
+  | "blocked";
+
+/** What Veyntra can actually do about a source.
+ *
+ * Deliberately separate from relevance. "Searchable" means a real
+ * adapter on a real connection — never that a table happens to sit in
+ * our own database. */
+export type DsarSearchCapability =
+  | "searchable"
+  | "manual_follow_up"
+  | "processor_follow_up"
+  | "not_connected"
+  | "unsupported";
+
+/** One of the systems behind a processing activity.
+ *
+ * A RoPA entry is compliance context, not a database: it says the
+ * person's data may be in the systems used for that processing, and
+ * these are those systems. */
+export type DsarPotentialSource = {
+  name: string;
+  kind: "ai_system" | "vendor" | "named_processor";
+  capability: DsarSearchCapability;
+  detail: string;
+};
+
+/** One candidate source, its ranking, and the decision about it.
+ *
+ * `relevance` ranks; it never filters. A source ranked "low" is still
+ * listed and still includable — a filter that is wrong costs a response
+ * its completeness, where a ranking that is wrong costs a click.
+ *
+ * Relevance is computed from the requester and the register alone. It is
+ * never a function of `search_capability`: how cheaply Veyntra can query
+ * something says nothing about whether this person's data is there. */
+export type DsarScopeSource = {
+  id: string;
+  source_key: string;
+  kind: "processing_activity" | "ai_system" | "vendor" | "named_processor" | "internal" | "manual";
+  name: string;
+  reason: string;
+  relevance: "high" | "possible" | "low";
+  relevance_reason: string | null;
+  linked_systems: string[];
+  potential_sources: DsarPotentialSource[];
+  search_capability: DsarSearchCapability;
+  /** null means nobody has decided yet, which is not the same as
+   * excluded. */
+  included: boolean | null;
+  added_by_user: boolean;
+  record_id: string | null;
+};
+
+/** Five states, because they mean five different things. Only
+ * `searched_none` is evidence of absence; the rest are kinds of
+ * "unknown". */
+export type DsarSearchState =
+  | "not_searched"
+  | "searched_none"
+  | "searched_found"
+  | "search_failed"
+  | "manual_follow_up"
+  | "processor_follow_up"
+  | "not_connected";
+
+export type DsarReviewDecision = "include" | "exclude" | "redact" | "needs_review";
+
+export type DsarDiscoveredItem = {
+  id: string;
+  source_key: string;
+  source_name: string;
+  search_state: DsarSearchState;
+  matches: number;
+  record_ids: string[];
+  state_detail: string | null;
+  review_decision: DsarReviewDecision;
+  review_reason: string | null;
+  reviewed_at: string | null;
+  /** What Veyntra noticed for a person to look at. Flags, never
+   * exemption decisions. */
+  sensitivity_flags: string[];
+  task_id: string | null;
+};
+
+export type DsarDiscoveryPlan = {
+  total: number;
+  connected: number;
+  manual: number;
+  excluded: number;
+  manual_sources: string[];
+  connected_sources: string[];
+};
+
+export type DsarBlocker = { code: string; message: string; anchor: string };
+
+export type DsarWorkflowState = {
+  phase: DsarPhase;
+  phase_label: string;
+  next_action: { label: string; detail: string; anchor: string } | null;
+  blockers: DsarBlocker[];
+  scope_total: number;
+  scope_included: number;
+  scope_undecided: number;
+  discovered_total: number;
+  needs_review: number;
+  manual_follow_ups: number;
+  open_follow_ups: number;
+  package_status: string | null;
+};
+
+export type DsarSourceLine = {
+  name: string;
+  state: DsarSearchState;
+  state_label: string;
+  matches: number;
+  decision: DsarReviewDecision;
+  decision_reason: string | null;
+  flags: string[];
+};
+
+export type DsarResponsePreview = {
+  dsar_id: string;
+  requester_name: string;
+  requester_email: string;
+  request_type: string;
+  received_at: string;
+  due_at: string;
+  identity_method: string | null;
+  identity_notes: string | null;
+  identity_verified_at: string | null;
+  identity_verified_by: string | null;
+  letter: string;
+  included: DsarSourceLine[];
+  excluded: DsarSourceLine[];
+  redacted: DsarSourceLine[];
+  not_searched: DsarSourceLine[];
+  follow_ups: string[];
+  blockers: string[];
+  coverage: DsarCoverage | null;
+  /** Fingerprint of the response's content. Sent back on approval so a
+   * request that moved in between is refused rather than absorbed. */
+  digest: string;
+};
+
+/** What the search actually covered.
+ *
+ * "Searched and empty" and "not searched at all" are counted separately:
+ * a package that adds them together claims a completeness it does not
+ * have. */
+export type DsarCoverage = {
+  scope_confirmed: number;
+  automatically_searched: number;
+  manual_completed: number;
+  outstanding: number;
+  searched_no_matches: number;
+  records_found: number;
+  complete: boolean;
+};
+
+export type DsarResponsePackage = {
+  id: string;
+  version: number;
+  status: "draft" | "approved" | "sent";
+  source_digest: string;
+  approved_at: string | null;
+  sent_at: string | null;
+};
+
+/** One place a request may reach, and why it is on the list.
+ *
+ * Read out of the privacy graph — not out of a search. Nothing here is
+ * personal data; these are systems, not findings. */
+export type DsarLocation = {
+  kind: "processing_activity" | "ai_system" | "vendor" | "named_processor";
+  name: string;
+  reason: string;
+  record_id: string | null;
+};
+
+export type DsarScope = {
+  locations: DsarLocation[];
+  /** "Nothing is recorded to search" — which is not the same claim as
+   * "this person has no data", and only the first is supportable. */
+  nothing_recorded: boolean;
 };
 
 export type AIIncidentStatus = "open" | "investigating" | "resolved" | "closed";
@@ -1966,7 +2194,29 @@ export type DataTransfer = {
   status: DataTransferStatus;
   related_risk_id: string | null;
   owner_id: string | null;
+  /** Which edge detection followed to find this, so a reviewer can check
+   * the inference. Null on a manually logged transfer. */
+  detected_from: string | null;
+  /** Set when a fact underneath a confirmed transfer moved. The record
+   * itself is untouched — this asks for another look. */
+  review_reason: string | null;
+  vendor_id: string | null;
+  last_reviewed_at: string | null;
   created_at: string;
+};
+
+/** One transfer with the records it was assessed against.
+ *
+ * The vendor's own country and DPA status ride alongside the transfer's
+ * rather than being merged into it: a reviewer deciding whether a
+ * mechanism still holds needs both claims, and one reconciled value
+ * would hide the disagreement that makes the question worth asking. */
+export type DataTransferDetail = DataTransfer & {
+  exporter_name: string;
+  processing_activity_name: string | null;
+  vendor_name: string | null;
+  vendor_country: string | null;
+  vendor_dpa_status: "pending" | "signed" | "not_required" | null;
 };
 
 export type Severity = "low" | "medium" | "high" | "critical";
@@ -3069,6 +3319,18 @@ export type AIAssessmentDetail = {
  * the UI can show that `ready` meant text was genuinely read, rather
  * than asking the user to trust a green badge over an empty result. */
 export type ComplianceDocument = {
+  /** source | generated_output. What kind of thing this is, stored on
+   * the record rather than guessed from a filename — a customer can
+   * upload something called "Audit Report v2". A generated output is a
+   * result of Veyntra's compliance work and never an input to it. */
+  artifact_type: "source" | "generated_output";
+  artifact_label: string;
+  origin_type: string | null;
+  origin_id: string | null;
+  /** "ISO 42001 Internal Audit", frozen at generation so it keeps
+   * reading correctly after the audit is renamed. */
+  origin_label: string | null;
+  origin_href: string | null;
   id: string;
   original_filename: string;
   content_type: string;
@@ -3517,4 +3779,331 @@ export type PrivacyOverview = {
   metrics: PrivacyMetric[];
   attention: PrivacyAttention[];
   needs_attention: number;
+};
+
+// --- privacy automation -------------------------------------------------
+//
+// Veyntra drafts from what the organization already declared; a person
+// supplies the judgements a draft is not allowed to contain. The types
+// keep that split visible: a suggestion payload carries
+// "needs_confirmation" where a legal judgement belongs, never a value.
+
+export type PrivacySuggestionSource = {
+  type: string;
+  id: string | null;
+  label: string;
+};
+
+export type PrivacySuggestion = {
+  id: string;
+  kind: "processing_activity" | "transfer";
+  status: "proposed" | "accepted" | "dismissed";
+  title: string;
+  /** The records this was read out of, so a reviewer can check it. */
+  sources: PrivacySuggestionSource[];
+  payload: Record<string, unknown>;
+  created_record_id: string | null;
+  created_at: string;
+};
+
+export type PrivacyAnalysis = {
+  created: number;
+  already_proposed: number;
+  /** Drafts skipped because a real record already covers them. */
+  already_recorded: number;
+};
+
+export type PrivacyDataLocation = {
+  label: string;
+  kind: string;
+  record_id: string;
+  reason: string;
+};
+
+export type RelatedRecord = {
+  id: string;
+  label: string;
+  kind: string;
+  href: string;
+  detail: string | null;
+};
+
+export type ProcessingActivityRelated = {
+  ai_systems: RelatedRecord[];
+  vendors: RelatedRecord[];
+  dpias: RelatedRecord[];
+  transfers: RelatedRecord[];
+};
+
+// --- starting a DPIA from context ---------------------------------------
+
+export type DpiaSuggestedAnswer = {
+  criterion: string;
+  value: boolean;
+  /** What the suggestion was read from, so a person can disagree with
+   * it rather than take it on trust. */
+  reason: string;
+};
+
+export type DpiaLinkedRecord = {
+  id: string;
+  label: string;
+  kind: string;
+  detail: string | null;
+};
+
+export type DpiaContext = {
+  title: string;
+  purpose: string | null;
+  data_subjects: string | null;
+  data_categories: string[];
+  special_category: boolean;
+  processing_activity_id: string | null;
+  ai_system_id: string | null;
+  owner_id: string | null;
+  ai_systems: DpiaLinkedRecord[];
+  vendors: DpiaLinkedRecord[];
+  transfers: DpiaLinkedRecord[];
+  evidence_count: number;
+  suggested_answers: DpiaSuggestedAnswer[];
+  /** Criteria nothing on record speaks to — asked rather than assumed,
+   * because silence on a criterion is not a "no". */
+  unknown: string[];
+};
+
+export type DpiaScreeningResult = {
+  /** required | recommended | not_indicated. A recommendation from the
+   * criteria reported, never a determination. */
+  outcome: string;
+  rationale: string;
+  criteria_met: string[];
+  mandatory_triggers: string[];
+  unanswered: string[];
+};
+
+// --- the DPIA lifecycle -------------------------------------------------
+
+/** A risk Veyntra proposes, and the decision it is waiting on.
+ *
+ * Never carries a likelihood or an impact. Those are the judgement the
+ * review exists to make, and a proposal arriving pre-rated would answer
+ * the one question the reviewer was brought in for. */
+export type DpiaSuggestedRisk = {
+  id: string | null;
+  title: string;
+  description: string;
+  /** The fact on record this was read from, so a reviewer can weigh it. */
+  reason: string;
+  status: "suggested" | "approved" | "dismissed";
+  /** Safeguards already on record, as a starting point — never a claim
+   * that they are sufficient. */
+  suggested_safeguards: string | null;
+  created_risk_id: string | null;
+  decided_at: string | null;
+};
+
+export type DpiaBlocker = { code: string; message: string };
+
+export type ConsultationState =
+  | "not_decided"
+  | "consultation_performed"
+  | "no_consultation";
+
+export type RiskConclusion =
+  | "not_reviewed"
+  | "risks_identified"
+  | "no_material_risks";
+
+export type DpiaMissingFact = {
+  code: string;
+  message: string;
+  /** Where to go and fix it, so a blocker is actionable rather than a
+   * statement that something is wrong somewhere. */
+  href: string;
+};
+
+export type DpiaSpecialSignal = {
+  kind: string;
+  /** The recorded text this was read out of, so a reviewer checks the
+   * detection rather than taking it on trust. */
+  evidence: string;
+};
+
+export type DpiaSectionReview = {
+  section: string;
+  approved_by: string | null;
+  approved_at: string | null;
+};
+
+export type DpiaSnapshotRisk = {
+  id: string;
+  title: string;
+  description: string | null;
+  affected_data_subjects: string | null;
+  likelihood: string;
+  impact: string;
+  existing_safeguards: string | null;
+  additional_mitigations: string | null;
+  residual_likelihood: string | null;
+  residual_impact: string | null;
+  status: string;
+};
+
+/** The assessment as it stood at completion. Written once. */
+export type DpiaSnapshot = {
+  processing: {
+    title: string;
+    purpose: string | null;
+    data_subjects: string | null;
+    data_categories: string[];
+    special_category: boolean;
+    retention: string | null;
+    ai_systems: string[];
+    vendors: { name: string; country: string | null }[];
+    transfers: string[];
+  };
+  screening: {
+    outcome: string | null;
+    decision: string | null;
+    decided_by: string | null;
+    decided_at: string | null;
+    rationale: string | null;
+  };
+  consultation: {
+    state: ConsultationState;
+    performed: boolean | null;
+    party: string | null;
+    role: string | null;
+    at: string | null;
+    /** The advice when one happened; the reason when none did. */
+    notes: string | null;
+    recorded_by: string | null;
+    recorded_at: string | null;
+  };
+  /** Not recoverable from the risk list: an empty register means
+   * "reviewed and found nothing material" here, and that is a claim
+   * somebody made. */
+  risk_review: {
+    conclusion: RiskConclusion;
+    rationale: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+  };
+  risks: DpiaSnapshotRisk[];
+  /** Kept because "we considered this and decided it was not a risk
+   * here" is part of what an assessment concluded. */
+  dismissed_risks: { title: string; reason: string }[];
+  residual_risk: string | null;
+  inherent_risk: string | null;
+  approval: {
+    action_type: string;
+    status: string;
+    decided_by: string | null;
+    decided_at: string | null;
+  } | null;
+  evidence: { id: string; title: string; control_id: string }[];
+};
+
+export type DpiaWorkflow = {
+  id: string;
+  title: string;
+  /** screening | draft | in_review | approved. A DPIA is not a draft
+   * assessment until somebody decides one is required. */
+  status: string;
+  processing_activity_id: string | null;
+  ai_system_id: string | null;
+
+  /** What Veyntra counted against Article 35(3) and the EDPB criteria. */
+  screening_outcome: string | null;
+  screening_rationale_text: string | null;
+  screening_criteria_met: string[];
+  screened_at: string | null;
+
+  /** And what a person decided about it — a different claim by a
+   * different party, so stored and shown separately. */
+  screening_decision: string | null;
+  screening_decided_at: string | null;
+  screening_decision_rationale: string | null;
+
+  processing_description: string | null;
+  necessity_assessment: string | null;
+  proportionality_assessment: string | null;
+  consultation_notes: string | null;
+
+  /** Null means nobody has assessed it — which is what a DPIA with no
+   * risks should say rather than "Low". */
+  inherent_risk: string | null;
+  residual_risk: string | null;
+  risk_count: number;
+  assessed_count: number;
+  mitigated_count: number;
+  can_calculate_residual: boolean;
+  risk_blocked_reason: string | null;
+
+  suggested_risks: DpiaSuggestedRisk[];
+  completion_blockers: DpiaBlocker[];
+  /** True when screening continued the assessment that already covered
+   * this processing rather than opening a second one. */
+  reused_existing: boolean;
+
+  /** Which sections a person has actually signed off. Recorded rather
+   * than inferred from whether the text still starts with Veyntra's
+   * draft marker — agreeing with a draft is a decision, not an edit. */
+  section_reviews: DpiaSectionReview[];
+
+  /** The one consultation state. Derived server-side from the single
+   * field that holds it, so the screen never reconciles two sources —
+   * it used to show "No consultation performed" beside "Nobody has
+   * approved the consultation record" about the same fact. */
+  consultation_state: ConsultationState;
+  consultation_performed: boolean | null;
+  consulted_party: string | null;
+  consulted_role: string | null;
+  consulted_at: string | null;
+  consultation_recorded_by_name: string | null;
+  consultation_recorded_at: string | null;
+
+  /** What the risk review concluded. Only the last two are a completed
+   * review: a risk count of zero cannot tell "nobody looked" apart from
+   * "looked, and found none material". */
+  risk_conclusion: RiskConclusion;
+  risk_conclusion_rationale: string | null;
+  risk_reviewed_by_name: string | null;
+  risk_reviewed_at: string | null;
+  /** True when every suggestion is decided and no risk is on the
+   * register — the only position from which "nothing material" is a
+   * conclusion rather than a guess. */
+  can_conclude_no_material_risks: boolean;
+
+  /** Core processing facts the assessment needs and does not have.
+   * Absent context is not a benign finding: a DPIA written against a
+   * record with no data categories cannot say what it assessed. */
+  missing_facts: DpiaMissingFact[];
+  /** Article 9 hints Veyntra read out of the record. Detection only —
+   * whether Article 9 applies is never decided by the product. */
+  special_category_signals: DpiaSpecialSignal[];
+  /** null = nobody has answered, which is distinct from a recorded
+   * "not applicable, for this reason". */
+  special_category_confirmed: boolean | null;
+  special_category_rationale: string | null;
+  /** Sections approved against processing details that have since moved. */
+  stale_sections: string[];
+  /** What each section is written against, kept apart from the answer so
+   * it can never be approved as one. */
+  section_guidance: Record<string, string>;
+  /** Set when a completed DPIA was signed off on content that would not
+   * pass today's gates. Never rewrites what it froze. */
+  quality_review_reason: string | null;
+
+  can_complete: boolean;
+  completed_at: string | null;
+  completed_by_name: string | null;
+  /** What the assessment concluded, frozen at completion. Null until
+   * then, and never re-derived afterwards. */
+  snapshot: DpiaSnapshot | null;
+  review_reason: string | null;
+  review_flagged_at: string | null;
+  /** Which statuses this DPIA can move to right now, so the UI offers
+   * one lifecycle rather than a list of words. */
+  allowed_transitions: DPIAStatus[];
 };

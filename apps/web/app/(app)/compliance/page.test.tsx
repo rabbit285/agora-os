@@ -67,6 +67,9 @@ const DPIA_FIXTURE: DPIA = {
   consultation_notes: null,
   residual_risk_level: null,
   screening_outcome: null,
+  consultation_performed: null,
+  completed_at: null,
+  review_reason: null,
   approval_id: null,
   owner_id: null,
   created_at: new Date().toISOString(),
@@ -80,7 +83,11 @@ const DSAR_FIXTURE: DSAR = {
   status: "received",
   verification_status: "pending",
   verification_method: null,
+  verification_notes: null,
   verified_at: null,
+  phase: "identity_verification",
+  blocked_reason: null,
+  scope_confirmed_at: null,
   discovery_findings: null,
   discovery_run_at: null,
   export_generated_at: null,
@@ -337,6 +344,10 @@ const DATA_TRANSFER_FIXTURE: DataTransfer = {
   status: "active",
   related_risk_id: null,
   owner_id: null,
+  detected_from: null,
+  review_reason: null,
+  vendor_id: null,
+  last_reviewed_at: null,
   created_at: new Date().toISOString(),
 };
 
@@ -491,16 +502,20 @@ describe("Privacy", () => {
     await user.selectOptions(screen.getByDisplayValue("Access"), "deletion");
     await user.click(screen.getByRole("button", { name: "Log DSAR" }));
 
-    await waitFor(() =>
-      expect(mockedApiFetch).toHaveBeenCalledWith("/api/v1/compliance/dsars", {
-        method: "POST",
-        body: {
-          requester_name: "New Requester",
-          requester_email: "new@example.com",
-          request_type: "deletion",
-        },
-      }),
-    );
+    await waitFor(() => expect(mockedApiFetch).toHaveBeenCalled());
+    const body = mockedApiFetch.mock.calls.find(
+      ([url, init]) => url === "/api/v1/compliance/dsars" && init?.method === "POST",
+    )?.[1]?.body as Record<string, unknown>;
+
+    expect(body).toMatchObject({
+      requester_name: "New Requester",
+      requester_email: "new@example.com",
+      request_type: "deletion",
+    });
+    // The response clock runs from receipt, so the date always goes with
+    // the request rather than being inferred server-side from when
+    // somebody got round to typing it in.
+    expect(body.received_at).toEqual(expect.any(String));
   });
 
   it("shows a linked-AI-system hint for a DPIA created via the registration hook", async () => {
@@ -509,7 +524,7 @@ describe("Privacy", () => {
     });
     renderPage(DpiasPage);
 
-    expect(await screen.findByText("Linked to an AI system")).toBeInTheDocument();
+    expect(await screen.findByText(/Linked to an AI system/)).toBeInTheDocument();
   });
 });
 
@@ -973,20 +988,56 @@ describe("Data Transfers", () => {
     expect(screen.getByText("US · sccs")).toBeInTheDocument();
   });
 
+  it("flags a transfer whose vendor moved, without changing what it records", async () => {
+    mockRoutes({
+      dataTransfers: [
+        {
+          ...DATA_TRANSFER_FIXTURE,
+          review_reason:
+            "Northwind Cloud's recorded location changed to IN; this transfer was assessed against US.",
+        },
+      ],
+    });
+    renderPage(TransfersPage);
+
+    expect(await screen.findByText("Worth another look")).toBeInTheDocument();
+    // The transfer still says what the person who approved it decided.
+    // Re-approving against the new destination is their call, not the
+    // product's.
+    expect(screen.getByText(/This record has not been changed/)).toBeInTheDocument();
+    expect(screen.getByText("US · sccs")).toBeInTheDocument();
+  });
+
+  it("says where a detected transfer came from, so the inference is checkable", async () => {
+    mockRoutes({
+      dataTransfers: [
+        { ...DATA_TRANSFER_FIXTURE, detected_from: "the vendor linked to Recruitment" },
+      ],
+    });
+    renderPage(TransfersPage);
+
+    expect(
+      await screen.findByText("Detected from the vendor linked to Recruitment"),
+    ).toBeInTheDocument();
+  });
+
   it("logs a new data transfer with the entered recipient and mechanism", async () => {
     mockRoutes({});
     renderPage(TransfersPage);
     const user = userEvent.setup();
 
-    await openForm(user, "Log a transfer");
+    await openForm(user, "Add manually");
 
     await user.type(
       await screen.findByPlaceholderText("Recipient name"),
       "New Recipient GmbH",
     );
     await user.type(screen.getByPlaceholderText("Destination country (e.g. US)"), "de");
+    // The mechanism starts unselected — which one covers a transfer is
+    // a legal judgement, and a form that pre-answers it has made the
+    // decision for whoever fills it in.
     await user.selectOptions(
-      screen.getByDisplayValue("Standard Contractual Clauses"),
+      screen.getByDisplayValue("Select transfer mechanism…"),
       "derogation",
     );
     await user.click(screen.getByRole("button", { name: "Log transfer" }));

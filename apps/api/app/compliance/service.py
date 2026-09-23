@@ -206,6 +206,13 @@ async def register_ai_system(
     risk_classification: str,
     owner_id: uuid.UUID | None,
     actor_user_id: uuid.UUID | None,
+    description: str | None = None,
+    # Who uses it, who is affected by it, and what it processes. Declared
+    # at registration so the privacy module can draft a processing
+    # activity from them rather than asking for the same facts again.
+    internal_users: list[str] | None = None,
+    affected_users: list[str] | None = None,
+    processed_data: list[dict[str, str]] | None = None,
 ) -> AISystem:
     system = AISystem(
         organization_id=organization_id,
@@ -214,6 +221,10 @@ async def register_ai_system(
         purpose=purpose,
         risk_classification=risk_classification,
         owner_id=owner_id,
+        description=description,
+        internal_users=list(internal_users or []),
+        affected_users=list(affected_users or []),
+        processed_data=list(processed_data or []),
     )
     db.add(system)
     await db.flush()

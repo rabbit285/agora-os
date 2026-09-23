@@ -3,13 +3,17 @@
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { DsarDiscoveryPanel } from "@/components/compliance/dsar-discovery";
+import { DsarNextAction } from "@/components/compliance/dsar-next-action";
+import { DsarResponsePackagePanel } from "@/components/compliance/dsar-response-package";
+import { DsarScopeReview } from "@/components/compliance/dsar-scope-review";
 import { DsarWorkflow } from "@/components/compliance/dsar-workflow";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-import type { DSAR, DSARStatus } from "@/lib/types";
+import type { DSAR, DSARStatus, DsarWorkflowState } from "@/lib/types";
 
 const selectClassName =
   "flex h-9 rounded-md border border-[var(--border-strong)] bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]";
@@ -22,6 +26,13 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
   const { data: dsar } = useQuery<DSAR>({
     queryKey: ["compliance", "dsars", id],
     queryFn: () => apiFetch<DSAR>(`/api/v1/compliance/dsars/${id}`),
+  });
+
+  // Where the request is and what it needs, derived server-side from the
+  // record. Nothing on this page lets somebody set it directly.
+  const { data: workflow } = useQuery<DsarWorkflowState>({
+    queryKey: ["compliance", "dsars", id, "workflow"],
+    queryFn: () => apiFetch<DsarWorkflowState>(`/api/v1/compliance/dsars/${id}/workflow`),
   });
 
   const updateStatus = useMutation({
@@ -38,30 +49,52 @@ export default function DSARDetailPage({ params }: { params: Promise<{ id: strin
 
   if (!dsar) return null;
 
-  const dueDate = new Date(dsar.due_at);
-  const isOverdue = dsar.status !== "fulfilled" && dsar.status !== "rejected" && dueDate < new Date();
-
   return (
     <div>
       <PageHeader
         title={dsar.requester_name}
         description={`${dsar.requester_email} — ${dsar.request_type} request`}
-        actions={<StatusBadge status={dsar.status} />}
+        actions={
+          <StatusBadge
+            status={workflow?.phase ?? dsar.status}
+            label={workflow?.phase_label}
+          />
+        }
       />
 
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-sm text-[var(--fg-muted)]">
-          Due {dueDate.toLocaleDateString()}
-          {isOverdue && <span className="ml-1 text-[var(--critical-600)]">(overdue)</span>}
-        </span>
-        {dsar.fulfilled_at && (
-          <span className="text-sm text-[var(--fg-muted)]">
-            · Fulfilled {new Date(dsar.fulfilled_at).toLocaleDateString()}
-          </span>
-        )}
-      </div>
+      {workflow && (
+        <DsarNextAction
+          workflow={workflow}
+          dueAt={dsar.due_at}
+          daysRemaining={dsar.days_remaining}
+          overdue={dsar.overdue}
+        />
+      )}
 
+      {/* Identity first: everything below either discloses data or acts
+          on a record, and both are wrong if the requester is not who
+          they say they are. */}
       <DsarWorkflow dsar={dsar} />
+
+      <DsarScopeReview dsarId={id} confirmed={dsar.scope_confirmed_at !== null} />
+
+      <DsarDiscoveryPanel
+        dsarId={id}
+        canSearch={
+          dsar.verification_status === "verified" && dsar.scope_confirmed_at !== null
+        }
+        blockedReason={
+          dsar.verification_status !== "verified"
+            ? "Verify the requester's identity before searching. Looking a person up on an unverified request is the same disclosure risk as answering it."
+            : dsar.scope_confirmed_at === null
+              ? "Confirm the search scope first — discovery searches exactly what you confirm."
+              : null
+        }
+      />
+
+      {dsar.discovery_run_at && (
+        <DsarResponsePackagePanel dsarId={id} workflow={workflow} />
+      )}
 
       <Card className="mb-6">
         <CardContent className="flex flex-col gap-3 pt-6">

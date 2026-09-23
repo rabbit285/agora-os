@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { CreatePanel } from "@/components/create-panel";
+import { PrivacySuggestions } from "@/components/compliance/privacy-suggestions";
+import { StartDpiaScreening } from "@/components/compliance/dpia-screening";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +19,6 @@ import type {
   DataTransfer,
   DataTransferStatus,
   DPIA,
-  DPIARiskLevel,
   DSAR,
   DSARRequestType,
   LegalBasis,
@@ -76,7 +78,10 @@ export function ProcessingActivitiesSection() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [legalBasis, setLegalBasis] = useState<LegalBasis>("legitimate_interests");
+  // Empty until somebody chooses. A pre-selected lawful basis is an
+  // answer nobody gave, and "Legitimate interests" is the worst one to
+  // give by default: it is the basis that requires a balancing test.
+  const [legalBasis, setLegalBasis] = useState<LegalBasis | "">("");
   const [dataSubjects, setDataSubjects] = useState("");
   const [retentionPeriod, setRetentionPeriod] = useState("");
 
@@ -107,14 +112,23 @@ export function ProcessingActivitiesSection() {
   });
 
   const canCreate =
-    name.trim() && purpose.trim() && dataSubjects.trim() && retentionPeriod.trim();
+    name.trim() &&
+    purpose.trim() &&
+    dataSubjects.trim() &&
+    retentionPeriod.trim() &&
+    // A lawful basis is not optional and is not guessable. Without one
+    // this is not a RoPA entry.
+    legalBasis;
 
   return (
     <div className="mb-8">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Record of Processing Activities (RoPA)
       </h2>
-      <CreatePanel label="Add processing activity">
+      {/* Drafted from AI systems and vendors already on file, so the
+          same facts are not typed twice. */}
+      <PrivacySuggestions kind="processing_activity" />
+      <CreatePanel label="Add manually">
         <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Activity name"
@@ -133,6 +147,7 @@ export function ProcessingActivitiesSection() {
             value={legalBasis}
             onChange={(e) => setLegalBasis(e.target.value as LegalBasis)}
           >
+            <option value="">Select lawful basis…</option>
             {LEGAL_BASIS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -181,27 +196,31 @@ export function ProcessingActivitiesSection() {
   );
 }
 
-export function DPIASection() {
-  const queryClient = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [riskLevel, setRiskLevel] = useState<DPIARiskLevel>("low");
+/** The lifecycle in the words a reader uses, not the column values.
+ *
+ * `not_required` especially: it was stored as `approved`, so a screening
+ * that concluded no assessment was needed read on this list as a DPIA
+ * that had been carried out and signed off. */
+const DPIA_STATUS_LABELS: Record<string, string> = {
+  screening: "Screening",
+  not_required: "No DPIA required",
+  draft: "Draft",
+  in_review: "In review",
+  approved: "Approved",
+  completed: "Completed",
+  rejected: "Rejected",
+};
 
+const DPIA_STAGE: Record<string, string> = {
+  screening: "Screening · waiting on your decision",
+  not_required: "Screening complete · no DPIA required",
+  completed: "Assessment complete",
+};
+
+export function DPIASection() {
   const { data: dpias } = useQuery<DPIA[]>({
     queryKey: ["compliance", "dpias"],
     queryFn: () => apiFetch<DPIA[]>("/api/v1/compliance/dpias"),
-  });
-
-  const createDpia = useMutation({
-    mutationFn: () =>
-      apiFetch<DPIA>("/api/v1/compliance/dpias", {
-        method: "POST",
-        body: { title, risk_level: riskLevel },
-      }),
-    onSuccess: () => {
-      setTitle("");
-      setRiskLevel("low");
-      queryClient.invalidateQueries({ queryKey: ["compliance", "dpias"] });
-    },
   });
 
   return (
@@ -209,53 +228,51 @@ export function DPIASection() {
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Data Protection Impact Assessments (DPIA)
       </h2>
-      <CreatePanel label="Create DPIA">
-        <div className="flex flex-wrap gap-2">
-          <Input
-            placeholder="DPIA title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="min-w-[200px] flex-1"
-          />
-          <select
-            className={selectClassName}
-            value={riskLevel}
-            onChange={(e) => setRiskLevel(e.target.value as DPIARiskLevel)}
-          >
-            <option value="low">Low risk</option>
-            <option value="medium">Medium risk</option>
-            <option value="high">High risk</option>
-          </select>
-          <Button disabled={!title.trim() || createDpia.isPending} onClick={() => createDpia.mutate()}>
-            Start DPIA
-          </Button>
-        </div>
-        <div className="pt-0 pb-4">
-          <p className="text-xs text-[var(--fg-subtle)]">
-            A high-risk DPIA automatically requires an Approval before it can be marked approved
-            (GDPR Article 35).
-          </p>
-        </div>
-      </CreatePanel>
-      {dpias?.length === 0 && <EmptyState
+      {/* §4/§19: one action, and it starts with screening rather than
+          with a risk level nobody has established yet. */}
+      <div className="mb-4">
+        <StartDpiaScreening />
+      </div>
+      {dpias?.length === 0 && (
+        <EmptyState
           title="No DPIAs recorded"
-          description={"A data protection impact assessment is required where processing is likely to be high risk — profiling, large-scale special category data, or systematic monitoring."}
-        />}
+          description={"Start from a processing activity or an AI system. Screening records whether an assessment is needed and why — Veyntra counts the criteria you report, and the conclusion is yours."}
+        />
+      )}
       <div className="flex flex-col gap-2">
         {dpias?.map((dpia) => (
-          <Link key={dpia.id} href={`/compliance/dpias/${dpia.id}`} className={CARD_LINK_FOCUS}>
+          <Link
+            key={dpia.id}
+            href={`/compliance/dpias/${dpia.id}`}
+            className={CARD_LINK_FOCUS}
+          >
             <Card className="transition-colors hover:border-[var(--border-strong)]">
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
-                  <div className="font-medium text-[var(--fg-default)]">{dpia.title}</div>
-                  {dpia.ai_system_id && (
-                    <div className="text-xs text-[var(--fg-subtle)]">Linked to an AI system</div>
+                  <div className="font-medium text-[var(--fg-default)]">
+                    {dpia.title}
+                  </div>
+                  <div className="text-xs text-[var(--fg-subtle)]">
+                    {DPIA_STAGE[dpia.status] ??
+                      (dpia.screening_outcome
+                        ? `Screened · ${dpia.screening_outcome.replace(/_/g, " ")}`
+                        : "Not screened yet")}
+                    {dpia.ai_system_id && " · Linked to an AI system"}
+                  </div>
+                  {/* A completed assessment whose processing has moved
+                      on is the one row on this list somebody needs to
+                      see without opening it. */}
+                  {dpia.review_reason && (
+                    <div className="mt-1 text-xs text-[var(--warning-700)]">
+                      Reassessment recommended — the processing has changed
+                      since this was completed.
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={dpia.risk_level} />
-                  <StatusBadge status={dpia.status} />
-                </div>
+                <StatusBadge
+                  status={dpia.status}
+                  label={DPIA_STATUS_LABELS[dpia.status]}
+                />
               </CardContent>
             </Card>
           </Link>
@@ -270,6 +287,12 @@ export function DSARSection() {
   const [requesterName, setRequesterName] = useState("");
   const [requesterEmail, setRequesterEmail] = useState("");
   const [requestType, setRequestType] = useState<DSARRequestType>("access");
+  // Defaults to today, but it is a field rather than an assumption: the
+  // response clock runs from receipt, and a request entered three days
+  // late does not get three extra days.
+  const [receivedAt, setReceivedAt] = useState(
+    () => new Date().toISOString().slice(0, 10),
+  );
   const [filter, setFilter] = useState("all");
 
   const { data: dsars } = useQuery<DSAR[]>({
@@ -308,6 +331,8 @@ export function DSARSection() {
         body: {
           requester_name: requesterName,
           requester_email: requesterEmail,
+          // Receipt, not entry. The deadline is calculated from this.
+          received_at: receivedAt ? new Date(receivedAt).toISOString() : undefined,
           request_type: requestType,
         },
       }),
@@ -331,6 +356,25 @@ export function DSARSection() {
             onChange={(e) => setRequesterName(e.target.value)}
             className="min-w-[180px] flex-1"
           />
+          <label
+            className="text-xs text-[var(--fg-muted)]"
+            htmlFor="dsar-received"
+          >
+            When the request was received
+          </label>
+          <Input
+            id="dsar-received"
+            type="date"
+            value={receivedAt}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setReceivedAt(e.target.value)}
+            className="w-48"
+          />
+          <p className="text-xs text-[var(--fg-subtle)]">
+            The response clock runs from receipt, not from when it was
+            entered here — a request logged three days late does not get
+            three extra days.
+          </p>
           <Input
             placeholder="Requester email"
             value={requesterEmail}
@@ -434,7 +478,11 @@ export function DataTransfersSection() {
   const queryClient = useQueryClient();
   const [recipientName, setRecipientName] = useState("");
   const [destinationCountry, setDestinationCountry] = useState("");
-  const [transferMechanism, setTransferMechanism] = useState<TransferMechanism>("sccs");
+  // Which mechanism covers a transfer is a legal judgement. The form
+  // asks; it does not answer.
+  const [transferMechanism, setTransferMechanism] = useState<
+    TransferMechanism | ""
+  >("");
 
   const { data: transfers } = useQuery<DataTransfer[]>({
     queryKey: ["compliance", "data-transfers"],
@@ -454,7 +502,7 @@ export function DataTransfersSection() {
     onSuccess: () => {
       setRecipientName("");
       setDestinationCountry("");
-      setTransferMechanism("sccs");
+      setTransferMechanism("");
       queryClient.invalidateQueries({ queryKey: ["compliance", "data-transfers"] });
       queryClient.invalidateQueries({ queryKey: ["compliance", "risks"] });
     },
@@ -475,7 +523,10 @@ export function DataTransfersSection() {
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--fg-muted)]">
         Data Transfers
       </h2>
-      <CreatePanel label="Log a transfer">
+      {/* Detected from processing activities whose processor is outside
+          the EEA. The mechanism stays the reviewer's call. */}
+      <PrivacySuggestions kind="transfer" />
+      <CreatePanel label="Add manually">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-2">
             <Input
@@ -496,6 +547,7 @@ export function DataTransfersSection() {
               value={transferMechanism}
               onChange={(e) => setTransferMechanism(e.target.value as TransferMechanism)}
             >
+              <option value="">Select transfer mechanism…</option>
               <option value="adequacy_decision">Adequacy decision</option>
               <option value="sccs">Standard Contractual Clauses</option>
               <option value="bcrs">Binding Corporate Rules</option>
@@ -505,6 +557,9 @@ export function DataTransfersSection() {
               disabled={
                 !recipientName.trim() ||
                 destinationCountry.trim().length !== 2 ||
+                // Which mechanism covers a transfer is the reviewer's
+                // call, so the form will not submit without one.
+                !transferMechanism ||
                 createTransfer.isPending
               }
               onClick={() => createTransfer.mutate()}
@@ -527,12 +582,18 @@ export function DataTransfersSection() {
       <div className="flex flex-col gap-2">
         {transfers?.map((transfer) => (
           <Card key={transfer.id}>
-            <CardContent className="flex items-center justify-between pt-6">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
               <div>
                 <div className="font-medium text-[var(--fg-default)]">{transfer.recipient_name}</div>
                 <div className="text-xs text-[var(--fg-subtle)]">
                   {transfer.destination_country} · {transfer.transfer_mechanism.replace(/_/g, " ")}
                 </div>
+                {transfer.detected_from && (
+                  <div className="text-xs text-[var(--fg-subtle)]">
+                    Detected from {transfer.detected_from}
+                  </div>
+                )}
                 {transfer.related_risk_id && (
                   <div className="text-xs text-[var(--critical-600)]">Linked risk created</div>
                 )}
@@ -554,6 +615,27 @@ export function DataTransfersSection() {
                 </select>
                 <StatusBadge status={transfer.status} />
               </div>
+              </div>
+
+              {/* A fact underneath this transfer moved. Said here rather
+                  than applied: the record still says what the person who
+                  approved it decided, and re-approving is their call. */}
+              {transfer.review_reason && (
+                <div className="mt-3 flex gap-2 rounded-[var(--radius-md)] border border-[var(--warning-300)] bg-[var(--warning-50)] p-3">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warning-600)]"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div className="text-xs font-medium text-[var(--fg-default)]">
+                      Worth another look
+                    </div>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[var(--fg-muted)]">
+                      {transfer.review_reason} This record has not been changed.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -13,12 +13,17 @@ refuses in the service rather than the router — a second endpoint added
 later, or a background job, must hit the same wall. Article 12(6) exists
 precisely so a controller can demand proof before answering.
 
-Discovery is deliberately narrow. It searches sources this organization
-owns, scoped to the organization, matching on the requester's email. It
-does not attempt to be exhaustive, and the export says so: a DSAR
-response is signed by a human who is accountable for its completeness,
-and a tool that implies it found everything invites that human to stop
-looking.
+Discovery no longer lives here. It moved to `dsar_discovery`, which
+searches only the scope a person confirmed and reports honestly on
+everything it could not reach.
+
+What was removed from this module mattered: it searched
+`support_customers`, `support_tickets`, `sales_contacts` and
+`sales_leads` — tables belonging to product modules Veyntra no longer
+ships — and reported "0 matches" for each. A case worker reading that
+zero would sign a response saying no data was found, on the strength of
+a query against systems this product does not operate. That is worse
+than not looking, because it looks like having looked.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ async def verify_identity(
     method: str,
     verified: bool,
     actor_user_id: uuid.UUID | None,
+    notes: str | None = None,
 ) -> DSAR:
     """Record the outcome of identity verification.
 
@@ -57,6 +63,9 @@ async def verify_identity(
     """
     dsar.verification_status = "verified" if verified else "failed"
     dsar.verification_method = method
+    # Kept on both outcomes. Why a verification failed is exactly what a
+    # second attempt, or a complaint, needs to be able to read.
+    dsar.verification_notes = (notes or '').strip() or None
     dsar.verified_at = datetime.now(UTC) if verified else None
     dsar.verified_by = actor_user_id if verified else None
 
@@ -69,153 +78,16 @@ async def verify_identity(
         else "compliance.dsar.identity_verification_failed",
         object_type="dsar",
         object_id=str(dsar.id),
-        after_state={"verification_status": dsar.verification_status, "method": method},
+        after_state={
+            "verification_status": dsar.verification_status,
+            "method": method,
+            # The note itself is not copied into the audit trail: it can
+            # describe how a person proved who they were, which is not
+            # something to duplicate into a second store.
+            "notes_recorded": bool(dsar.verification_notes),
+        },
     )
     return dsar
-
-
-async def run_data_discovery(
-    db: AsyncSession, *, organization_id: uuid.UUID, dsar: DSAR, actor_user_id: uuid.UUID | None
-) -> dict[str, Any]:
-    """Search this organization's own records for the requester.
-
-    Imports are local because these are other modules' tables and a
-    top-level import would couple the compliance package to all of them
-    at load time. Counts and identifiers are returned rather than full
-    records: this is a map of where the person appears, which is what a
-    case worker needs to decide what to include, and it keeps the
-    discovery result itself from becoming a second copy of the data.
-    """
-    from app.identity.models import User
-    from app.sales.models import Contact, Lead
-    from app.support.models import Customer, Ticket
-
-    email = dsar.requester_email.strip().lower()
-    sources: list[dict[str, Any]] = []
-
-    # Organization members.
-    user_rows = list(
-        (
-            await db.execute(select(User.id, User.email).where(func.lower(User.email) == email))
-        ).all()
-    )
-    sources.append(
-        {
-            "source": "Identity — user accounts",
-            "matches": len(user_rows),
-            "record_ids": [str(r[0]) for r in user_rows],
-        }
-    )
-
-    # Support customers and their tickets.
-    customer_rows = list(
-        (
-            await db.execute(
-                select(Customer.id).where(
-                    Customer.organization_id == organization_id,
-                    func.lower(Customer.email) == email,
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    ticket_count = 0
-    if customer_rows:
-        ticket_count = int(
-            (
-                await db.execute(
-                    select(func.count())
-                    .select_from(Ticket)
-                    .where(
-                        Ticket.organization_id == organization_id,
-                        Ticket.customer_id.in_(customer_rows),
-                    )
-                )
-            ).scalar_one()
-        )
-    sources.append(
-        {
-            "source": "Support — customers",
-            "matches": len(customer_rows),
-            "record_ids": [str(c) for c in customer_rows],
-        }
-    )
-    sources.append({"source": "Support — tickets", "matches": ticket_count, "record_ids": []})
-
-    # Sales contacts and leads.
-    contact_rows = list(
-        (
-            await db.execute(
-                select(Contact.id).where(
-                    Contact.organization_id == organization_id,
-                    func.lower(Contact.email) == email,
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    sources.append(
-        {
-            "source": "Sales — contacts",
-            "matches": len(contact_rows),
-            "record_ids": [str(c) for c in contact_rows],
-        }
-    )
-
-    # A Lead carries no email of its own — it points at a Contact. Reached
-    # through the contacts matched above rather than by a column that does
-    # not exist, which is also the correct relationship: a lead is about a
-    # person, it is not itself a person.
-    lead_rows: list[uuid.UUID] = []
-    if contact_rows:
-        lead_rows = list(
-            (
-                await db.execute(
-                    select(Lead.id).where(
-                        Lead.organization_id == organization_id,
-                        Lead.contact_id.in_(contact_rows),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-    sources.append(
-        {
-            "source": "Sales — leads",
-            "matches": len(lead_rows),
-            "record_ids": [str(lead) for lead in lead_rows],
-        }
-    )
-
-    findings = {
-        "email": email,
-        "sources": sources,
-        "total_matches": sum(int(s["matches"]) for s in sources),
-        # Stated in the result itself, not only in documentation, because
-        # this string travels with the export.
-        "coverage_note": (
-            "Searched the sources listed above only. Systems outside Veyntra, and unstructured "
-            "content such as free-text notes or attachments, were not searched. A case worker "
-            "remains responsible for the completeness of the response."
-        ),
-    }
-
-    dsar.discovery_findings = findings
-    dsar.discovery_run_at = datetime.now(UTC)
-
-    await record_event(
-        db,
-        organization_id=organization_id,
-        actor_user_id=actor_user_id,
-        action="compliance.dsar.discovery_run",
-        object_type="dsar",
-        object_id=str(dsar.id),
-        after_state={"total_matches": findings["total_matches"], "sources": len(sources)},
-    )
-    return findings
 
 
 def build_export_payload(dsar: DSAR) -> str:

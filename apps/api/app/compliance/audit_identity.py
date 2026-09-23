@@ -29,7 +29,6 @@ never the same field.
 from __future__ import annotations
 
 import logging
-import re
 import uuid
 from dataclasses import dataclass
 
@@ -37,6 +36,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.models import Audit
+from app.core import organization as core_organization
 from app.core.models import Membership, Organization
 from app.identity.models import User
 
@@ -55,13 +55,11 @@ AUDITOR_TYPE_LABELS = {
 # name a reader would recognise. Deliberately not a fallback to anything
 # derived from a person — an audit report that names a human's mailbox as
 # the audited organization is worse than one that admits a gap.
-UNCONFIGURED_ORGANIZATION = "Organization name not configured"
+UNCONFIGURED_ORGANIZATION = core_organization.UNCONFIGURED
 
-# Rough, and only used to reject. An organization is free to be called
-# anything; what it must not be called in a formal report is somebody's
-# email address, which is what a tenant created from a signup form with
-# the email pasted into the organization field ends up with.
-_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# The rule itself lives in `app.core.organization`, so the report, the
+# review export and the public Trust Center page all reach the same
+# answer.
 
 
 @dataclass
@@ -90,26 +88,13 @@ class AuditorIdentity:
 def organization_display_name(organization: Organization | None) -> str | None:
     """The organization's name, or nothing.
 
-    Returns None rather than a substitute, so every caller has to decide
-    what to show — and none of them can accidentally fall through to an
-    email address.
+    Kept as the name this module has always exported, now delegating to
+    the one canonical resolver — every surface that names an
+    organization has to reach the same answer, and a second copy of this
+    rule is how one of them ends up publishing what the others refuse to
+    print.
     """
-    if organization is None:
-        return None
-    name = (organization.name or "").strip()
-    if not name:
-        return None
-    if _EMAIL.match(name):
-        # The reported case: a tenant whose name field holds
-        # "xwarren@outlook.com". The record is real and the value is not
-        # a company name, so it is treated as unconfigured.
-        logger.info(
-            "Organization %s has an email address in its name field; "
-            "reporting it as unconfigured",
-            organization.id,
-        )
-        return None
-    return name
+    return core_organization.display_name(organization)
 
 
 async def resolve_auditor(db: AsyncSession, *, audit: Audit) -> AuditorIdentity:

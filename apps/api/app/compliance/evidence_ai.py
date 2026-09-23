@@ -907,6 +907,27 @@ async def process_document(
                 file_record=file_record,
                 actor_user_id=actor_user_id,
             )
+
+            # A privacy document that has just been parsed is a source of
+            # processing facts, and this is the moment they become
+            # readable. Without this the RoPA stayed empty while the
+            # document sat in the library marked Analyzed — evidence
+            # mapping and the privacy register were two pipelines and
+            # only one of them was connected to documents.
+            #
+            # Proposals only, and idempotent on the document's own id, so
+            # a re-analysis reconciles rather than proposing again.
+            try:
+                from app.compliance import privacy_suggestions
+
+                await privacy_suggestions.analyse(
+                    db, organization_id=organization_id
+                )
+            except Exception:  # noqa: BLE001 - drafting must not fail an upload
+                logger.exception(
+                    "Privacy drafting failed after analysing %s", file_record.id
+                )
+
             await db.commit()
 
             # Auto-approved mappings created real evidence, so the

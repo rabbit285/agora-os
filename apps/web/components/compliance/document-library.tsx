@@ -94,10 +94,25 @@ function mappingSummary(doc: ComplianceDocument): string {
   return "no control matches proposed";
 }
 
+/** Whether Veyntra produced this file, rather than being given it.
+ *
+ * The distinction is stored on the record rather than guessed from a
+ * filename — a customer can upload something called "Audit Report v2",
+ * and a library that reclassified it would quietly drop a real document
+ * out of the evidence workflow.
+ */
+function isGenerated(doc: ComplianceDocument): boolean {
+  return doc.artifact_type === "generated_output";
+}
+
 export function DocumentLibrary() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Which half of the library is on screen. Documents Veyntra was given
+  // and documents Veyntra produced are different kinds of thing, and
+  // listing them together is what made a report look like evidence.
+  const [tab, setTab] = useState<"source" | "generated_output">("source");
 
   const { data: documents } = useQuery<ComplianceDocument[]>({
     queryKey: ["compliance", "documents"],
@@ -107,6 +122,10 @@ export function DocumentLibrary() {
     refetchInterval: (query) =>
       (query.state.data ?? []).some((d) => IN_FLIGHT.has(d.processing_status)) ? 2000 : false,
   });
+
+  const sourceDocs = (documents ?? []).filter((doc) => !isGenerated(doc));
+  const generatedDocs = (documents ?? []).filter(isGenerated);
+  const visible = tab === "source" ? sourceDocs : generatedDocs;
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["compliance", "documents"] });
@@ -183,8 +202,65 @@ export function DocumentLibrary() {
         <p className="text-sm text-[var(--fg-muted)]">No documents uploaded yet.</p>
       )}
 
+      {(documents?.length ?? 0) > 0 && (
+        <div
+          role="tablist"
+          aria-label="Document library"
+          className="mb-4 flex flex-wrap gap-1 border-b border-[var(--border-default)]"
+        >
+          {(
+            [
+              [
+                "source",
+                "Source documents",
+                sourceDocs.length,
+                "Documents used to support your compliance records.",
+              ],
+              [
+                "generated_output",
+                "Generated outputs",
+                generatedDocs.length,
+                "Reports and exports Veyntra produced from your compliance records.",
+              ],
+            ] as const
+          ).map(([key, label, count, hint]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              title={hint}
+              onClick={() => setTab(key)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                tab === key
+                  ? "border-[var(--accent-600)] text-[var(--fg-default)]"
+                  : "border-transparent text-[var(--fg-muted)] hover:text-[var(--fg-default)]"
+              }`}
+            >
+              {label}
+              <span className="ml-2 text-xs text-[var(--fg-subtle)]">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(documents?.length ?? 0) > 0 && (
+        <p className="mb-3 text-xs text-[var(--fg-subtle)]">
+          {tab === "source"
+            ? "Documents used to support your compliance records."
+            : "Reports and exports Veyntra produced from your compliance records. These are results of your compliance work, not evidence for it."}
+        </p>
+      )}
+
+      {visible.length === 0 && (documents?.length ?? 0) > 0 && (
+        <p className="text-sm text-[var(--fg-muted)]">
+          {tab === "generated_output"
+            ? "Nothing generated yet. Audit reports and security review exports appear here once you produce them."
+            : "No source documents yet."}
+        </p>
+      )}
+
       <div className="flex flex-col gap-2">
-        {(documents ?? []).map((doc) => (
+        {visible.map((doc) => (
           // The whole row opens the document — via one real link that
           // stretches over the card, not a click handler on a div. The
           // link keeps its keyboard semantics and its accessible name;
@@ -258,6 +334,15 @@ export function DocumentLibrary() {
                     </Badge>
                   )}
                   {doc.document_domain && <Badge variant="outline">{doc.document_domain}</Badge>}
+                  {/* A result of Veyntra's compliance work, not a source
+                      for it. Said on the row because the two used to sit
+                      side by side looking identical. */}
+                  {isGenerated(doc) && (
+                    <Badge variant="secondary" className="gap-1">
+                      <Sparkles className="h-3 w-3" aria-hidden="true" />
+                      Generated output
+                    </Badge>
+                  )}
                   {doc.processing_status === "ready" && (
                     <Badge variant="success" className="gap-1">
                       <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
@@ -308,7 +393,27 @@ export function DocumentLibrary() {
               {/* Files that arrived from elsewhere in Veyntra were never
                   submitted for compliance analysis. Offering the action
                   is honest; showing a stalled progress trail is not. */}
-              {doc.processing_status === "not_analyzed" && (
+              {isGenerated(doc) && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-[var(--fg-muted)]">
+                    {doc.origin_label
+                      ? `Generated from ${doc.origin_label}.`
+                      : "Produced by Veyntra from your compliance records."}
+                  </span>
+                  {doc.origin_href && (
+                    <Link
+                      href={doc.origin_href}
+                      // Above the row-wide link that opens the document,
+                      // so this one does its own job instead of being
+                      // swallowed by it.
+                      className="relative z-10 text-sm text-[var(--fg-link)] underline"
+                    >
+                      Open {doc.origin_type === "audit_report" ? "audit" : "review"}
+                    </Link>
+                  )}
+                </div>
+              )}
+              {!isGenerated(doc) && doc.processing_status === "not_analyzed" && (
                 <div className="relative z-10 flex flex-wrap items-center gap-2">
                   <span className="text-sm text-[var(--fg-muted)]">Not analyzed yet.</span>
                   <Button

@@ -17,12 +17,9 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import Membership
 from app.seed import _ensure_compliance_catalog
-from app.support.models import Customer
 
 
 @pytest.fixture(autouse=True)
@@ -30,13 +27,15 @@ async def _catalog(db_session: AsyncSession) -> None:
     await _ensure_compliance_catalog(db_session)
 
 
-async def _signup(client: AsyncClient, email: str) -> None:
+async def _signup(
+    client: AsyncClient, email: str, *, full_name: str = "Privacy Tester"
+) -> None:
     response = await client.post(
         "/api/v1/auth/signup",
         json={
             "email": email,
             "password": "correct-horse-battery",
-            "full_name": "Privacy Tester",
+            "full_name": full_name,
             "organization_name": f"Acme AI {uuid.uuid4().hex[:6]}",
         },
     )
@@ -56,28 +55,27 @@ async def _dsar(client: AsyncClient, email: str = "emma.muller@example-test.com"
     return response.json()["id"]
 
 
-async def _support_customer(
-    db: AsyncSession, client: AsyncClient, *, name: str, email: str
-) -> None:
-    """Create a support customer directly in the database.
+async def _run_discovery(client: AsyncClient, dsar_id: str) -> list[dict]:
+    """Verify, confirm the whole suggested scope, and search it.
 
-    Seeded here rather than through POST /api/v1/support/customers because
-    the support module was withdrawn from the product when Veyntra narrowed
-    to compliance, so that route no longer exists. The *table* very much
-    does, and it is exactly what DSAR discovery has to search: personal
-    data does not stop existing because a module stopped being sold.
-    Seeding at this level keeps the coverage that matters — discovery
-    really does reach support records — without depending on a retired
-    HTTP surface.
+    Discovery obeys the confirmed scope exactly, so getting to a search
+    now means going through the two steps that gate it. That is the
+    point of them.
     """
-    me = (await client.get("/api/v1/auth/me")).json()
-    organization_id = (
-        await db.execute(
-            select(Membership.organization_id).where(Membership.user_id == uuid.UUID(me["id"]))
-        )
-    ).scalar_one()
-    db.add(Customer(organization_id=organization_id, name=name, email=email))
-    await db.flush()
+    await client.post(
+        f"/api/v1/compliance/dsars/{dsar_id}/verify-identity",
+        json={"verified": True, "method": "Email verification (synthetic test)"},
+    )
+    scope = (await client.get(f"/api/v1/compliance/dsars/{dsar_id}/scope")).json()
+    await client.post(
+        f"/api/v1/compliance/dsars/{dsar_id}/scope/confirm",
+        json={
+            "decisions": [
+                {"source_key": row["source_key"], "included": True} for row in scope
+            ]
+        },
+    )
+    return (await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discovery/run")).json()
 
 
 async def test_new_request_starts_unverified(client: AsyncClient) -> None:
@@ -141,45 +139,69 @@ async def test_discovery_finds_the_person_where_they_actually_appear(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """D5. A discovery that reports nothing regardless of the data is
-    worse than none — it manufactures confidence that there is nothing to
-    disclose."""
+    not a discovery.
+
+    The store searched here is Veyntra's own account records — the one
+    thing this product is genuinely the system of record for. It used to
+    search `support_customers` and `sales_contacts` too, tables belonging
+    to modules Veyntra no longer ships, and reported "0 matches" for
+    them; a case worker reading that zero would sign a response saying
+    no data was found on the strength of a query against systems this
+    product does not operate.
+    """
     await _signup(client, "dsar-discover@example.com")
+    # The requester is the signed-up user, so they really do appear in
+    # the one place Veyntra can honestly search.
+    dsar_id = await _dsar(client, email="dsar-discover@example.com")
 
-    subject_email = "found.person@example-test.com"
-    await _support_customer(db_session, client, name="Found Person", email=subject_email)
+    items = await _run_discovery(client, dsar_id)
+    accounts = next(item for item in items if item["source_name"] == "User accounts")
 
-    dsar_id = await _dsar(client, email=subject_email)
-    response = await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")
-    assert response.status_code == 200, response.text
-    findings = response.json()
-
-    by_source = {s["source"]: s for s in findings["sources"]}
-    assert by_source["Support — customers"]["matches"] == 1
-    assert findings["total_matches"] >= 1
-    # Every result states what was not searched, so nobody reads a clean
-    # result as "there is nothing".
-    assert "not searched" in findings["coverage_note"]
+    assert accounts["search_state"] == "searched_found"
+    assert accounts["matches"] == 1
 
 
 async def test_discovery_is_scoped_to_the_calling_organization(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """The one thing worse than failing to find a person's data is
-    returning somebody else's."""
-    subject_email = "shared.address@example-test.com"
-
+    """Another tenant's account must not surface in this one's search."""
     await _signup(client, "dsar-tenant-a@example.com")
-    await _support_customer(db_session, client, name="Tenant A Customer", email=subject_email)
     await client.post("/api/v1/auth/logout")
-
     await _signup(client, "dsar-tenant-b@example.com")
-    dsar_id = await _dsar(client, email=subject_email)
-    findings = (await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")).json()
 
-    by_source = {s["source"]: s for s in findings["sources"]}
-    assert by_source["Support — customers"]["matches"] == 0, (
-        "another organization's customer record surfaced in this tenant's DSAR discovery"
-    )
+    # Tenant B asks about tenant A's user. The account exists in the
+    # products's database; it is not this controller's to disclose.
+    dsar_id = await _dsar(client, email="dsar-tenant-a@example.com")
+    items = await _run_discovery(client, dsar_id)
+    accounts = next(item for item in items if item["source_name"] == "User accounts")
+
+    assert accounts["search_state"] == "searched_none"
+    assert accounts["matches"] == 0
+
+
+async def test_no_legacy_product_module_is_offered_as_a_source(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Veyntra is AI compliance only, and the scope has to say so.
+
+    Sales and Support tables may still exist for historical reasons.
+    Searching them and reporting the result as evidence is what this
+    guards against.
+    """
+    await _signup(client, "dsar-nolegacy@example.com")
+    dsar_id = await _dsar(client)
+
+    scope = (await client.get(f"/api/v1/compliance/dsars/{dsar_id}/scope")).json()
+    names = {row["name"] for row in scope}
+
+    for legacy in (
+        "Support records",
+        "Support — customers",
+        "Support — tickets",
+        "Sales — contacts",
+        "Sales — leads",
+    ):
+        assert legacy not in names
 
 
 async def test_discovery_returns_references_not_a_second_copy_of_the_data(
@@ -187,14 +209,15 @@ async def test_discovery_returns_references_not_a_second_copy_of_the_data(
 ) -> None:
     """Counts and ids, not records: the discovery result must not become
     an uncontrolled duplicate of the personal data it located."""
-    await _signup(client, "dsar-refs@example.com")
-    subject_email = "refs.person@example-test.com"
-    await _support_customer(db_session, client, name="Refs Person", email=subject_email)
-    dsar_id = await _dsar(client, email=subject_email)
-    findings = (await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")).json()
+    await _signup(client, "dsar-refs@example.com", full_name="Refs Person")
+    dsar_id = await _dsar(client, email="dsar-refs@example.com")
 
-    serialized = str(findings)
-    assert "Refs Person" not in serialized
+    items = await _run_discovery(client, dsar_id)
+    accounts = next(item for item in items if item["source_name"] == "User accounts")
+
+    assert accounts["matches"] == 1
+    # References to where the person is, never the person's own details.
+    assert "Refs Person" not in str(items)
 
 
 async def test_another_organizations_dsar_is_not_reachable(client: AsyncClient) -> None:
@@ -203,7 +226,7 @@ async def test_another_organizations_dsar_is_not_reachable(client: AsyncClient) 
     await client.post("/api/v1/auth/logout")
 
     await _signup(client, "dsar-iso-b@example.com")
-    for path in ("verify-identity", "discover", "export"):
+    for path in ("verify-identity", "discovery/run", "export"):
         body = {"verified": True, "method": "x"} if path == "verify-identity" else None
         response = await client.post(f"/api/v1/compliance/dsars/{dsar_id}/{path}", json=body)
         assert response.status_code == 404, path
@@ -214,11 +237,7 @@ async def test_the_whole_request_is_auditable(client: AsyncClient) -> None:
     record of who did it and when."""
     await _signup(client, "dsar-audit@example.com")
     dsar_id = await _dsar(client)
-    await client.post(
-        f"/api/v1/compliance/dsars/{dsar_id}/verify-identity",
-        json={"verified": True, "method": "Email verification"},
-    )
-    await client.post(f"/api/v1/compliance/dsars/{dsar_id}/discover")
+    await _run_discovery(client, dsar_id)
     await client.post(f"/api/v1/compliance/dsars/{dsar_id}/export")
 
     events = (

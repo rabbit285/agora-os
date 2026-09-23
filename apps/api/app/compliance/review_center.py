@@ -49,6 +49,14 @@ class ReviewItem:
     `href` points at the screen where the decision is actually made. A
     queue that lists work without taking you to it just relocates the
     searching.
+
+    The fields below `href` carry what makes a decision possible to make
+    rather than merely visible: what Veyntra recommends where it has
+    grounds to recommend anything, the facts it read, and what changes
+    if the reviewer agrees. They are optional because most categories
+    here are "somebody must look at this", not "here is a proposed
+    answer" — and a recommendation invented to fill a field is worse
+    than an empty one.
     """
 
     id: str
@@ -57,6 +65,13 @@ class ReviewItem:
     # high | medium | low
     priority: str
     href: str
+    recommendation: str | None = None
+    recommendation_reason: str | None = None
+    # Named facts with how directly each was established. Never a
+    # model's confidence in a legal conclusion — that is not a
+    # measurement of anything.
+    evidence: list[dict] = field(default_factory=list)
+    impact: str | None = None
 
 
 @dataclass
@@ -460,6 +475,42 @@ async def _pending_approvals(db: AsyncSession, organization_id: uuid.UUID) -> Re
     return category
 
 
+async def _privacy_decisions(
+    db: AsyncSession, organization_id: uuid.UUID
+) -> ReviewCategory:
+    """The privacy judgements, in the one queue with everything else.
+
+    Privacy had been surfacing these on its own overview, which is a
+    second queue — and the whole argument for a Review Center is that
+    there is only one place to look.
+    """
+    from app.compliance.privacy_review import privacy_decisions
+
+    decisions = await privacy_decisions(db, organization_id=organization_id)
+    return ReviewCategory(
+        key="privacy_decisions",
+        label="Privacy decisions",
+        description=(
+            "Veyntra drafted these records from your systems, vendors and "
+            "documents. These are the judgements it cannot make for you."
+        ),
+        items=[
+            ReviewItem(
+                id=decision.id,
+                title=decision.title,
+                detail=decision.detail,
+                priority=decision.priority,
+                href=decision.href,
+                recommendation=decision.recommendation,
+                recommendation_reason=decision.recommendation_reason,
+                evidence=decision.evidence,
+                impact=decision.impact,
+            )
+            for decision in decisions
+        ],
+    )
+
+
 async def build_review_center(
     db: AsyncSession,
     *,
@@ -468,6 +519,7 @@ async def build_review_center(
 ) -> ReviewCenter:
     """Everything waiting on a person, in one queue."""
     categories = [
+        await _privacy_decisions(db, organization_id),
         await _evidence_mappings(db, organization_id),
         await _pending_approvals(db, organization_id),
         await _ai_risk_classifications(db, organization_id),
