@@ -368,6 +368,33 @@ class File(UUIDPrimaryKeyMixin, Base):
     # Terminal states are `failed` (we tried and could not) and
     # `unsupported` (we can never read this content type) — kept distinct
     # because the first is worth retrying and the second never is.
+    # source | generated_output
+    #
+    # What kind of thing this file is, recorded rather than guessed from
+    # a filename or an extension. A document somebody uploaded is a
+    # source of evidence; a report Veyntra produced from the compliance
+    # record is a *result* of it, and treating the second as the first
+    # is how a product ends up citing its own conclusions back to
+    # itself.
+    #
+    # The distinction has to live in the data because everything
+    # downstream keys on it: evidence analysis refuses generated files,
+    # the copilot index skips them, and the library lists them apart.
+    # Hiding it in the UI would leave every one of those paths open.
+    artifact_type: Mapped[str] = mapped_column(
+        String(20), default="source", nullable=False, index=True
+    )
+    # What produced it, for a generated output: "audit_report" or
+    # "review_export". Null for anything uploaded.
+    origin_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # The record it came out of — the audit, the security review. Kept
+    # so a report can never be used to evidence the very conclusions it
+    # was written from; see app.compliance.artifacts.
+    origin_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    # How that record reads to a person, frozen. "Generated from ISO
+    # 42001 Internal Audit" has to keep working after the audit is
+    # renamed or archived.
+    origin_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
     processing_status: Mapped[str] = mapped_column(String(20), default="not_analyzed", index=True)
     # Set when this upload turned out to be bytes the organization
     # already has as a fully analysed document. The row is kept — someone

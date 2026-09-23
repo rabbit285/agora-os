@@ -4,15 +4,34 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=200)
     full_name: str = Field(min_length=1, max_length=200)
+    # The name entered here is the organization's name for the life of
+    # the account: it goes on audit reports, on security review
+    # summaries, and on the public Trust Center page. It is not
+    # onboarding text somebody confirms again later.
+    #
+    # Refused when it is an email address. That value reaches the column
+    # the only way it can — submitted here — and once stored it
+    # propagates silently into reports and onto a public page. Catching
+    # it where a person can still fix it is the whole point.
     organization_name: str = Field(min_length=1, max_length=200)
     marketing_consent: bool = False
+
+    @field_validator("organization_name")
+    @classmethod
+    def _is_an_organization_name(cls, value: str) -> str:
+        from app.core.organization import name_problem
+
+        problem = name_problem(value)
+        if problem:
+            raise ValueError(problem)
+        return value.strip()
 
 
 class LoginRequest(BaseModel):

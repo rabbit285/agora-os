@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
@@ -20,8 +21,24 @@ from app.compliance.ai_system_governance import assess_ai_system
 from app.compliance import audit_findings as audit_finding_service
 from app.compliance import audit_state, audit_workspace
 from app.compliance.audit_scope_text import suggested_scope as suggested_audit_scope
+from app.compliance import artifacts
 from app.compliance import audit_identity, audit_report, audit_report_service
-from app.compliance import privacy_deadlines, privacy_overview
+from app.compliance import (
+    dpia_approval,
+    dsar_discovery,
+    dsar_response,
+    dsar_scope,
+    dsar_workflow,
+    transfer_drift,
+    dpia_quality,
+    dpia_completion,
+    dpia_prefill,
+    dpia_risks,
+    dpia_workflow,
+    ropa_titles,
+)
+from app.compliance import privacy_accept, privacy_deadlines, privacy_overview
+from app.compliance import privacy_suggestions
 from app.identity.models import User
 from app.compliance import review_export, review_export_service
 from app.compliance.assessment import (
@@ -85,7 +102,6 @@ from app.compliance.dpia_screening import (
 from app.compliance.dsar import (
     DsarVerificationRequired,
     generate_export,
-    run_data_discovery,
     verify_identity,
 )
 from app.compliance.evidence_ai import (
@@ -116,6 +132,10 @@ from app.compliance.models import (
     ControlAssessment,
     ControlMapping,
     DataTransfer,
+    DsarDiscoveredItem,
+    DsarResponsePackage,
+    DsarScopeSource,
+    DpiaRiskSuggestion,
     Evidence,
     EvidenceEvent,
     EvidenceSuggestion,
@@ -128,6 +148,9 @@ from app.compliance.models import (
     QuestionnaireAnswer,
     QuestionnaireQuestion,
     AuditReport,
+    PrivacySuggestion,
+    ProcessingActivityAISystem,
+    ProcessingActivityVendor,
     Requirement,
     ReviewExport,
     Risk,
@@ -235,7 +258,50 @@ from app.compliance.schemas import (
     PrivacyAttentionOut,
     PrivacyMetricOut,
     PrivacyOverviewOut,
+    DpiaBlockerOut,
+    DpiaConsultationIn,
+    DpiaContextOut,
+    DpiaScreeningDecisionIn,
+    DpiaScreeningStartIn,
+    DpiaMissingFactOut,
+    DpiaRiskApproveIn,
+    DpiaRiskConclusionIn,
+    DpiaRiskDismissIn,
+    DpiaSectionApproveIn,
+    RiskRemediationIn,
+    DpiaSectionReviewOut,
+    DpiaSpecialCategoryIn,
+    DsarBlockerOut,
+    DsarCoverageOut,
+    DsarDiscoveredItemOut,
+    DsarDiscoveryPlanOut,
+    DsarItemReviewIn,
+    DsarManualSourceIn,
+    DsarNextActionOut,
+    DsarResponseApproveIn,
+    DsarResponsePackageOut,
+    DsarResponsePreviewOut,
+    DsarScopeConfirmIn,
+    DsarScopeSourceOut,
+    DsarSourceLineOut,
+    DsarWorkflowOut,
+    DpiaSpecialSignalOut,
+    DpiaSuggestedRiskOut,
+    DpiaWorkflowOut,
+    DpiaLinkedRecordOut,
+    DpiaSuggestedAnswerOut,
+    ProcessingActivityRelatedOut,
+    RopaTitleProblemOut,
+    RopaTitleRepairApply,
+    RopaTitleRepairOut,
     ProcessingActivityReviewIn,
+    PrivacyAnalysisOut,
+    PrivacyDataLocationOut,
+    PrivacySuggestionAcceptIn,
+    PrivacySuggestionDismissIn,
+    PrivacySuggestionOut,
+    PrivacySuggestionSourceOut,
+    RelatedRecordOut,
     AuditFindingCreate,
     AuditFindingOut,
     AuditFindingStatusUpdate,
@@ -259,6 +325,7 @@ from app.compliance.schemas import (
     CopilotIndexBackfillOut,
     CreateGapTaskRequest,
     DataTransferCreate,
+    DataTransferDetailOut,
     DataTransferOut,
     DataTransferStatusUpdate,
     DeleteResultOut,
@@ -272,7 +339,6 @@ from app.compliance.schemas import (
     DPIASectionsUpdate,
     DPIAStatusUpdate,
     DSARCreate,
-    DsarDiscoveryOut,
     DSAROut,
     DSARStatusUpdate,
     DsarVerificationRequest,
@@ -389,7 +455,7 @@ from app.compliance.vendor_review import (
     run_privacy_review,
     run_security_review,
 )
-from app.core.models import Approval, File, Membership, Task
+from app.core.models import Approval, File, Membership, Organization, Task
 from app.core.pagination import Pagination, paginate, pagination_params
 from app.core.routes import document_detail_href
 from app.core.schemas import TaskOut
@@ -1769,6 +1835,14 @@ async def list_compliance_documents(
             has_controls=has_controls,
             mapping_count=out.proposed_count + out.approved_count,
         )
+        # What Veyntra produced, labelled as such and pointed back at
+        # the record it came out of. Without this the library showed a
+        # report beside the policies it was written from, offering to
+        # analyse it for evidence.
+        out.artifact_label = artifacts.ARTIFACT_LABELS.get(
+            file_record.artifact_type or artifacts.SOURCE, "Source document"
+        )
+        out.origin_href = artifacts.origin_href(file_record)
         documents.append(out)
     return documents
 
@@ -2245,6 +2319,17 @@ async def analyze_document_for_evidence(
     if file_record is None or file_record.organization_id != context.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
+    # A report Veyntra wrote from the compliance record is not a source
+    # of evidence for it. Refused here rather than filtered in a query,
+    # so whoever asked is told why instead of watching a request come
+    # back empty.
+    try:
+        await artifacts.guard_analysis(file_record)
+    except artifacts.EvidenceRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
     try:
         file_bytes = download_object(file_record.storage_key)
     except Exception as exc:  # noqa: BLE001 - storage faults must not read as AI faults
@@ -2584,14 +2669,33 @@ async def create_risk(
     # AI system or DPIA by guessing an id.
     if payload.ai_system_id is not None:
         await _get_org_ai_system(db, payload.ai_system_id, context.organization_id)
+    dpia: DPIA | None = None
     if payload.dpia_id is not None:
         dpia = await db.get(DPIA, payload.dpia_id)
         if dpia is None or dpia.organization_id != context.organization_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
+        if dpia.status == dpia_workflow.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This DPIA is complete and its record is frozen. Start a "
+                    "reassessment rather than adding to what was concluded."
+                ),
+            )
 
     risk = Risk(organization_id=context.organization_id, **payload.model_dump())
     db.add(risk)
     await db.flush()
+    if dpia is not None:
+        # §10's "Add risk" is a completed risk review too: a risk on the
+        # register is what "risks were identified" means, however it got
+        # there.
+        await dpia_workflow.note_risks_identified(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            actor_user_id=context.user.id,
+        )
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -3142,8 +3246,19 @@ async def create_ai_system(
         purpose=payload.purpose,
         risk_classification=payload.risk_classification,
         owner_id=payload.owner_id,
+        description=payload.description,
+        internal_users=payload.internal_users,
+        affected_users=payload.affected_users,
+        processed_data=payload.processed_data,
         actor_user_id=context.user.id,
     )
+
+    # The privacy implications of a new AI system are knowable the moment
+    # it is registered, so they are drafted then. Proposals only —
+    # nothing here creates a RoPA entry or a transfer — and the same
+    # `source_key` that makes re-analysis idempotent makes this safe to
+    # run on every registration.
+    await privacy_suggestions.analyse(db, organization_id=context.organization_id)
 
     from app.automation.triggers import dispatch_event
 
@@ -3451,6 +3566,37 @@ async def create_ai_assessment(
     return assessment
 
 
+@router.get(
+    "/processing-activities/title-repairs",
+    response_model=list[RopaTitleRepairOut],
+)
+async def list_ropa_title_repairs(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[RopaTitleRepairOut]:
+    """Activities whose title names who rather than what.
+
+    Declared before `/processing-activities/{activity_id}` so the
+    literal path wins — FastAPI matches in definition order and a UUID
+    parameter would swallow it.
+    """
+    repairs = await ropa_titles.find_title_repairs(
+        db, organization_id=context.organization_id
+    )
+    return [
+        RopaTitleRepairOut(
+            activity_id=repair.activity_id,
+            current_title=repair.current_title,
+            problem=RopaTitleProblemOut(
+                kind=repair.problem.kind, message=repair.problem.message
+            ),
+            suggested_title=repair.suggested_title,
+            suggestion_reason=repair.suggestion_reason,
+        )
+        for repair in repairs
+    ]
+
+
 @router.get("/processing-activities", response_model=list[ProcessingActivityOut])
 async def list_processing_activities(
     db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
@@ -3473,7 +3619,33 @@ async def create_processing_activity(
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
 ) -> ProcessingActivity:
-    activity = ProcessingActivity(organization_id=context.organization_id, **payload.model_dump())
+    # §2: the organization answers who is processing; the activity
+    # answers what is being processed. A title that borrows the first
+    # identity leaves the second unrecorded, which is the one Article 30
+    # asks for.
+    problem = await ropa_titles.identity_conflict(
+        db, organization_id=context.organization_id, title=payload.name
+    )
+    if problem is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=problem.message
+        )
+
+    fields = payload.model_dump()
+    # §7: an activity missing a decision only a person can make is a
+    # draft. Recording it as active would put an incomplete claim into
+    # the register and stop the overview asking about it.
+    incomplete = not (fields.get("legal_basis") or "") or not (
+        fields.get("retention_period") or ""
+    ).strip()
+    fields["legal_basis"] = fields.get("legal_basis") or ""
+    fields["retention_period"] = (fields.get("retention_period") or "").strip()
+
+    activity = ProcessingActivity(
+        organization_id=context.organization_id, **fields
+    )
+    if incomplete:
+        activity.status = "draft"
     db.add(activity)
     await db.flush()
     await record_event(
@@ -3511,6 +3683,168 @@ async def get_dpia_screening_criteria(
     matches in definition order and a UUID parameter would swallow it.
     """
     return {"mandatory": MANDATORY_CRITERIA, "edpb": EDPB_CRITERIA}
+
+
+@router.get("/dpias/prefill", response_model=DpiaContextOut)
+async def get_dpia_prefill(
+    processing_activity_id: uuid.UUID | None = None,
+    ai_system_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DpiaContextOut:
+    """What is already known about the processing being assessed.
+
+    The DPIA flow used to open on a title and a risk dropdown — which
+    asks somebody to classify the risk before the screening that exists
+    to establish it, and then to retype facts sitting in the record they
+    are assessing. This returns those facts, plus the screening answers
+    the record already supports, each with the reason it was proposed.
+
+    Declared before `/dpias/{dpia_id}` so the literal path wins: FastAPI
+    matches in definition order and a UUID parameter would swallow it.
+    """
+    if processing_activity_id is None and ai_system_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Name what is being assessed: a processing activity or an AI "
+                "system."
+            ),
+        )
+    built = await dpia_prefill.build_context(
+        db,
+        organization_id=context.organization_id,
+        processing_activity_id=processing_activity_id,
+        ai_system_id=ai_system_id,
+    )
+    if built is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Record not found"
+        )
+
+    def link(entry) -> DpiaLinkedRecordOut:
+        return DpiaLinkedRecordOut(
+            id=entry.id, label=entry.label, kind=entry.kind, detail=entry.detail
+        )
+
+    return DpiaContextOut(
+        title=built.title,
+        purpose=built.purpose,
+        data_subjects=built.data_subjects,
+        data_categories=list(built.data_categories),
+        special_category=built.special_category,
+        processing_activity_id=built.processing_activity_id,
+        ai_system_id=built.ai_system_id,
+        owner_id=built.owner_id,
+        ai_systems=[link(entry) for entry in built.ai_systems],
+        vendors=[link(entry) for entry in built.vendors],
+        transfers=[link(entry) for entry in built.transfers],
+        evidence_count=built.evidence_count,
+        suggested_answers=[
+            DpiaSuggestedAnswerOut(
+                criterion=answer.criterion, value=answer.value, reason=answer.reason
+            )
+            for answer in built.suggested_answers
+        ],
+        unknown=list(built.unknown),
+    )
+
+
+@router.post("/dpias/screening/start", response_model=DpiaWorkflowOut)
+async def start_dpia_screening(
+    payload: DpiaScreeningStartIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Open — or find — the DPIA for this processing, and screen it.
+
+    Reuses the existing record rather than creating a second one.
+    Screening the same activity twice must reach the same DPIA: two
+    half-finished assessments for one activity is an auditor asking
+    which is authoritative.
+
+    The answers Veyntra can support from the record are applied first,
+    then whatever the person supplied — so a reviewer's answer always
+    wins over a suggestion.
+    """
+    activity: ProcessingActivity | None = None
+    if payload.processing_activity_id is not None:
+        activity = await _get_org_processing_activity(
+            db, payload.processing_activity_id, context.organization_id
+        )
+
+    dpia = await dpia_workflow.existing_for(
+        db,
+        organization_id=context.organization_id,
+        processing_activity_id=payload.processing_activity_id,
+        ai_system_id=payload.ai_system_id,
+    )
+    reused = dpia is not None
+
+    if dpia is None:
+        title = (
+            f"{activity.name} DPIA"
+            if activity is not None
+            else (payload.title or "DPIA")
+        )
+        dpia = DPIA(
+            organization_id=context.organization_id,
+            processing_activity_id=payload.processing_activity_id,
+            ai_system_id=payload.ai_system_id,
+            title=title,
+            # No risk level. Nobody has assessed anything yet, and a
+            # default here is the bug this endpoint exists to stop.
+            risk_level=None,
+            status=dpia_workflow.SCREENING,
+            owner_id=context.user.id,
+        )
+        db.add(dpia)
+        await db.flush()
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="compliance.dpia.created",
+            object_type="dpia",
+            object_id=str(dpia.id),
+            after_state={"title": dpia.title, "status": dpia.status},
+        )
+
+    processing = (
+        await dpia_workflow.context_for(db, activity=activity)
+        if activity is not None
+        else None
+    )
+    answers = dict(payload.answers or {})
+    if processing is not None:
+        merged = dpia_workflow.suggested_answers(processing)
+        merged.update(answers)
+        answers = merged
+
+    await dpia_workflow.record_screening(
+        db,
+        organization_id=context.organization_id,
+        dpia=dpia,
+        answers=answers,
+        actor_user_id=context.user.id,
+    )
+    # Propose the risks the record implies now, so they are waiting the
+    # moment the assessment opens. Reconciling by source key means
+    # screening the same activity again refreshes rather than duplicates.
+    await _reconcile_dpia_risks(
+        db,
+        organization_id=context.organization_id,
+        dpia=dpia,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dpia)
+
+    view = await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+    view.reused_existing = reused
+    return view
 
 
 @router.post("/dpias/screening", response_model=DpiaScreeningResultOut)
@@ -3558,8 +3892,26 @@ async def update_dpia_sections(
     dpia = await db.get(DPIA, dpia_id)
     if dpia is None or dpia.organization_id != context.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DPIA not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    if dpia.status == dpia_workflow.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "This DPIA is complete and its record is frozen. Start a "
+                "reassessment rather than editing what was concluded."
+            ),
+        )
+    supplied = payload.model_dump(exclude_unset=True)
+    changed = [
+        field
+        for field, value in supplied.items()
+        if (getattr(dpia, field) or "") != (value or "")
+    ]
+    for field, value in supplied.items():
         setattr(dpia, field, value)
+    # An approval is a statement about particular words. Keeping the tick
+    # after those words are rewritten would leave the record saying
+    # somebody approved text they never saw.
+    dpia_workflow.unreview_changed_sections(dpia, changed)
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -3591,6 +3943,15 @@ async def recalculate_dpia_residual(
     before = dpia.residual_risk_level
     level = await recalculate_residual_risk(
         db, organization_id=context.organization_id, dpia=dpia
+    )
+    # Article 36(1): a high residual rating is the case a controller
+    # cannot sign off alone, so the approval is raised from the rating
+    # itself rather than from somebody later trying to complete.
+    await dpia_approval.sync_high_residual_approval(
+        db,
+        organization_id=context.organization_id,
+        dpia=dpia,
+        actor_user_id=context.user.id,
     )
     await record_event(
         db,
@@ -3667,6 +4028,14 @@ async def update_dpia_status(
     context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
 ) -> DPIA:
     dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    # One lifecycle, and it is not a free-text field. Without this the
+    # dropdown could move a DPIA straight from screening to approved,
+    # skipping the decision the screening exists to capture.
+    refusal = dpia_workflow.transition_refusal(dpia.status, payload.status)
+    if refusal is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=refusal
+        )
     if payload.findings is not None:
         dpia.findings = payload.findings
     try:
@@ -3708,32 +4077,548 @@ async def verify_dsar_identity(
         dsar=dsar,
         method=payload.method,
         verified=payload.verified,
+        notes=payload.notes,
         actor_user_id=context.user.id,
     )
+    # Verifying moves the request on; the stored phase follows the record
+    # rather than waiting for somebody to notice.
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
     await db.commit()
     await db.refresh(dsar)
     return dsar
 
 
-@router.post("/dsars/{dsar_id}/discover", response_model=DsarDiscoveryOut)
-async def discover_dsar_data(
+def _scope_out(row) -> DsarScopeSourceOut:
+    return DsarScopeSourceOut(
+        id=row.id,
+        source_key=row.source_key,
+        kind=row.kind,
+        name=row.name,
+        reason=row.reason,
+        relevance=row.relevance,
+        relevance_reason=row.relevance_reason,
+        linked_systems=list(row.linked_systems or []),
+        potential_sources=list(row.potential_sources or []),
+        search_capability=row.search_capability,
+        included=row.included,
+        added_by_user=row.added_by_user,
+        record_id=row.record_id,
+    )
+
+
+def _dsar_item_out(row) -> DsarDiscoveredItemOut:
+    return DsarDiscoveredItemOut(
+        id=row.id,
+        source_key=row.source_key,
+        source_name=row.source_name,
+        search_state=row.search_state,
+        matches=row.matches,
+        record_ids=[str(value) for value in (row.record_ids or [])],
+        state_detail=row.state_detail,
+        review_decision=row.review_decision,
+        review_reason=row.review_reason,
+        reviewed_at=row.reviewed_at,
+        sensitivity_flags=list(row.sensitivity_flags or []),
+        task_id=row.task_id,
+    )
+
+
+def _workflow_out(state) -> DsarWorkflowOut:
+    return DsarWorkflowOut(
+        phase=state.phase,
+        phase_label=state.phase_label,
+        next_action=(
+            DsarNextActionOut(
+                label=state.next_action.label,
+                detail=state.next_action.detail,
+                anchor=state.next_action.anchor,
+            )
+            if state.next_action
+            else None
+        ),
+        blockers=[
+            DsarBlockerOut(code=b.code, message=b.message, anchor=b.anchor)
+            for b in state.blockers
+        ],
+        scope_total=state.scope_total,
+        scope_included=state.scope_included,
+        scope_undecided=state.scope_undecided,
+        discovered_total=state.discovered_total,
+        needs_review=state.needs_review,
+        manual_follow_ups=state.manual_follow_ups,
+        open_follow_ups=state.open_follow_ups,
+        package_status=state.package_status,
+    )
+
+
+@router.get("/dsars/{dsar_id}/workflow", response_model=DsarWorkflowOut)
+async def get_dsar_workflow(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DsarWorkflowOut:
+    """Where this request is, and the single next thing to do.
+
+    Derived on read. A phase somebody could set by hand would stop
+    describing reality the first time it was convenient.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    state = await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    return _workflow_out(state)
+
+
+@router.get("/dsars/{dsar_id}/scope", response_model=list[DsarScopeSourceOut])
+async def get_dsar_scope(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[DsarScopeSourceOut]:
+    """The ranked candidate sources, and what has been decided about them.
+
+    Suggestions are reconciled on read so the ranking reflects the
+    current register. Decisions already made are preserved -- a source
+    somebody excluded does not come back included because the register
+    changed.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    rows = await dsar_scope.reconcile(
+        db, organization_id=context.organization_id, dsar=dsar
+    )
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    return [_scope_out(row) for row in sorted(rows, key=dsar_scope.sort_key)]
+
+
+@router.post("/dsars/{dsar_id}/scope/confirm", response_model=list[DsarScopeSourceOut])
+async def confirm_dsar_scope(
+    dsar_id: uuid.UUID,
+    payload: DsarScopeConfirmIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> list[DsarScopeSourceOut]:
+    """Record the human decision about what to search.
+
+    Refuses while anything is undecided. A scope confirmed with sources
+    nobody looked at is not a confirmed scope, and discovery obeys this
+    list exactly.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    rows = {
+        row.source_key: row
+        for row in (
+            await db.execute(
+                select(DsarScopeSource).where(DsarScopeSource.dsar_id == dsar.id)
+            )
+        )
+        .scalars()
+        .all()
+    }
+    for decision in payload.decisions:
+        row = rows.get(decision.source_key)
+        if row is not None:
+            row.included = decision.included
+            row.exclusion_reason = (
+                (decision.exclusion_reason or "").strip() or None
+                if decision.included is False
+                else None
+            )
+
+    # Excluding something the product argued was likely relevant is a
+    # judgement, and it has to be recorded as one. Excluding a source
+    # ranked "probably unrelated" needs no explanation -- agreeing with
+    # the reasoning already shown is not a decision that needs defending.
+    unexplained = [
+        row
+        for row in rows.values()
+        if row.included is False
+        and row.relevance == dsar_scope.HIGH
+        and not (row.exclusion_reason or "").strip()
+    ]
+    if unexplained:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Record why these likely-relevant source(s) are being left out: "
+                + ", ".join(sorted(row.name for row in unexplained))
+                + ". A narrowed scope has to carry its own justification."
+            ),
+        )
+
+    undecided = [row for row in rows.values() if row.included is None]
+    if undecided:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"{len(undecided)} source(s) have no decision yet: "
+                + ", ".join(sorted(row.name for row in undecided)[:5])
+                + ". Include or exclude each one before confirming the scope."
+            ),
+        )
+
+    dsar.scope_confirmed_at = datetime.now(UTC)
+    dsar.scope_confirmed_by = context.user.id
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.dsar.scope_confirmed",
+        object_type="dsar",
+        object_id=str(dsar.id),
+        after_state={
+            "included": sum(1 for row in rows.values() if row.included),
+            "excluded": sum(1 for row in rows.values() if row.included is False),
+        },
+    )
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    return [
+        _scope_out(row) for row in sorted(rows.values(), key=dsar_scope.sort_key)
+    ]
+
+
+@router.post("/dsars/{dsar_id}/scope/sources", response_model=DsarScopeSourceOut)
+async def add_dsar_scope_source(
+    dsar_id: uuid.UUID,
+    payload: DsarManualSourceIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DsarScopeSourceOut:
+    """Add a source Veyntra did not propose.
+
+    The register is never complete, and the person handling the request
+    often knows about a system it does not list. Marked as manual, so
+    discovery raises a follow-up rather than pretending to search it.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    key = dsar_scope.source_key_for("manual", payload.name)
+    existing = (
+        await db.execute(
+            select(DsarScopeSource).where(
+                DsarScopeSource.dsar_id == dsar.id,
+                DsarScopeSource.source_key == key,
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        # §18: adding the same source twice is one source.
+        return _scope_out(existing)
+
+    row = DsarScopeSource(
+        organization_id=context.organization_id,
+        dsar_id=dsar.id,
+        source_key=key,
+        kind="manual",
+        name=payload.name,
+        reason=payload.reason,
+        relevance=dsar_scope.HIGH,
+        relevance_reason=(
+            "Added by a person who knows this system holds data relevant to this "
+            "request."
+        ),
+        linked_systems=[],
+        potential_sources=[],
+        # A source somebody typed in is one Veyntra has no way to reach.
+        search_capability=dsar_scope.NOT_CONNECTED,
+        included=True,
+        added_by_user=True,
+    )
+    db.add(row)
+    await db.flush()
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    await db.refresh(row)
+    return _scope_out(row)
+
+
+@router.get("/dsars/{dsar_id}/discovery-plan", response_model=DsarDiscoveryPlanOut)
+async def get_dsar_discovery_plan(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DsarDiscoveryPlanOut:
+    """§8: what the run will do, before it does it."""
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    plan = await dsar_discovery.build_plan(db, dsar=dsar)
+    return DsarDiscoveryPlanOut(
+        total=plan.total,
+        connected=plan.connected,
+        manual=plan.manual,
+        excluded=plan.excluded,
+        manual_sources=plan.manual_sources,
+        connected_sources=plan.connected_sources,
+    )
+
+
+@router.get("/dsars/{dsar_id}/discovered", response_model=list[DsarDiscoveredItemOut])
+async def list_dsar_discovered(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[DsarDiscoveredItemOut]:
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    rows = (
+        await db.execute(
+            select(DsarDiscoveredItem)
+            .where(DsarDiscoveredItem.dsar_id == dsar.id)
+            .order_by(DsarDiscoveredItem.source_name)
+        )
+    ).scalars().all()
+    return [_dsar_item_out(row) for row in rows]
+
+
+@router.post("/dsars/{dsar_id}/discovery/run", response_model=list[DsarDiscoveredItemOut])
+async def run_dsar_discovery(
     dsar_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
-) -> DsarDiscoveryOut:
-    """Search this organization's own records for the requester.
+) -> list[DsarDiscoveredItemOut]:
+    """Search the confirmed scope.
 
-    Returns a map of where the person appears — counts and record ids,
-    not the records themselves — which is what a case worker needs to
-    decide what belongs in the response, and stops the discovery result
-    from becoming a second uncontrolled copy of the data.
+    Refuses before identity verification and before the scope is
+    confirmed -- §5. Searching for somebody on the strength of an
+    unverified claim is the same disclosure risk as answering them, one
+    step earlier.
+
+    Safe to re-run: rows are keyed by source, decisions are preserved,
+    and follow-up tasks are raised once.
     """
     dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
-    findings = await run_data_discovery(
-        db, organization_id=context.organization_id, dsar=dsar, actor_user_id=context.user.id
+    if dsar.verification_status != "verified":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Verify the requester's identity before searching. Looking a person "
+                "up on an unverified request is the same disclosure risk as answering "
+                "it."
+            ),
+        )
+    if dsar.scope_confirmed_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Confirm the search scope first. Discovery searches exactly what was "
+                "confirmed, so an unconfirmed scope would either search too much or "
+                "too little."
+            ),
+        )
+
+    items = await dsar_discovery.run(
+        db,
+        organization_id=context.organization_id,
+        dsar=dsar,
+        actor_user_id=context.user.id,
     )
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
     await db.commit()
-    return DsarDiscoveryOut(**findings)
+    return [_dsar_item_out(item) for item in items]
+
+
+@router.patch(
+    "/dsars/{dsar_id}/discovered/{item_id}", response_model=DsarDiscoveredItemOut
+)
+async def review_dsar_discovered_item(
+    dsar_id: uuid.UUID,
+    item_id: uuid.UUID,
+    payload: DsarItemReviewIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DsarDiscoveredItemOut:
+    """Record what to do with one discovered record set.
+
+    A reason is required to exclude or redact. Withholding data from a
+    data subject is a decision somebody has to be able to defend, and an
+    unexplained exclusion is indistinguishable after the fact from an
+    accident.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    item = (
+        await db.execute(
+            select(DsarDiscoveredItem).where(
+                DsarDiscoveredItem.id == item_id,
+                DsarDiscoveredItem.dsar_id == dsar.id,
+            )
+        )
+    ).scalars().first()
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    if payload.review_decision in ("exclude", "redact") and not (
+        payload.review_reason or ""
+    ).strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Record why this is being {payload.review_decision}d. Withholding "
+                "data from a data subject is a decision that has to be defensible."
+            ),
+        )
+
+    item.review_decision = payload.review_decision
+    item.review_reason = (payload.review_reason or "").strip() or None
+    item.reviewed_by = context.user.id
+    item.reviewed_at = datetime.now(UTC)
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.dsar.item_reviewed",
+        object_type="dsar",
+        object_id=str(dsar.id),
+        after_state={"source": item.source_name, "decision": item.review_decision},
+    )
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    await db.refresh(item)
+    return _dsar_item_out(item)
+
+
+def _dsar_preview_out(preview) -> DsarResponsePreviewOut:
+    def lines(rows) -> list[DsarSourceLineOut]:
+        return [
+            DsarSourceLineOut(
+                name=row.name,
+                state=row.state,
+                state_label=row.state_label,
+                matches=row.matches,
+                decision=row.decision,
+                decision_reason=row.decision_reason,
+                flags=row.flags,
+            )
+            for row in rows
+        ]
+
+    return DsarResponsePreviewOut(
+        dsar_id=preview.dsar_id,
+        requester_name=preview.requester_name,
+        requester_email=preview.requester_email,
+        request_type=preview.request_type,
+        received_at=preview.received_at,
+        due_at=preview.due_at,
+        identity_method=preview.identity_method,
+        identity_notes=preview.identity_notes,
+        identity_verified_at=preview.identity_verified_at,
+        identity_verified_by=preview.identity_verified_by,
+        letter=preview.letter,
+        included=lines(preview.included),
+        excluded=lines(preview.excluded),
+        redacted=lines(preview.redacted),
+        not_searched=lines(preview.not_searched),
+        follow_ups=preview.follow_ups,
+        blockers=preview.blockers,
+        coverage=(
+            DsarCoverageOut(**asdict(preview.coverage)) if preview.coverage else None
+        ),
+        digest=preview.digest,
+    )
+
+
+@router.get("/dsars/{dsar_id}/response/preview", response_model=DsarResponsePreviewOut)
+async def preview_dsar_response(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DsarResponsePreviewOut:
+    """The drafted response, before anybody approves it.
+
+    Built from live records and stamped with a digest of them. Nothing
+    is stored: a preview is a question, not a commitment.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    preview = await dsar_response.build_preview(
+        db, organization_id=context.organization_id, dsar=dsar
+    )
+    return _dsar_preview_out(preview)
+
+
+@router.post("/dsars/{dsar_id}/response/approve", response_model=DsarResponsePackageOut)
+async def approve_dsar_response(
+    dsar_id: uuid.UUID,
+    payload: DsarResponseApproveIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DsarResponsePackage:
+    """Freeze the previewed response as the approved one.
+
+    What is approved is what gets sent. Rebuilding at send time would let
+    the answer change between the moment somebody read it and the moment
+    it went out.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    try:
+        package = await dsar_response.approve(
+            db,
+            organization_id=context.organization_id,
+            dsar=dsar,
+            confirm_digest=payload.digest,
+            actor_user_id=context.user.id,
+            letter_override=payload.letter,
+        )
+    except dsar_response.ResponseRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    await db.refresh(package)
+    return package
+
+
+@router.post("/dsars/{dsar_id}/response/sent", response_model=DsarResponsePackageOut)
+async def mark_dsar_response_sent(
+    dsar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DsarResponsePackage:
+    """Record that the approved response reached the requester.
+
+    Refuses while anything still blocks completion -- §13. An open manual
+    follow-up is one of those: a response can be sent while a source is
+    outstanding, but the request is not finished until it is closed.
+    """
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    package = (
+        await db.execute(
+            select(DsarResponsePackage)
+            .where(
+                DsarResponsePackage.dsar_id == dsar.id,
+                DsarResponsePackage.status == "approved",
+            )
+            .order_by(DsarResponsePackage.version.desc())
+        )
+    ).scalars().first()
+    if package is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Approve the response package before recording it as sent.",
+        )
+
+    blockers = await dsar_workflow.completion_blockers(db, dsar=dsar)
+    if blockers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=" ".join(blocker.message for blocker in blockers),
+        )
+
+    try:
+        package = await dsar_response.mark_sent(
+            db,
+            organization_id=context.organization_id,
+            dsar=dsar,
+            package=package,
+            actor_user_id=context.user.id,
+        )
+    except dsar_response.ResponseRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    await db.refresh(package)
+    return package
 
 
 @router.post("/dsars/{dsar_id}/export")
@@ -3748,8 +4633,57 @@ async def export_dsar(
     `app.compliance.dsar.generate_export`, not here, so a second caller
     added later cannot skip it — see that module's docstring for why this
     direction of risk is the one that matters.
+
+    Where a package has been approved, this renders *that* snapshot
+    rather than rebuilding from live records — §12. Rebuilding would let
+    the exported answer differ from the one somebody read and signed off,
+    and the thing that differed would be a person's personal data.
     """
     dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    approved = (
+        await db.execute(
+            select(DsarResponsePackage)
+            .where(
+                DsarResponsePackage.dsar_id == dsar.id,
+                DsarResponsePackage.status.in_(("approved", "sent")),
+            )
+            .order_by(DsarResponsePackage.version.desc())
+        )
+    ).scalars().first()
+    if approved is not None:
+        if dsar.verification_status != "verified":
+            # Belt and braces: a package cannot be approved unverified,
+            # but the export is the disclosure, so it re-checks rather
+            # than trusting an earlier state.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This request cannot be exported until the data subject's "
+                    "identity has been verified."
+                ),
+            )
+        rendered = dsar_response.render(approved).encode("utf-8")
+        dsar.export_generated_at = datetime.now(UTC)
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="compliance.dsar.export_generated",
+            object_type="dsar",
+            object_id=str(dsar.id),
+            after_state={"version": approved.version, "from_snapshot": True},
+        )
+        await db.commit()
+        return Response(
+            content=rendered,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="dsar-{dsar.id}-v{approved.version}.txt"'
+                )
+            },
+        )
+
     try:
         payload, filename = await generate_export(
             db, organization_id=context.organization_id, dsar=dsar, actor_user_id=context.user.id
@@ -3791,8 +4725,13 @@ async def create_dsar_endpoint(
         requester_email=payload.requester_email,
         request_type=payload.request_type,
         assigned_to=payload.assigned_to,
+        received_at=payload.received_at,
         actor_user_id=context.user.id,
     )
+    # A new request is already at identity verification, not sitting at
+    # "received" waiting for somebody to open it. The list should say so
+    # the moment it is logged.
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
     await db.commit()
     await db.refresh(dsar)
     return dsar
@@ -3804,7 +4743,13 @@ async def get_dsar(
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(get_org_context),
 ) -> DSAR:
-    return await _get_org_dsar(db, dsar_id, context.organization_id)
+    dsar = await _get_org_dsar(db, dsar_id, context.organization_id)
+    # The stored phase is a cache for lists; opening a request recomputes
+    # it, so a detail view is never stale even if a child row moved
+    # without passing through this router.
+    await dsar_workflow.refresh_phase(db, dsar=dsar)
+    await db.commit()
+    return dsar
 
 
 @router.patch("/dsars/{dsar_id}/status", response_model=DSAROut)
@@ -3831,6 +4776,15 @@ async def update_dsar_status_endpoint(
 async def list_data_transfers(
     db: AsyncSession = Depends(get_db), context: OrgContext = Depends(get_org_context)
 ) -> list[DataTransfer]:
+    # Check the confirmed transfers against the records they were
+    # assessed from before returning them. A vendor that changed country
+    # last week should not wait for somebody to re-run detection before
+    # the screen says so. This only ever sets `review_reason` — the
+    # transfer's own destination and mechanism are left exactly as the
+    # person who approved them left them.
+    await transfer_drift.flag_drifted_transfers(
+        db, organization_id=context.organization_id
+    )
     result = await db.execute(
         select(DataTransfer)
         .where(DataTransfer.organization_id == context.organization_id)
@@ -3874,13 +4828,47 @@ async def _get_org_data_transfer(
     return transfer
 
 
-@router.get("/data-transfers/{transfer_id}", response_model=DataTransferOut)
+@router.get("/data-transfers/{transfer_id}", response_model=DataTransferDetailOut)
 async def get_data_transfer(
     transfer_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     context: OrgContext = Depends(get_org_context),
-) -> DataTransfer:
-    return await _get_org_data_transfer(db, transfer_id, context.organization_id)
+) -> DataTransferDetailOut:
+    """One transfer, with the records it was assessed against.
+
+    The vendor's country and DPA status are shown as the vendor records
+    them — not merged into the transfer. A reviewer deciding whether a
+    mechanism still holds needs to see both claims side by side; a single
+    reconciled number would hide the disagreement that makes the question
+    worth asking.
+    """
+    transfer = await _get_org_data_transfer(db, transfer_id, context.organization_id)
+    # Same check the list runs, so opening a transfer from a stale link
+    # does not show a flag the list already cleared, or miss one it set.
+    await transfer_drift.flag_drifted_transfers(
+        db, organization_id=context.organization_id
+    )
+    await db.refresh(transfer)
+
+    organization = await db.get(Organization, context.organization_id)
+    activity = (
+        await db.get(ProcessingActivity, transfer.processing_activity_id)
+        if transfer.processing_activity_id
+        else None
+    )
+    vendor = await db.get(Vendor, transfer.vendor_id) if transfer.vendor_id else None
+
+    return DataTransferDetailOut(
+        **{
+            field: getattr(transfer, field)
+            for field in DataTransferOut.model_fields
+        },
+        exporter_name=organization.name if organization else "This organization",
+        processing_activity_name=activity.name if activity else None,
+        vendor_name=vendor.name if vendor else None,
+        vendor_country=(vendor.country or None) if vendor else None,
+        vendor_dpa_status=(vendor.dpa_status or None) if vendor else None,
+    )
 
 
 @router.patch("/data-transfers/{transfer_id}/status", response_model=DataTransferOut)
@@ -3991,6 +4979,11 @@ async def create_vendor(
     vendor = Vendor(organization_id=context.organization_id, **payload.model_dump())
     db.add(vendor)
     await db.flush()
+
+    # A vendor's location is what makes a third-country transfer
+    # detectable. Idempotent, so a vendor created before any activity
+    # simply proposes nothing yet.
+    await privacy_suggestions.analyse(db, organization_id=context.organization_id)
     await record_event(
         db,
         organization_id=context.organization_id,
@@ -7758,3 +8751,1097 @@ async def review_processing_activity(
     await db.commit()
     await db.refresh(activity)
     return activity
+
+
+# --- privacy suggestions ------------------------------------------------
+#
+# Veyntra drafts from what the organization already declared; a person
+# supplies the judgements a draft is not allowed to contain. The two
+# halves are separate endpoints because they are separate acts.
+
+
+def _suggestion_out(suggestion: PrivacySuggestion) -> PrivacySuggestionOut:
+    return PrivacySuggestionOut(
+        id=suggestion.id,
+        kind=suggestion.kind,
+        status=suggestion.status,
+        title=suggestion.title,
+        sources=[
+            PrivacySuggestionSourceOut(
+                type=source.get("type", ""),
+                id=source.get("id"),
+                label=source.get("label", ""),
+            )
+            for source in (suggestion.sources or [])
+        ],
+        payload=suggestion.payload or {},
+        created_record_id=suggestion.created_record_id,
+        created_at=suggestion.created_at,
+    )
+
+
+async def _get_org_suggestion_row(
+    db: AsyncSession, suggestion_id: uuid.UUID, organization_id: uuid.UUID
+) -> PrivacySuggestion:
+    suggestion = await db.get(PrivacySuggestion, suggestion_id)
+    if suggestion is None or suggestion.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found"
+        )
+    return suggestion
+
+
+@router.post("/privacy/suggestions/analyse", response_model=PrivacyAnalysisOut)
+async def analyse_privacy_records(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> PrivacyAnalysisOut:
+    """Draft the privacy records this organization's own data implies.
+
+    Reads AI systems, vendors and processing activities; writes only
+    proposals. Running it twice reconciles rather than duplicating, and
+    a proposal somebody already accepted or dismissed is left alone —
+    re-analysis must not resurrect a decision a person made.
+    """
+    result = await privacy_suggestions.analyse(
+        db, organization_id=context.organization_id
+    )
+    if result.created:
+        await record_event(
+            db,
+            organization_id=context.organization_id,
+            actor_user_id=context.user.id,
+            action="compliance.privacy_suggestion.analysed",
+            object_type="organization",
+            object_id=str(context.organization_id),
+            after_state={
+                "created": result.created,
+                "already_proposed": result.unchanged,
+                "already_recorded": result.already_recorded,
+            },
+        )
+    await db.commit()
+    return PrivacyAnalysisOut(
+        created=result.created,
+        already_proposed=result.unchanged,
+        already_recorded=result.already_recorded,
+    )
+
+
+@router.get("/privacy/suggestions", response_model=list[PrivacySuggestionOut])
+async def list_privacy_suggestions(
+    kind: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[PrivacySuggestionOut]:
+    """Drafts waiting for a person. Never records."""
+    rows = await privacy_suggestions.open_suggestions(
+        db, organization_id=context.organization_id, kind=kind
+    )
+    return [_suggestion_out(row) for row in rows]
+
+
+@router.post(
+    "/privacy/suggestions/{suggestion_id}/accept",
+    response_model=PrivacySuggestionOut,
+)
+async def accept_privacy_suggestion(
+    suggestion_id: uuid.UUID,
+    payload: PrivacySuggestionAcceptIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> PrivacySuggestionOut:
+    """Turn a draft into a record, with the judgements you supply.
+
+    Refuses without them. A RoPA entry with no lawful basis is not a
+    RoPA entry, and one whose basis a machine chose is worse, because it
+    looks answered.
+    """
+    suggestion = await _get_org_suggestion_row(
+        db, suggestion_id, context.organization_id
+    )
+    try:
+        if suggestion.kind == privacy_suggestions.PROCESSING_ACTIVITY:
+            await privacy_accept.accept_processing_activity(
+                db,
+                suggestion=suggestion,
+                legal_basis=payload.legal_basis or "",
+                retention_period=payload.retention_period or "",
+                special_category=payload.special_category,
+                special_category_condition=payload.special_category_condition,
+                actor_user_id=context.user.id,
+            )
+        else:
+            await privacy_accept.accept_transfer(
+                db,
+                suggestion=suggestion,
+                transfer_mechanism=payload.transfer_mechanism or "",
+                safeguards_description=payload.safeguards_description,
+                actor_user_id=context.user.id,
+            )
+    except privacy_accept.AcceptRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    # A new processing activity is a new set of transfer questions, so
+    # the transfer implied by its own processor appears without anybody
+    # asking for it.
+    await privacy_suggestions.analyse(db, organization_id=context.organization_id)
+    await db.commit()
+    await db.refresh(suggestion)
+    return _suggestion_out(suggestion)
+
+
+@router.post(
+    "/privacy/suggestions/{suggestion_id}/dismiss",
+    response_model=PrivacySuggestionOut,
+)
+async def dismiss_privacy_suggestion(
+    suggestion_id: uuid.UUID,
+    payload: PrivacySuggestionDismissIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> PrivacySuggestionOut:
+    """Record that somebody looked and said no."""
+    suggestion = await _get_org_suggestion_row(
+        db, suggestion_id, context.organization_id
+    )
+    await privacy_accept.dismiss(
+        db,
+        suggestion=suggestion,
+        reason=payload.reason,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(suggestion)
+    return _suggestion_out(suggestion)
+
+
+@router.get("/privacy/data-locations", response_model=list[PrivacyDataLocationOut])
+async def list_privacy_data_locations(
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> list[PrivacyDataLocationOut]:
+    """Where to look when answering a data request.
+
+    A search **scope**, assembled from the organization's own inventory.
+    Nothing here reads or discloses anybody's personal data; what was
+    actually found, and what may lawfully be released, stays with the
+    person answering the request.
+    """
+    locations = await privacy_suggestions.data_locations(
+        db, organization_id=context.organization_id
+    )
+    return [
+        PrivacyDataLocationOut(
+            label=location.label,
+            kind=location.kind,
+            record_id=location.record_id,
+            reason=location.reason,
+        )
+        for location in locations
+    ]
+
+
+@router.get(
+    "/processing-activities/{activity_id}/related",
+    response_model=ProcessingActivityRelatedOut,
+)
+async def get_processing_activity_related(
+    activity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> ProcessingActivityRelatedOut:
+    """What this activity connects to, navigable from here.
+
+    The whole reason the links exist: nobody should maintain the same
+    fact in a RoPA entry, a vendor record and a transfer record.
+    """
+    activity = await _get_org_processing_activity(
+        db, activity_id, context.organization_id
+    )
+
+    ai_rows = (
+        await db.execute(
+            select(AISystem)
+            .join(
+                ProcessingActivityAISystem,
+                ProcessingActivityAISystem.ai_system_id == AISystem.id,
+            )
+            .where(
+                ProcessingActivityAISystem.processing_activity_id == activity.id
+            )
+        )
+    ).scalars().all()
+    vendor_rows = (
+        await db.execute(
+            select(Vendor)
+            .join(
+                ProcessingActivityVendor,
+                ProcessingActivityVendor.vendor_id == Vendor.id,
+            )
+            .where(ProcessingActivityVendor.processing_activity_id == activity.id)
+        )
+    ).scalars().all()
+    dpia_rows = (
+        await db.execute(
+            select(DPIA).where(DPIA.processing_activity_id == activity.id)
+        )
+    ).scalars().all()
+    transfer_rows = (
+        await db.execute(
+            select(DataTransfer).where(
+                DataTransfer.processing_activity_id == activity.id
+            )
+        )
+    ).scalars().all()
+
+    return ProcessingActivityRelatedOut(
+        ai_systems=[
+            RelatedRecordOut(
+                id=row.id,
+                label=row.name,
+                kind="ai_system",
+                href=f"/ai-systems/{row.id}",
+            )
+            for row in ai_rows
+        ],
+        vendors=[
+            RelatedRecordOut(
+                id=row.id,
+                label=row.name,
+                kind="vendor",
+                href=f"/compliance/vendors/{row.id}",
+                detail=(row.country or None),
+            )
+            for row in vendor_rows
+        ],
+        dpias=[
+            RelatedRecordOut(
+                id=row.id,
+                label=row.title,
+                kind="dpia",
+                href=f"/compliance/dpias/{row.id}",
+                detail=row.status,
+            )
+            for row in dpia_rows
+        ],
+        transfers=[
+            RelatedRecordOut(
+                id=row.id,
+                label=f"{row.recipient_name} ({row.destination_country})",
+                kind="transfer",
+                href=f"/compliance/data-transfers/{row.id}",
+                detail=row.transfer_mechanism,
+            )
+            for row in transfer_rows
+        ],
+    )
+
+
+# --- what a processing activity is called -------------------------------
+#
+# The organization answers who is doing the processing; the activity
+# answers what processing is being done. A RoPA entry titled with the
+# organization's name answers the first question twice and the second
+# not at all.
+
+
+@router.post(
+    "/processing-activities/{activity_id}/title",
+    response_model=ProcessingActivityOut,
+)
+async def rename_processing_activity(
+    activity_id: uuid.UUID,
+    payload: RopaTitleRepairApply,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> ProcessingActivity:
+    """Give the activity a title that describes the processing.
+
+    Guarded by the same rule as creation: a title that names the
+    organization or a person is refused, so a repair cannot land back
+    where it started.
+    """
+    activity = await _get_org_processing_activity(
+        db, activity_id, context.organization_id
+    )
+    problem = await ropa_titles.identity_conflict(
+        db, organization_id=context.organization_id, title=payload.title
+    )
+    if problem is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=problem.message
+        )
+
+    before = activity.name
+    activity.name = payload.title.strip()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.processing_activity.renamed",
+        object_type="processing_activity",
+        object_id=str(activity.id),
+        before_state={"name": before},
+        after_state={"name": activity.name},
+    )
+    await db.commit()
+    await db.refresh(activity)
+    return activity
+
+
+# --- the DPIA lifecycle: screening, then the assessment ------------------
+#
+# Selecting a processing activity used to open a full assessment: four
+# empty boxes, no risks, and "Inherent risk: Low" on a document where
+# nobody had assessed anything. Screening comes first, a person decides,
+# and only then is there a draft to fill in.
+
+
+def _screening_out(
+    dpia: DPIA,
+    state,
+    blockers,
+    suggested,
+    *,
+    completed_by_name: str | None = None,
+    consultation_recorded_by_name: str | None = None,
+    risk_reviewed_by_name: str | None = None,
+    can_conclude_no_material_risks: bool = False,
+    missing: list | None = None,
+    signals: list | None = None,
+    stale: set[str] | None = None,
+) -> DpiaWorkflowOut:
+    findings = dpia.screening_findings or {}
+    reviews = dpia.section_reviews or {}
+    return DpiaWorkflowOut(
+        id=dpia.id,
+        title=dpia.title,
+        status=dpia.status,
+        processing_activity_id=dpia.processing_activity_id,
+        ai_system_id=dpia.ai_system_id,
+        screening_outcome=dpia.screening_outcome,
+        screening_rationale_text=findings.get("rationale"),
+        screening_criteria_met=list(findings.get("criteria_met") or []),
+        screened_at=dpia.screened_at,
+        screening_decision=dpia.screening_decision,
+        screening_decided_at=dpia.screening_decided_at,
+        screening_decision_rationale=dpia.screening_rationale,
+        processing_description=dpia.processing_description,
+        necessity_assessment=dpia.necessity_assessment,
+        proportionality_assessment=dpia.proportionality_assessment,
+        consultation_notes=dpia.consultation_notes,
+        inherent_risk=state.inherent,
+        residual_risk=state.residual,
+        risk_count=state.risk_count,
+        assessed_count=state.assessed_count,
+        mitigated_count=state.mitigated_count,
+        can_calculate_residual=state.can_calculate_residual,
+        risk_blocked_reason=state.blocked_reason,
+        suggested_risks=[
+            DpiaSuggestedRiskOut(
+                id=risk.id,
+                title=risk.title,
+                description=risk.description,
+                reason=risk.reason,
+                status=risk.status,
+                suggested_safeguards=risk.suggested_safeguards,
+                created_risk_id=risk.created_risk_id,
+                decided_at=risk.decided_at,
+            )
+            for risk in suggested
+        ],
+        completion_blockers=[
+            DpiaBlockerOut(code=b.code, message=b.message) for b in blockers
+        ],
+        section_reviews=[
+            DpiaSectionReviewOut(
+                section=key,
+                approved_by=(
+                    uuid.UUID(entry["approved_by"])
+                    if entry.get("approved_by")
+                    else None
+                ),
+                approved_at=entry.get("approved_at"),
+            )
+            for key, entry in reviews.items()
+            if isinstance(entry, dict)
+        ],
+        consultation_state=dpia_workflow.consultation_state(dpia),
+        consultation_performed=dpia.consultation_performed,
+        consulted_party=dpia.consulted_party,
+        consulted_role=dpia.consulted_role,
+        consulted_at=dpia.consulted_at,
+        consultation_recorded_by_name=consultation_recorded_by_name,
+        consultation_recorded_at=dpia.consultation_recorded_at,
+        risk_conclusion=dpia_workflow.risk_conclusion_of(dpia),
+        risk_conclusion_rationale=dpia.risk_conclusion_rationale,
+        risk_reviewed_by_name=risk_reviewed_by_name,
+        risk_reviewed_at=dpia.risk_reviewed_at,
+        can_conclude_no_material_risks=can_conclude_no_material_risks,
+        missing_facts=[
+            DpiaMissingFactOut(code=gap.code, message=gap.message, href=gap.href)
+            for gap in (missing or [])
+        ],
+        special_category_signals=[
+            DpiaSpecialSignalOut(kind=signal.kind, evidence=signal.evidence)
+            for signal in (signals or [])
+        ],
+        special_category_confirmed=dpia.special_category_confirmed,
+        special_category_rationale=dpia.special_category_rationale,
+        stale_sections=sorted(stale or set()),
+        section_guidance=dict(dpia_quality.SECTION_GUIDANCE),
+        quality_review_reason=dpia.quality_review_reason,
+        can_complete=not blockers and dpia.status != dpia_workflow.COMPLETED,
+        completed_at=dpia.completed_at,
+        completed_by_name=completed_by_name,
+        snapshot=dpia.snapshot,
+        review_reason=dpia.review_reason,
+        review_flagged_at=dpia.review_flagged_at,
+        allowed_transitions=list(dpia_workflow.TRANSITIONS.get(dpia.status, ())),
+    )
+
+
+async def _workflow_view(
+    db: AsyncSession, *, organization_id: uuid.UUID, dpia: DPIA
+) -> DpiaWorkflowOut:
+    state = await dpia_workflow.risk_state(
+        db, organization_id=organization_id, dpia=dpia
+    )
+    blockers = await dpia_workflow.completion_blockers(
+        db, organization_id=organization_id, dpia=dpia
+    )
+    # Read, never recompute. Suggestions used to be derived on every
+    # request, which made them impossible to approve or dismiss — the
+    # thing a reviewer acted on did not exist between two page loads.
+    suggested = await dpia_risks.for_dpia(
+        db, organization_id=organization_id, dpia_id=dpia.id
+    )
+    async def name_of(user_id: uuid.UUID | None) -> str | None:
+        if user_id is None:
+            return None
+        person = await db.get(User, user_id)
+        if person is None:
+            return None
+        return (person.full_name or "").strip() or person.email
+
+    # The reviewer can conclude "nothing material" only once there is
+    # nothing left open: every suggestion decided, and no risk on the
+    # register to contradict the conclusion.
+    undecided = await dpia_workflow.pending_risk_suggestions(
+        db, organization_id=organization_id, dpia=dpia
+    )
+    can_conclude = (
+        undecided == 0
+        and state.risk_count == 0
+        and dpia.risk_conclusion != dpia_workflow.NO_MATERIAL_RISKS
+        and dpia.status not in (dpia_workflow.COMPLETED, dpia_workflow.NOT_REQUIRED)
+    )
+
+    missing, signals, stale = await dpia_workflow.content_gaps(
+        db, organization_id=organization_id, dpia=dpia
+    )
+
+    return _screening_out(
+        dpia,
+        state,
+        blockers,
+        suggested,
+        completed_by_name=await name_of(dpia.completed_by),
+        consultation_recorded_by_name=await name_of(dpia.consultation_recorded_by),
+        risk_reviewed_by_name=await name_of(dpia.risk_reviewed_by),
+        can_conclude_no_material_risks=can_conclude,
+        missing=missing,
+        signals=signals,
+        stale=stale,
+    )
+
+
+async def _reconcile_dpia_risks(
+    db: AsyncSession,
+    *,
+    organization_id: uuid.UUID,
+    dpia: DPIA,
+    actor_user_id: uuid.UUID | None,
+) -> None:
+    """Refresh the proposed risks from the current facts, if there are any.
+
+    Safe to call repeatedly — `dpia_risks.reconcile` matches on what a
+    proposal is about, so re-running never duplicates and never revives
+    something a person dismissed.
+    """
+    if not dpia.processing_activity_id:
+        return
+    activity = await db.get(ProcessingActivity, dpia.processing_activity_id)
+    if activity is None:
+        return
+    await dpia_risks.reconcile(
+        db,
+        organization_id=organization_id,
+        dpia=dpia,
+        context=await dpia_workflow.context_for(db, activity=activity),
+        actor_user_id=actor_user_id,
+    )
+
+
+@router.post("/dpias/{dpia_id}/screening/decision", response_model=DpiaWorkflowOut)
+async def decide_dpia_screening(
+    dpia_id: uuid.UUID,
+    payload: DpiaScreeningDecisionIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Record whether a DPIA is required.
+
+    Veyntra counted the criteria; this is the controller concluding. The
+    two are stored separately because they are different claims by
+    different parties, and a screen showing only the count would imply
+    the product made the call.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    processing = None
+    if dpia.processing_activity_id:
+        activity = await db.get(ProcessingActivity, dpia.processing_activity_id)
+        if activity is not None:
+            processing = await dpia_workflow.context_for(db, activity=activity)
+
+    try:
+        await dpia_workflow.decide_screening(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            decision=payload.decision,
+            rationale=payload.rationale,
+            actor_user_id=context.user.id,
+            context=processing,
+        )
+    except dpia_workflow.DpiaRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    # The assessment is open, so refresh the risks the record implies.
+    if payload.decision == dpia_workflow.DECISION_REQUIRED:
+        await _reconcile_dpia_risks(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            actor_user_id=context.user.id,
+        )
+    else:
+        # No assessment is going to happen, so the proposals raised
+        # while screening have nothing to belong to. Only undecided
+        # ones go — a decided proposal is a record of a decision.
+        await dpia_risks.withdraw_undecided(
+            db,
+            organization_id=context.organization_id,
+            dpia_id=dpia.id,
+        )
+
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post(
+    "/dpias/{dpia_id}/sections/approve", response_model=DpiaWorkflowOut
+)
+async def approve_dpia_section(
+    dpia_id: uuid.UUID,
+    payload: DpiaSectionApproveIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Sign off one Article 35(7) section.
+
+    Recorded rather than inferred. Completion used to test whether the
+    text still began with Veyntra's draft marker, so deleting one word
+    counted as review — and a reviewer who agreed with the draft
+    verbatim had no way to say so without editing it first.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if dpia.status == dpia_workflow.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This DPIA is complete. Its assessment is frozen.",
+        )
+    digest = None
+    if dpia.processing_activity_id:
+        activity = await db.get(ProcessingActivity, dpia.processing_activity_id)
+        if activity is not None:
+            digest = dpia_workflow.context_digest(
+                await dpia_workflow.context_for(db, activity=activity)
+            )
+    try:
+        dpia_workflow.approve_section(
+            dpia,
+            section=payload.section,
+            actor_user_id=context.user.id,
+            context_digest_at_approval=digest,
+        )
+    except dpia_workflow.DpiaRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.dpia.section_approved",
+        object_type="dpia",
+        object_id=str(dpia.id),
+        after_state={"section": payload.section},
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post("/dpias/{dpia_id}/consultation", response_model=DpiaWorkflowOut)
+async def record_dpia_consultation(
+    dpia_id: uuid.UUID,
+    payload: DpiaConsultationIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Article 35(2): whether a DPO or data subjects were consulted.
+
+    The single authoritative consultation record. Writing it is also what
+    satisfies Article 35(7)'s consultation section — there is no second
+    "approve the consultation" step, because there is only one decision
+    here to make, and having two produced a page that said "No
+    consultation performed" and "Nobody has approved the consultation
+    record" about the same fact.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if dpia.status == dpia_workflow.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This DPIA is complete. Its assessment is frozen.",
+        )
+    try:
+        await dpia_workflow.record_consultation(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            performed=payload.performed,
+            party=payload.party,
+            role=payload.role,
+            consulted_at=payload.consulted_at,
+            notes=payload.notes,
+            actor_user_id=context.user.id,
+        )
+    except dpia_workflow.DpiaRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post(
+    "/dpias/{dpia_id}/risk-suggestions/{suggestion_id}/approve",
+    response_model=DpiaWorkflowOut,
+)
+async def approve_dpia_risk_suggestion(
+    dpia_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    payload: DpiaRiskApproveIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Accept a proposed risk, with the rating a person chose.
+
+    The likelihood and impact come from the request rather than the
+    proposal: this is the moment the DPIA acquires a risk position, and
+    a rating Veyntra supplied would flow straight into an inherent level
+    nobody decided.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    suggestion = await db.get(DpiaRiskSuggestion, suggestion_id)
+    if (
+        suggestion is None
+        or suggestion.dpia_id != dpia.id
+        or suggestion.organization_id != context.organization_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found"
+        )
+    try:
+        await dpia_risks.approve(
+            db,
+            organization_id=context.organization_id,
+            suggestion=suggestion,
+            likelihood=payload.likelihood,
+            impact=payload.impact,
+            title=payload.title,
+            description=payload.description,
+            affected_data_subjects=payload.affected_data_subjects,
+            existing_safeguards=payload.existing_safeguards,
+            owner_id=payload.owner_id,
+            actor_user_id=context.user.id,
+        )
+    except dpia_risks.RiskSuggestionRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    # A risk reached the register, so that is what the review concluded
+    # — and it clears any earlier "no material risks", which the presence
+    # of a risk contradicts.
+    await dpia_workflow.note_risks_identified(
+        db,
+        organization_id=context.organization_id,
+        dpia=dpia,
+        actor_user_id=context.user.id,
+    )
+    # The register changed, so the level derived from it has.
+    await recalculate_residual_risk(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+    await dpia_approval.sync_high_residual_approval(
+        db,
+        organization_id=context.organization_id,
+        dpia=dpia,
+        actor_user_id=context.user.id,
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post(
+    "/dpias/{dpia_id}/risk-suggestions/{suggestion_id}/dismiss",
+    response_model=DpiaWorkflowOut,
+)
+async def dismiss_dpia_risk_suggestion(
+    dpia_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    payload: DpiaRiskDismissIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Record that this is not a risk here, and why."""
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    suggestion = await db.get(DpiaRiskSuggestion, suggestion_id)
+    if (
+        suggestion is None
+        or suggestion.dpia_id != dpia.id
+        or suggestion.organization_id != context.organization_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found"
+        )
+    try:
+        await dpia_risks.dismiss(
+            db,
+            organization_id=context.organization_id,
+            suggestion=suggestion,
+            reason=payload.reason,
+            actor_user_id=context.user.id,
+        )
+    except dpia_risks.RiskSuggestionRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post(
+    "/risks/{risk_id}/remediation",
+    response_model=TaskOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def open_risk_remediation(
+    risk_id: uuid.UUID,
+    payload: RiskRemediationIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.risks.manage")),
+) -> Task:
+    """Open the work that reduces a risk, in the existing task system.
+
+    Reuses `core.Task` rather than adding a second thing called
+    remediation. The mitigation is also written onto the risk, because
+    the residual rating has to be justified by something recorded — a
+    lower number whose reason lives only in a task nobody reads back is
+    the failure this link exists to prevent.
+    """
+    risk = await db.get(Risk, risk_id)
+    if risk is None or risk.organization_id != context.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Risk not found"
+        )
+
+    existing = (
+        await db.execute(
+            select(Task).where(
+                Task.organization_id == context.organization_id,
+                Task.entity_type == "risk",
+                Task.entity_id == str(risk.id),
+                Task.status != "done",
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        # §31: pressing the button twice is one piece of work, not two.
+        return existing
+
+    task = Task(
+        organization_id=context.organization_id,
+        title=payload.title.strip(),
+        description=(payload.description or "").strip() or None,
+        module="compliance",
+        status="open",
+        priority=payload.priority,
+        assignee_id=payload.assignee_id,
+        due_at=payload.due_at,
+        created_by=context.user.id,
+        entity_type="risk",
+        entity_id=str(risk.id),
+    )
+    db.add(task)
+
+    # The commitment, on the risk it justifies.
+    addition = payload.title.strip()
+    if payload.description:
+        addition = f"{addition} — {payload.description.strip()}"
+    risk.additional_mitigations = (
+        f"{risk.additional_mitigations}\n{addition}"
+        if risk.additional_mitigations
+        else addition
+    )[:2000]
+
+    await db.flush()
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action="compliance.risk.remediation_opened",
+        object_type="risk",
+        object_id=str(risk.id),
+        after_state={"task_id": str(task.id), "title": task.title},
+    )
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+@router.post(
+    "/dpias/{dpia_id}/risk-conclusion", response_model=DpiaWorkflowOut
+)
+async def conclude_dpia_risk_review(
+    dpia_id: uuid.UUID,
+    payload: DpiaRiskConclusionIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Record that the risks were reviewed and none met the threshold.
+
+    The alternative used to be inventing a risk. Completion demanded at
+    least one on the register, so a reviewer who had read every candidate
+    and judged none material could only finish by writing down something
+    they did not believe — which is a worse record than the honest one.
+
+    Refused while any suggestion is undecided or any risk is on the
+    register: the conclusion is a claim about a review that finished.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if dpia.status == dpia_workflow.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This DPIA is complete. Its assessment is frozen.",
+        )
+    try:
+        await dpia_workflow.conclude_no_material_risks(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            rationale=payload.rationale,
+            actor_user_id=context.user.id,
+        )
+    except dpia_workflow.DpiaRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post(
+    "/dpias/{dpia_id}/special-category", response_model=DpiaWorkflowOut
+)
+async def decide_dpia_special_category(
+    dpia_id: uuid.UUID,
+    payload: DpiaSpecialCategoryIn,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Answer the Article 9 question Veyntra raised.
+
+    Veyntra reads health signals out of the processing record — a name
+    like "Employee medical-leave administration" strongly suggests them —
+    and stops there. Whether special-category data is in scope, and on
+    what Article 9 condition, is a legal conclusion the product does not
+    reach.
+
+    Ruling it out needs a reason. Without one this endpoint would let a
+    detected signal be dismissed with a click, which is how "no
+    categories recorded" became "nothing sensitive here".
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if dpia.status == dpia_workflow.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This DPIA is complete. Its assessment is frozen.",
+        )
+    if not payload.confirmed and not (payload.rationale or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Ruling out special-category data needs a reason. Veyntra "
+                "detected a signal in this processing, and an unexplained "
+                "dismissal is indistinguishable from nobody having looked."
+            ),
+        )
+
+    before = {
+        "confirmed": dpia.special_category_confirmed,
+        "rationale": dpia.special_category_rationale,
+    }
+    changing = dpia.special_category_confirmed is not None
+
+    dpia.special_category_confirmed = payload.confirmed
+    dpia.special_category_rationale = (payload.rationale or "").strip() or None
+    dpia.special_category_decided_by = context.user.id
+    dpia.special_category_decided_at = utcnow()
+
+    await record_event(
+        db,
+        organization_id=context.organization_id,
+        actor_user_id=context.user.id,
+        action=(
+            "compliance.dpia.special_category_changed"
+            if changing
+            else "compliance.dpia.special_category_decided"
+        ),
+        object_type="dpia",
+        object_id=str(dpia.id),
+        before_state=before if changing else None,
+        after_state={
+            "confirmed": payload.confirmed,
+            "rationale": dpia.special_category_rationale,
+        },
+    )
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.post("/dpias/{dpia_id}/complete", response_model=DpiaWorkflowOut)
+async def complete_dpia(
+    dpia_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(require_permission("compliance.privacy.manage")),
+) -> DpiaWorkflowOut:
+    """Finish the assessment and freeze what it concluded.
+
+    Refuses while anything is outstanding, and says everything that is —
+    together, so the work can be finished in one pass rather than
+    discovering the next missing thing on each press.
+    """
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    try:
+        await dpia_completion.complete(
+            db,
+            organization_id=context.organization_id,
+            dpia=dpia,
+            actor_user_id=context.user.id,
+        )
+    except dpia_workflow.DpiaRefused as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    await db.commit()
+    await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )
+
+
+@router.get("/dpias/{dpia_id}/workflow", response_model=DpiaWorkflowOut)
+async def get_dpia_workflow(
+    dpia_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    context: OrgContext = Depends(get_org_context),
+) -> DpiaWorkflowOut:
+    """The DPIA's screening, risk position and what blocks completion."""
+    dpia = await _get_org_dpia(db, dpia_id, context.organization_id)
+    if dpia.status == dpia_workflow.COMPLETED:
+        # §16: a DPIA completed before the quality gates existed keeps
+        # its snapshot and gains a flag. Rewriting it to satisfy a rule
+        # introduced afterwards would replace the record with a
+        # better-looking one nobody signed.
+        problems = dpia_completion.snapshot_quality_problems(dpia)
+        reason = (
+            "This DPIA was completed before Veyntra checked assessment "
+            "quality, and its record would not pass those checks now: "
+            + " ".join(problems)
+        )[:2000] if problems else None
+        if reason != dpia.quality_review_reason:
+            dpia.quality_review_reason = reason
+            if reason:
+                await record_event(
+                    db,
+                    organization_id=context.organization_id,
+                    actor_user_id=context.user.id,
+                    action="compliance.dpia.quality_review_recommended",
+                    object_type="dpia",
+                    object_id=str(dpia.id),
+                    after_state={"problems": problems},
+                )
+            await db.commit()
+            await db.refresh(dpia)
+
+        # §24: notice that the processing moved. This never edits the
+        # frozen assessment — it raises a flag saying somebody should
+        # look again, which is a different claim by a different party.
+        changes = await dpia_completion.check_for_drift(
+            db, organization_id=context.organization_id, dpia=dpia
+        )
+        if changes:
+            await dpia_completion.flag_for_review(
+                db,
+                organization_id=context.organization_id,
+                dpia=dpia,
+                changes=changes,
+            )
+            await db.commit()
+            await db.refresh(dpia)
+    return await _workflow_view(
+        db, organization_id=context.organization_id, dpia=dpia
+    )

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChecklistItem(BaseModel):
@@ -123,6 +123,18 @@ class OrganizationSettingsOut(BaseModel):
 
 class OrganizationSettingsUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def _is_an_organization_name(cls, value: str) -> str:
+        # Same rule as signup. A boundary that only guards one of the two
+        # write paths is not a boundary.
+        from app.core.organization import name_problem
+
+        problem = name_problem(value)
+        if problem:
+            raise ValueError(problem)
+        return value.strip()
     # spec §66 Webhook notification channel target. Not in
     # model_fields_set means "leave unchanged"; explicit null clears it.
     notification_webhook_url: str | None = Field(default=None, max_length=500)

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.models import Policy
+from app.core import organization as core_organization
 from app.core.models import Organization
 from app.db.session import get_db
 from app.dependencies import OrgContext, get_org_context, require_permission
@@ -68,7 +69,13 @@ async def get_public_trust_center(
             )
         )
 
-    return TrustCenterPublicOut(organization_name=organization.name, items=public_items)
+    # The one surface where getting this wrong publishes a person's
+    # email address to the internet. Resolved through the same rule the
+    # reports use rather than reading the column directly.
+    return TrustCenterPublicOut(
+        organization_name=core_organization.identify(organization).name,
+        items=public_items,
+    )
 
 
 @router.post(

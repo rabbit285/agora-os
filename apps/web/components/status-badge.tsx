@@ -130,7 +130,12 @@ export function StatusBadge({
   status,
   label,
 }: {
-  status: string;
+  /** Nullable on purpose. Several statuses in this product mean
+   * "nobody has decided yet", and a badge is not the place to crash
+   * over one — this renders nothing rather than taking the page with
+   * it. Callers that want to *say* something about the absence pass a
+   * `label`. */
+  status: string | null | undefined;
   /** The server's wording for this state, where it has one.
    *
    * Several vocabularies here read badly when de-underscored:
@@ -139,6 +144,8 @@ export function StatusBadge({
    * chosen for the reader, they win over the ones derived from the key. */
   label?: string | null;
 }) {
-  const variant = STATUS_VARIANTS[status] ?? "secondary";
-  return <Badge variant={variant}>{label || status.replace(/_/g, " ")}</Badge>;
+  const text = label || (status ? status.replace(/_/g, " ") : "");
+  if (!text) return null;
+  const variant = (status ? STATUS_VARIANTS[status] : undefined) ?? "secondary";
+  return <Badge variant={variant}>{text}</Badge>;
 }

@@ -53,6 +53,14 @@ function document(
   return {
     id: "cccccccc-1111-4222-8333-444444444444",
     original_filename: FILENAME,
+    // An uploaded document unless a test says otherwise, which is what
+    // every existing case here is about.
+    artifact_type: "source",
+    artifact_label: "Source document",
+    origin_type: null,
+    origin_id: null,
+    origin_label: null,
+    origin_href: null,
     content_type:
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     size_bytes: 20_000,

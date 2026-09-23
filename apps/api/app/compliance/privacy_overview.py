@@ -203,7 +203,12 @@ async def build_overview(
             extension_months=request.extension_months or 0,
             now=moment,
         )
-        href = f"/compliance/privacy/data-requests/{request.id}"
+        # The list lives under /compliance/privacy/data-requests, but a
+        # single request's workflow — verification, scope, discovery,
+        # export — is at /compliance/dsars/{id}. An alert that lands on a
+        # 404 is worse than no alert: it teaches people the overdue
+        # warnings are broken and can be ignored.
+        href = f"/compliance/dsars/{request.id}"
         if state.overdue:
             overview.attention.append(
                 AttentionItem(
@@ -304,7 +309,7 @@ async def build_overview(
                     severity="attention",
                     title=f"{dpia.title} is awaiting review",
                     detail="A DPIA in review needs somebody to reach a conclusion on it.",
-                    href=f"/compliance/privacy/dpias/{dpia.id}",
+                    href=f"/compliance/dpias/{dpia.id}",
                     record_type="dpia",
                     record_id=dpia.id,
                 )
@@ -319,7 +324,7 @@ async def build_overview(
                         "Screening records whether a full assessment is needed, "
                         "and why."
                     ),
-                    href=f"/compliance/privacy/dpias/{dpia.id}",
+                    href=f"/compliance/dpias/{dpia.id}",
                     record_type="dpia",
                     record_id=dpia.id,
                 )

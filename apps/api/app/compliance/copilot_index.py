@@ -190,6 +190,12 @@ async def backfill_organization(
                     File.organization_id == organization_id,
                     File.processing_status == "ready",
                     File.index_status.in_(("pending", "failed")),
+                    # A generated report must not be retrieved as
+                    # evidence for the compliance state it was written
+                    # from. Asking about the report itself is a
+                    # different question, answered from the record it
+                    # belongs to rather than from this index.
+                    File.artifact_type == "source",
                 )
                 .order_by(File.created_at)
                 .limit(limit)

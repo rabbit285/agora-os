@@ -481,6 +481,17 @@ class AISystemCreate(BaseModel):
         default="minimal", pattern="^(minimal|limited|high|unacceptable)$"
     )
     owner_id: uuid.UUID | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    # Who uses it, and who is affected by it without using it. The
+    # second group is usually the data subjects of the processing, and
+    # an inventory keyed only on users loses them entirely.
+    #
+    # These are also what lets Veyntra draft a processing activity from
+    # a registration instead of asking for the same facts again.
+    internal_users: list[str] = []
+    affected_users: list[str] = []
+    # [{"name": "Contact information", "classification": "confidential"}]
+    processed_data: list[dict[str, str]] = []
 
 
 class AISystemStatusUpdate(BaseModel):
@@ -542,15 +553,30 @@ class AISystemDetailOut(AISystemOut):
 
 
 class ProcessingActivityCreate(BaseModel):
+    """Opening a RoPA entry.
+
+    The name has to describe the **processing** — "Customer Support",
+    "Billing and Payments" — not the organization doing it. That
+    distinction is enforced at the endpoint, against the live records,
+    rather than by a word list here.
+    """
+
     name: str = Field(min_length=1, max_length=300)
     purpose: str = Field(min_length=1, max_length=2000)
-    legal_basis: str = Field(
+    # Optional, because it is a judgement somebody may not be ready to
+    # make. An activity without one is recorded as a draft rather than
+    # refused — the record is still worth having — and the overview
+    # already surfaces it as needing a decision.
+    legal_basis: str | None = Field(
+        default=None,
         pattern="^(consent|contract|legal_obligation|vital_interests|public_task|"
-        "legitimate_interests)$"
+        "legitimate_interests)$",
     )
     data_categories: list[str] = Field(default_factory=list)
     data_subjects: str = Field(min_length=1, max_length=300)
-    retention_period: str = Field(min_length=1, max_length=300)
+    # Likewise deferrable: how long data is kept is often a decision
+    # somebody has to go and find out.
+    retention_period: str | None = Field(default=None, max_length=300)
     owner_id: uuid.UUID | None = None
 
 
@@ -612,7 +638,23 @@ class DPIACreate(BaseModel):
 
 
 class DPIAStatusUpdate(BaseModel):
-    status: str = Field(pattern="^(draft|in_review|approved|rejected)$")
+    """A manual move along the DPIA lifecycle.
+
+    The pattern accepts every state the lifecycle has, including the ones
+    this endpoint will refuse — `screening`, `not_required` and
+    `completed` are reached by deciding the screening or by running the
+    completion check, never by setting a word here.
+
+    They are accepted *into* the schema so that
+    `dpia_workflow.transition_refusal` is what turns them down, with the
+    sentence explaining which step was skipped. Rejecting them here
+    instead produced a bare "Validation error", which tells somebody
+    their request failed and nothing about what to do next.
+    """
+
+    status: str = Field(
+        pattern="^(screening|not_required|draft|in_review|approved|completed|rejected)$"
+    )
     findings: str | None = None
 
 
@@ -621,7 +663,11 @@ class DPIAOut(BaseModel):
     processing_activity_id: uuid.UUID | None
     ai_system_id: uuid.UUID | None
     title: str
-    risk_level: str
+    # Null where nobody has assessed it. The column used to default to
+    # "low", so a DPIA with no risks reported an inherent risk it had
+    # never been given — and a non-optional field here would 500 rather
+    # than say so.
+    risk_level: str | None = None
     status: str
     findings: str | None
     processing_description: str | None = None
@@ -631,6 +677,18 @@ class DPIAOut(BaseModel):
     # Null until the risks raised against this DPIA have been reassessed.
     residual_risk_level: str | None = None
     screening_outcome: str | None = None
+    # What a person decided about the recommendation, kept apart from it.
+    screening_decision: str | None = None
+    screening_decided_at: datetime | None = None
+    screening_rationale: str | None = None
+    screened_at: datetime | None = None
+    # Article 35(2). Null means nobody has resolved it, which is not the
+    # same as a recorded "no consultation was carried out".
+    consultation_performed: bool | None = None
+    completed_at: datetime | None = None
+    # Set when the processing under a completed DPIA has moved on. A
+    # recommendation to reassess, never an edit to what was concluded.
+    review_reason: str | None = None
     approval_id: uuid.UUID | None
     owner_id: uuid.UUID | None
     created_at: datetime
@@ -643,6 +701,10 @@ class DSARCreate(BaseModel):
     requester_email: str = Field(min_length=3, max_length=320)
     request_type: str = Field(pattern="^(access|deletion|rectification|portability)$")
     assigned_to: uuid.UUID | None = None
+    # When the request actually arrived. A request logged three days
+    # late does not get three extra days, so this is asked rather than
+    # assumed to be now.
+    received_at: datetime | None = None
 
 
 class DSARStatusUpdate(BaseModel):
@@ -660,7 +722,16 @@ class DSAROut(BaseModel):
     # than offering a button that will be refused.
     verification_status: str = "pending"
     verification_method: str | None = None
+    # What was actually done to establish identity. The method is a
+    # category; this is the evidence behind it.
+    verification_notes: str | None = None
     verified_at: datetime | None = None
+    # Where the request actually is. "In progress" covers everything
+    # between logging a request and sending it, which is exactly the span
+    # somebody needs to navigate.
+    phase: str = "received"
+    blocked_reason: str | None = None
+    scope_confirmed_at: datetime | None = None
     discovery_findings: dict[str, Any] | None = None
     discovery_run_at: datetime | None = None
     export_generated_at: datetime | None = None
@@ -794,6 +865,22 @@ class VendorCreate(BaseModel):
     website: str | None = None
     contact_email: str | None = None
     owner_id: uuid.UUID | None = None
+    # Where the processor is. Without it the product cannot tell whether
+    # sending data to this vendor is a third-country transfer, which is
+    # the one question a transfer record exists to answer.
+    #
+    # ISO 3166-1 alpha-2, the same convention LegalEntity uses. Null
+    # means nobody has recorded it — reported as unknown rather than
+    # assumed domestic.
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+    # Free text for the detail a country code cannot carry: "EU region
+    # (Frankfurt)", "US and Ireland".
+    data_location: str | None = Field(default=None, max_length=300)
+
+    @field_validator("country")
+    @classmethod
+    def _upper(cls, value: str | None) -> str | None:
+        return value.strip().upper() if value else None
 
 
 class VendorStatusUpdate(BaseModel):
@@ -811,6 +898,11 @@ class VendorOut(BaseModel):
     category: str
     website: str | None
     contact_email: str | None
+    # Where the processor is. Surfaced because transfer detection turns
+    # on it, and a screen that cannot show it cannot explain why a
+    # transfer was or was not proposed.
+    country: str | None = None
+    data_location: str | None = None
     risk_tier: str
     status: str
     dpa_status: str
@@ -2107,9 +2199,41 @@ class DataTransferOut(BaseModel):
     status: str
     related_risk_id: uuid.UUID | None
     owner_id: uuid.UUID | None
+    # Which edge detection followed to find this, so a reviewer checks the
+    # inference rather than trusting it. Null on a manually logged
+    # transfer, which was nobody's inference.
+    detected_from: str | None = None
+    # Set when a fact underneath a confirmed transfer moved. The record
+    # itself is untouched — this asks for another look.
+    review_reason: str | None = None
+    vendor_id: uuid.UUID | None = None
+    last_reviewed_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DataTransferDetailOut(DataTransferOut):
+    """One transfer with the records it was assessed against.
+
+    Assembled rather than stored. Every field below already lives on the
+    activity or the vendor, and copying them onto the transfer would give
+    the same fact two homes and let them drift — which is precisely the
+    failure `review_reason` exists to catch.
+    """
+
+    # Who is sending the data. Read from the organization, because a
+    # transfer with no exporter named is not a transfer anybody can
+    # assess.
+    exporter_name: str
+    processing_activity_name: str | None = None
+    # The vendor's own record, shown next to what the transfer claims so
+    # a disagreement is visible rather than inferred.
+    vendor_name: str | None = None
+    vendor_country: str | None = None
+    # pending | signed | not_required — the contract an SCCs mechanism
+    # actually rests on.
+    vendor_dpa_status: str | None = None
 
 
 class FrameworkActivationOut(BaseModel):
@@ -2319,6 +2443,10 @@ class DsarVerificationRequest(BaseModel):
 
     verified: bool
     method: str = Field(min_length=1, max_length=200)
+    # What was actually done, in the verifier's own words. The method is
+    # a category; this is the evidence a regulator asking "how did you
+    # know it was her?" needs.
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class DsarDiscoveryOut(BaseModel):
@@ -2421,6 +2549,18 @@ class ComplianceDocumentOut(BaseModel):
     processing_status: str
     processing_error: str | None
     processed_at: datetime | None
+    # source | generated_output. What kind of thing this is, so the
+    # library can list what Veyntra was given apart from what it
+    # produced — and so a generated report never offers to be analysed
+    # for evidence.
+    artifact_type: str = "source"
+    artifact_label: str = "Source document"
+    origin_type: str | None = None
+    origin_id: uuid.UUID | None = None
+    # "Generated from ISO 42001 Internal Audit", frozen so it keeps
+    # reading correctly after the audit is renamed.
+    origin_label: str | None = None
+    origin_href: str | None = None
     # Whether the Copilot can retrieve from this document. Separate
     # from `processing_status`, which only says Document Intelligence
     # finished — a document can be analysed and mapped perfectly while
@@ -2908,6 +3048,17 @@ class ReviewItemOut(BaseModel):
     # Where the decision is actually made. A queue that lists work
     # without taking you to it just relocates the searching.
     href: str
+    # What Veyntra recommends, where it has grounds to recommend
+    # anything. Absent on a lawful basis, because which one applies
+    # turns on facts no database holds.
+    recommendation: str | None = None
+    recommendation_reason: str | None = None
+    # The facts behind it, each with how directly it was established.
+    # Confidence is quoted for facts only — a number attached to a
+    # legal conclusion measures nothing.
+    evidence: list[dict[str, Any]] = []
+    # What changes if the reviewer agrees.
+    impact: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -3005,3 +3156,661 @@ class CopilotIndexBackfillOut(BaseModel):
     indexed: int
     failed: int
     unsupported: int
+
+
+# --- privacy automation -------------------------------------------------
+#
+# Veyntra drafts from what the organization already declared; a person
+# supplies the judgements a draft is not allowed to contain. The schemas
+# keep that split visible: nothing in a suggestion payload is a lawful
+# basis or a transfer mechanism, and the accept request is where those
+# arrive.
+
+
+class PrivacySuggestionSourceOut(BaseModel):
+    """A record this draft was read out of, so it can be checked."""
+
+    type: str
+    id: str | None = None
+    label: str
+
+
+class PrivacySuggestionOut(BaseModel):
+    """A proposed privacy record. Never an authoritative one."""
+
+    id: uuid.UUID
+    # processing_activity | transfer
+    kind: str
+    # proposed | accepted | dismissed
+    status: str
+    title: str
+    sources: list[PrivacySuggestionSourceOut] = []
+    # The drafted facts. Carries "needs_confirmation" where a judgement
+    # belongs, rather than a value nobody chose.
+    payload: dict[str, Any] = {}
+    created_record_id: uuid.UUID | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PrivacyAnalysisOut(BaseModel):
+    created: int = 0
+    already_proposed: int = 0
+    # Drafts skipped because a real record already covers them.
+    already_recorded: int = 0
+
+
+class PrivacySuggestionAcceptIn(BaseModel):
+    """The judgements only a person can supply.
+
+    All optional on the schema and required by the service, because
+    which ones apply depends on what is being accepted — and the error a
+    person reads should say what is missing rather than which field of a
+    union failed validation.
+    """
+
+    legal_basis: str | None = None
+    retention_period: str | None = None
+    special_category: bool = False
+    special_category_condition: str | None = Field(default=None, max_length=200)
+    transfer_mechanism: str | None = None
+    safeguards_description: str | None = Field(default=None, max_length=2000)
+
+
+class PrivacySuggestionDismissIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class PrivacyDataLocationOut(BaseModel):
+    """Somewhere the organization's own records say personal data lives.
+
+    A search scope for answering a data request — not a search, and not
+    a disclosure.
+    """
+
+    label: str
+    kind: str
+    record_id: uuid.UUID
+    reason: str
+
+
+class RelatedRecordOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    kind: str
+    href: str
+    detail: str | None = None
+
+
+class ProcessingActivityRelatedOut(BaseModel):
+    """What a processing activity connects to, navigable from it."""
+
+    ai_systems: list[RelatedRecordOut] = []
+    vendors: list[RelatedRecordOut] = []
+    dpias: list[RelatedRecordOut] = []
+    transfers: list[RelatedRecordOut] = []
+
+
+# --- starting a DPIA from context ---------------------------------------
+
+
+class DpiaSuggestedAnswerOut(BaseModel):
+    """A screening criterion the record already speaks to, and why.
+
+    Never applied silently — the reason travels with it so the person
+    screening can see what it was read from and disagree.
+    """
+
+    criterion: str
+    value: bool
+    reason: str
+
+
+class DpiaLinkedRecordOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    kind: str
+    detail: str | None = None
+
+
+class DpiaContextOut(BaseModel):
+    """What is known before anybody types anything.
+
+    Assembled from the processing activity or AI system being assessed,
+    so the DPIA does not ask again for facts already recorded.
+    """
+
+    title: str
+    purpose: str | None = None
+    data_subjects: str | None = None
+    data_categories: list[str] = []
+    special_category: bool = False
+    processing_activity_id: uuid.UUID | None = None
+    ai_system_id: uuid.UUID | None = None
+    owner_id: uuid.UUID | None = None
+    ai_systems: list[DpiaLinkedRecordOut] = []
+    vendors: list[DpiaLinkedRecordOut] = []
+    transfers: list[DpiaLinkedRecordOut] = []
+    evidence_count: int = 0
+    suggested_answers: list[DpiaSuggestedAnswerOut] = []
+    # Criteria nothing on record speaks to. Listed so the screen asks
+    # rather than presenting silence as a clean result.
+    unknown: list[str] = []
+
+
+# --- what a processing activity is called -------------------------------
+
+
+class RopaTitleProblemOut(BaseModel):
+    """Why a title answers "who processes" rather than "what is processed"."""
+
+    kind: str
+    message: str
+
+
+class RopaTitleRepairOut(BaseModel):
+    """A recorded title that names the wrong thing, and what to do.
+
+    Proposed, never applied. A record somebody typed deliberately is
+    theirs, and silently retitling it would be the product overruling
+    its user on the one field only the user can write.
+    """
+
+    activity_id: uuid.UUID
+    current_title: str
+    problem: RopaTitleProblemOut
+    # Null when the activity's own purpose does not support a better
+    # title — an ambiguous case is not one to guess at.
+    suggested_title: str | None = None
+    suggestion_reason: str | None = None
+
+
+class RopaTitleRepairApply(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+
+
+# --- the DPIA lifecycle -------------------------------------------------
+
+
+class DpiaScreeningStartIn(BaseModel):
+    """What is being screened, and whatever the person has answered."""
+
+    processing_activity_id: uuid.UUID | None = None
+    ai_system_id: uuid.UUID | None = None
+    title: str | None = Field(default=None, max_length=300)
+    answers: dict[str, bool] = {}
+
+
+class DpiaScreeningDecisionIn(BaseModel):
+    """The controller's conclusion, kept apart from the recommendation."""
+
+    decision: Literal["required", "not_required"]
+    # Required when deciding a DPIA is *not* needed. "We looked and
+    # decided no" is a defensible record; an unexplained no is not.
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
+class DpiaSuggestedRiskOut(BaseModel):
+    """A risk Veyntra proposes, and the decision it is waiting on.
+
+    Never carries a likelihood or an impact. Those are the judgement the
+    review exists to make, and a proposal arriving pre-rated would answer
+    the one question the reviewer was brought in for.
+    """
+
+    id: uuid.UUID | None = None
+    title: str
+    description: str
+    # The fact on record this was read from, so a reviewer can weigh it.
+    reason: str
+    # suggested | approved | dismissed
+    status: str = "suggested"
+    # Safeguards already on record, as a starting point — never a claim
+    # that they are sufficient.
+    suggested_safeguards: str | None = None
+    created_risk_id: uuid.UUID | None = None
+    decided_at: datetime | None = None
+
+
+class DpiaRiskApproveIn(BaseModel):
+    """Accepting a proposal as a real risk, with the rating a person chose.
+
+    `likelihood` and `impact` are required: this is the moment the DPIA
+    acquires a risk position, and there is no honest default. The text
+    fields are optional overrides, because editing a proposal and
+    approving it are the same decision made about different words.
+    """
+
+    likelihood: Literal["low", "medium", "high"]
+    impact: Literal["low", "medium", "high"]
+    title: str | None = Field(default=None, max_length=300)
+    description: str | None = Field(default=None, max_length=2000)
+    affected_data_subjects: str | None = Field(default=None, max_length=500)
+    existing_safeguards: str | None = Field(default=None, max_length=2000)
+    owner_id: uuid.UUID | None = None
+
+
+class DpiaRiskDismissIn(BaseModel):
+    """Recording that this is not a risk here, and why.
+
+    The reason is required for the same argument that makes "DPIA not
+    required" need one: an unexplained dismissal is indistinguishable
+    from nobody having looked.
+    """
+
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class RiskRemediationIn(BaseModel):
+    """Work opened against a risk, in the existing task system.
+
+    A residual rating has to be justified by something recorded. This
+    is what makes the mitigation a commitment somebody owns rather than
+    a sentence in a prose box.
+    """
+
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    priority: Literal["low", "normal", "high"] = "normal"
+    assignee_id: uuid.UUID | None = None
+    due_at: datetime | None = None
+
+
+class DpiaSectionApproveIn(BaseModel):
+    """Signing off one Article 35(7) section.
+
+    Separate from editing the text, because agreeing with a draft is a
+    decision. Inferring review from "the wording changed" would mean a
+    reviewer who agrees verbatim has to alter the words first.
+    """
+
+    section: Literal[
+        "processing_description",
+        "necessity_assessment",
+        "proportionality_assessment",
+        "consultation_notes",
+    ]
+
+
+class DpiaConsultationIn(BaseModel):
+    """Article 35(2): whether a DPO or data subjects were consulted.
+
+    `performed` is required and has no default. "No consultation was
+    carried out" is an answer somebody gave; leaving the field null means
+    nobody has addressed it, and the two must stay distinguishable.
+
+    `notes` carries the advice or outcome when a consultation happened,
+    and the reason when one was judged unnecessary — which is required in
+    that case, for the same argument that makes "DPIA not required" need
+    a reason.
+    """
+
+    performed: bool
+    party: str | None = Field(default=None, max_length=300)
+    role: str | None = Field(default=None, max_length=150)
+    consulted_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class DsarScopeSourceOut(BaseModel):
+    """One candidate source, its ranking, and the decision about it."""
+
+    id: uuid.UUID
+    source_key: str
+    kind: str
+    name: str
+    reason: str
+    # high | medium | low. A ranking, never a filter -- a source the
+    # product thinks is unrelated is still listed and still includable.
+    # high | possible | low. Computed from the requester and the
+    # register alone -- never from whether Veyntra can search the source
+    # cheaply, which is a fact about our plumbing rather than about where
+    # this person's data is.
+    relevance: str
+    relevance_reason: str | None = None
+    linked_systems: list[str] = []
+    # The actual systems behind a processing activity, each with its own
+    # connection state. A RoPA entry is compliance context, not a
+    # database: it says where to look next.
+    potential_sources: list[dict] = []
+    # searchable | manual_follow_up | processor_follow_up | not_connected
+    # | unsupported. Kept strictly apart from relevance.
+    search_capability: str = "manual_follow_up"
+    # None means nobody has decided yet, which is not the same as
+    # excluded.
+    included: bool | None = None
+    added_by_user: bool = False
+    record_id: uuid.UUID | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DsarScopeDecisionIn(BaseModel):
+    """One person's include/exclude decision about one source."""
+
+    source_key: str
+    included: bool
+    # Why a relevant source is being left out. Required when excluding
+    # something Veyntra ranked high: a narrowed scope has to carry its
+    # own justification, or the response has an unexplained gap.
+    exclusion_reason: str | None = Field(default=None, max_length=1000)
+
+
+class DsarScopeConfirmIn(BaseModel):
+    """Confirming the scope, with the decisions that make it up.
+
+    Decisions are sent together with the confirmation rather than saved
+    one by one, so a half-applied scope cannot be confirmed.
+    """
+
+    decisions: list[DsarScopeDecisionIn] = []
+
+
+class DsarManualSourceIn(BaseModel):
+    """A source a person knows about and the register does not."""
+
+    name: str = Field(min_length=2, max_length=300)
+    reason: str = Field(min_length=2, max_length=1000)
+
+
+class DsarDiscoveryPlanOut(BaseModel):
+    """What a discovery run will do, before it does it."""
+
+    total: int
+    connected: int
+    manual: int
+    excluded: int
+    manual_sources: list[str] = []
+    connected_sources: list[str] = []
+
+
+class DsarCoverageOut(BaseModel):
+    """What the search actually covered, counted honestly.
+
+    Separate numbers for "searched and empty" and "not searched at all",
+    because a response that adds them together is claiming a completeness
+    it does not have.
+    """
+
+    scope_confirmed: int
+    automatically_searched: int
+    manual_completed: int
+    outstanding: int
+    searched_no_matches: int
+    records_found: int
+    # False whenever anything is still outstanding. The package says so
+    # rather than leaving a reader to infer it from the numbers.
+    complete: bool
+
+
+class DsarDiscoveredItemOut(BaseModel):
+    id: uuid.UUID
+    source_key: str
+    source_name: str
+    # not_searched | searched_none | searched_found | search_failed |
+    # manual_follow_up. Five states because they mean five different
+    # things -- only searched_none is evidence of absence.
+    search_state: str
+    matches: int
+    record_ids: list[str] = []
+    state_detail: str | None = None
+    review_decision: str
+    review_reason: str | None = None
+    reviewed_at: datetime | None = None
+    # What Veyntra noticed for a person to look at. Flags, not
+    # exemption decisions.
+    sensitivity_flags: list[str] = []
+    task_id: uuid.UUID | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DsarItemReviewIn(BaseModel):
+    """The disclosure decision for one discovered record set."""
+
+    review_decision: str = Field(pattern="^(include|exclude|redact|needs_review)$")
+    review_reason: str | None = Field(default=None, max_length=1000)
+
+
+class DsarBlockerOut(BaseModel):
+    code: str
+    message: str
+    anchor: str
+
+
+class DsarNextActionOut(BaseModel):
+    label: str
+    detail: str
+    anchor: str
+
+
+class DsarWorkflowOut(BaseModel):
+    """Where the request is and what it needs, for the page header."""
+
+    phase: str
+    phase_label: str
+    next_action: DsarNextActionOut | None = None
+    blockers: list[DsarBlockerOut] = []
+    scope_total: int = 0
+    scope_included: int = 0
+    scope_undecided: int = 0
+    discovered_total: int = 0
+    needs_review: int = 0
+    manual_follow_ups: int = 0
+    open_follow_ups: int = 0
+    package_status: str | None = None
+
+
+class DsarSourceLineOut(BaseModel):
+    name: str
+    state: str
+    state_label: str
+    matches: int
+    decision: str
+    decision_reason: str | None = None
+    flags: list[str] = []
+
+
+class DsarResponsePreviewOut(BaseModel):
+    """The drafted response, before anybody approves it."""
+
+    dsar_id: uuid.UUID
+    requester_name: str
+    requester_email: str
+    request_type: str
+    received_at: str
+    due_at: str
+    identity_method: str | None = None
+    identity_notes: str | None = None
+    identity_verified_at: str | None = None
+    identity_verified_by: str | None = None
+    letter: str
+    included: list[DsarSourceLineOut] = []
+    excluded: list[DsarSourceLineOut] = []
+    redacted: list[DsarSourceLineOut] = []
+    not_searched: list[DsarSourceLineOut] = []
+    follow_ups: list[str] = []
+    blockers: list[str] = []
+    # What the search actually covered. Present so the reader is not left
+    # to infer completeness from the source lists above.
+    coverage: DsarCoverageOut | None = None
+    # Fingerprint of the inputs. Sent back on approval so a request that
+    # moved in between is refused rather than silently absorbed.
+    digest: str
+
+
+class DsarResponseApproveIn(BaseModel):
+    digest: str
+    # A person editing the drafted letter is expected; the edit is part
+    # of what gets approved.
+    letter: str | None = Field(default=None, max_length=20000)
+
+
+class DsarResponsePackageOut(BaseModel):
+    id: uuid.UUID
+    version: int
+    status: str
+    source_digest: str
+    approved_at: datetime | None = None
+    sent_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DpiaSpecialCategoryIn(BaseModel):
+    """Answering a detected Article 9 signal.
+
+    Veyntra detects; a person decides. Ruling one out needs a reason for
+    the same argument that makes "DPIA not required" need one: an
+    unexplained no is indistinguishable from nobody having looked, and
+    this is the answer the record would be defended on.
+    """
+
+    confirmed: bool
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
+class DpiaMissingFactOut(BaseModel):
+    code: str
+    message: str
+    # Where to go and fix it, so a blocker is actionable rather than a
+    # statement that something is wrong somewhere.
+    href: str
+
+
+class DpiaSpecialSignalOut(BaseModel):
+    kind: str
+    # The recorded text this was read out of, so a reviewer checks the
+    # detection rather than taking it on trust.
+    evidence: str
+
+
+class DpiaRiskConclusionIn(BaseModel):
+    """Recording that the risk review found nothing material.
+
+    Only this direction needs an endpoint. "Risks were identified" is
+    what accepting a risk already means, so it is recorded there rather
+    than asserted separately.
+    """
+
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+class DpiaSectionReviewOut(BaseModel):
+    section: str
+    approved_by: uuid.UUID | None = None
+    approved_at: str | None = None
+
+
+class DpiaBlockerOut(BaseModel):
+    code: str
+    message: str
+
+
+class DpiaWorkflowOut(BaseModel):
+    """A DPIA's screening, risk position and what stops it completing."""
+
+    id: uuid.UUID
+    title: str
+    # screening | draft | in_review | approved
+    status: str
+    processing_activity_id: uuid.UUID | None = None
+    ai_system_id: uuid.UUID | None = None
+
+    # --- what Veyntra counted -----------------------------------------
+    screening_outcome: str | None = None
+    screening_rationale_text: str | None = None
+    screening_criteria_met: list[str] = []
+    screened_at: datetime | None = None
+
+    # --- and what a person decided about it ----------------------------
+    screening_decision: str | None = None
+    screening_decided_at: datetime | None = None
+    screening_decision_rationale: str | None = None
+
+    processing_description: str | None = None
+    necessity_assessment: str | None = None
+    proportionality_assessment: str | None = None
+    consultation_notes: str | None = None
+
+    # Null means "nobody has assessed this", which is what a DPIA with no
+    # risks should say rather than "Low".
+    inherent_risk: str | None = None
+    residual_risk: str | None = None
+    risk_count: int = 0
+    assessed_count: int = 0
+    mitigated_count: int = 0
+    can_calculate_residual: bool = False
+    risk_blocked_reason: str | None = None
+
+    suggested_risks: list[DpiaSuggestedRiskOut] = []
+    completion_blockers: list[DpiaBlockerOut] = []
+    # True when screening found the DPIA that already covered this
+    # processing rather than opening a second one.
+    reused_existing: bool = False
+
+    # --- which sections a person has actually signed off ---------------
+    section_reviews: list[DpiaSectionReviewOut] = []
+
+    # --- Article 35(2) consultation ------------------------------------
+    # Null means unresolved, which is not the same as "none performed".
+    # not_decided | consultation_performed | no_consultation. Derived
+    # from the one field that holds it, so the screen never has to
+    # reconcile two sources.
+    consultation_state: str = "not_decided"
+    consultation_performed: bool | None = None
+    consulted_party: str | None = None
+    consulted_role: str | None = None
+    consulted_at: datetime | None = None
+    consultation_recorded_by_name: str | None = None
+    consultation_recorded_at: datetime | None = None
+
+    # --- what the risk review concluded --------------------------------
+    #
+    # not_reviewed | risks_identified | no_material_risks. Only the last
+    # two are a completed review: a risk count of zero cannot tell
+    # "nobody looked" apart from "looked, and found none".
+    risk_conclusion: str = "not_reviewed"
+    risk_conclusion_rationale: str | None = None
+    risk_reviewed_by_name: str | None = None
+    risk_reviewed_at: datetime | None = None
+    # True when the reviewer is in a position to conclude that nothing is
+    # material: every suggestion decided, and no risk on the register.
+    can_conclude_no_material_risks: bool = False
+
+    # --- content quality, as opposed to workflow completeness ----------
+    #
+    # Absent context is not a benign finding: a DPIA written against a
+    # record with no data categories cannot say what was assessed.
+    missing_facts: list[DpiaMissingFactOut] = []
+    # Detected Article 9 hints nobody has answered yet. Never a
+    # determination that Article 9 applies.
+    special_category_signals: list[DpiaSpecialSignalOut] = []
+    # null = unanswered, and distinct from a recorded "not applicable".
+    special_category_confirmed: bool | None = None
+    special_category_rationale: str | None = None
+    # Sections approved against processing details that have since moved.
+    stale_sections: list[str] = []
+    # The guidance each section is written against, kept apart from the
+    # answer so it can never be approved as one.
+    section_guidance: dict[str, str] = {}
+    # Set when a completed DPIA was signed off on content that would not
+    # pass today's gates. Never rewrites what it froze.
+    quality_review_reason: str | None = None
+
+    # --- completion -----------------------------------------------------
+    can_complete: bool = False
+    completed_at: datetime | None = None
+    completed_by_name: str | None = None
+    # What the assessment concluded, frozen at completion. Null until
+    # then; never re-derived afterwards.
+    snapshot: dict[str, Any] | None = None
+    # Set when the processing underneath a completed DPIA has moved on.
+    # A recommendation to look again, never an edit to what was concluded.
+    review_reason: str | None = None
+    review_flagged_at: datetime | None = None
+
+    # Which statuses this DPIA can actually move to right now, so the UI
+    # offers one lifecycle rather than a list of words.
+    allowed_transitions: list[str] = []

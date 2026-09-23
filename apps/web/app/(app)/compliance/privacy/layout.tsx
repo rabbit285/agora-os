@@ -44,6 +44,11 @@ export default function PrivacyLayout({
     queryKey: ["compliance", "privacy", "overview"],
     queryFn: () =>
       apiFetch<PrivacyOverview>("/api/v1/compliance/privacy/overview"),
+    // Same reason as the suggestion counts: work arrives from document
+    // analysis after the page has loaded, and a badge that never updates
+    // is worse than no badge.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   return (

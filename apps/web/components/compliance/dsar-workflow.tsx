@@ -2,16 +2,20 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Download, Lock, Search, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Download, Lock, ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { API_URL, ApiError, apiFetch } from "@/lib/api";
-import type { DSAR, DsarDiscovery } from "@/lib/types";
+import type { DSAR } from "@/lib/types";
 
-/** Verification, discovery, and export for one access request.
+/** Identity verification and the export, for one request.
+ *
+ * Scope review and discovery used to live here too, as read-only lists
+ * that nothing downstream consumed — see `dsar-scope-review` and
+ * `dsar-discovery` for the versions that actually drive the search.
  *
  * The export control is disabled until the requester is verified, and
  * says why. That is a courtesy, not the enforcement — the API refuses
@@ -22,9 +26,7 @@ import type { DSAR, DsarDiscovery } from "@/lib/types";
 export function DsarWorkflow({ dsar }: { dsar: DSAR }) {
   const queryClient = useQueryClient();
   const [method, setMethod] = useState("");
-  const [discovery, setDiscovery] = useState<DsarDiscovery | null>(
-    (dsar.discovery_findings as DsarDiscovery | null) ?? null,
-  );
+  const [notes, setNotes] = useState("");
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["compliance", "dsars", dsar.id] });
@@ -33,22 +35,20 @@ export function DsarWorkflow({ dsar }: { dsar: DSAR }) {
     mutationFn: (verified: boolean) =>
       apiFetch<DSAR>(`/api/v1/compliance/dsars/${dsar.id}/verify-identity`, {
         method: "POST",
-        body: { verified, method: method || "Not recorded" },
+        body: {
+          verified,
+          method: method || "Not recorded",
+          // The method is a category; this is the evidence behind it,
+          // and it is what a regulator asking "how did you know it was
+          // her?" actually needs.
+          notes: notes.trim() || undefined,
+        },
       }),
     onSuccess: invalidate,
   });
 
-  const discover = useMutation({
-    mutationFn: () =>
-      apiFetch<DsarDiscovery>(`/api/v1/compliance/dsars/${dsar.id}/discover`, { method: "POST" }),
-    onSuccess: (data) => {
-      setDiscovery(data);
-      invalidate();
-    },
-  });
-
   const isVerified = dsar.verification_status === "verified";
-  const error = verify.error ?? discover.error;
+  const error = verify.error;
 
   return (
     <>
@@ -84,6 +84,22 @@ export function DsarWorkflow({ dsar }: { dsar: DSAR }) {
               Verified{dsar.verification_method ? ` via ${dsar.verification_method}` : ""}
               {dsar.verified_at && ` on ${new Date(dsar.verified_at).toLocaleDateString()}`}
             </p>
+          ) : dsar.verification_status === "failed" ? (
+            <div>
+              <p className="text-sm text-[var(--critical-600)]">
+                Verification failed
+                {dsar.verification_method ? ` via ${dsar.verification_method}` : ""}.
+              </p>
+              {dsar.verification_notes && (
+                <p className="mt-1 text-sm text-[var(--fg-muted)]">
+                  {dsar.verification_notes}
+                </p>
+              )}
+              <p className="mt-2 text-sm text-[var(--fg-muted)]">
+                Nothing will be searched or disclosed on this request. Re-verify with a
+                different method, or reject it, recording why.
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-sm">
@@ -92,6 +108,16 @@ export function DsarWorkflow({ dsar }: { dsar: DSAR }) {
                   value={method}
                   placeholder="e.g. Email verification to the address on file"
                   onChange={(e) => setMethod(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--fg-default)]">
+                  What was done, and what came back?
+                </span>
+                <Input
+                  value={notes}
+                  placeholder="e.g. Requester confirmed ownership through verification link."
+                  onChange={(e) => setNotes(e.target.value)}
                 />
               </label>
               <div className="flex flex-wrap gap-2">
@@ -112,47 +138,6 @@ export function DsarWorkflow({ dsar }: { dsar: DSAR }) {
                 </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-medium text-[var(--fg-default)]">Data discovery</h2>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={discover.isPending}
-              onClick={() => discover.mutate()}
-            >
-              <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-              {discover.isPending ? "Searching…" : discovery ? "Search again" : "Search data sources"}
-            </Button>
-          </div>
-
-          {discovery ? (
-            <>
-              <table className="w-full text-sm">
-                <tbody>
-                  {discovery.sources.map((source) => (
-                    <tr key={source.source} className="border-b border-[var(--border-default)]">
-                      <td className="py-1.5 text-[var(--fg-muted)]">{source.source}</td>
-                      <td className="py-1.5 text-right font-mono text-[var(--fg-default)]">
-                        {source.matches}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-xs leading-relaxed text-[var(--fg-muted)]">
-                {discovery.coverage_note}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-[var(--fg-muted)]">
-              No search has been run for this request yet.
-            </p>
           )}
         </CardContent>
       </Card>

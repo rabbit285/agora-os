@@ -258,6 +258,14 @@ async def test_high_risk_dpia_cannot_be_approved_without_its_approval(
     ).json()
     assert dpia["approval_id"] is not None
 
+    # Draft → in_review → approved. The lifecycle no longer lets a
+    # status field skip a stage, so the gate is reached the way a person
+    # would reach it.
+    moved = await client.patch(
+        f"/api/v1/compliance/dpias/{dpia['id']}/status", json={"status": "in_review"}
+    )
+    assert moved.status_code == 200, moved.text
+
     response = await client.patch(
         f"/api/v1/compliance/dpias/{dpia['id']}/status", json={"status": "approved"}
     )
